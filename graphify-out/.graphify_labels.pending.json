@@ -1,5 +1,5 @@
 {
-  "0": "Aparelhos",
+  "0": "Catalogo",
   "1": "servico.py",
   "2": "cli.py",
   "3": "Servico",
@@ -12,14 +12,11 @@
   "10": "CLAUDE.md",
   "11": "protocolos.py",
   "12": "instalar.sh",
-  "13": "ErroEmissor",
+  "13": "EmissorSimulado",
   "14": "LEIA-ME.md",
   "15": "empacotar.sh",
-  "16": "ServidorMCP",
+  "16": "criar_servidor",
   "17": "Notificador",
-  "18": "TestServidorMCP",
   "19": "TestProtocolos",
-  "20": "TestVocabulario",
-  "21": "sinais.py",
-  "22": "Tunel"
+  "20": "TestVocabulario"
 }

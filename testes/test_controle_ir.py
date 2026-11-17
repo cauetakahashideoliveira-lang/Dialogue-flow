@@ -119,6 +119,18 @@ data: 1000 500 1000 500 3000
         self.assertEqual([Sinal(c["sinal"]).impressao() for c in p["comandos"]],
                          [Sinal(c["sinal"]).impressao() for c in p2["comandos"]])
 
+    def test_captura_corrompida_nao_derruba_importacao(self):
+        texto = self.IR + """#
+name: Quebrado
+type: raw
+frequency: 38000
+duty_cycle: 0.33
+data: 1073741453 500
+"""
+        p = formatos.ler_flipper(texto, "t")
+        self.assertEqual(len(p["comandos"]), 4)
+        self.assertEqual(p["descartados"], 1)
+
     def test_pronto_e_broadlink(self):
         f, d = protocolos.codificar("NEC", 0x10, 0x22)
         pr = pulsos_para_pronto(f, d)

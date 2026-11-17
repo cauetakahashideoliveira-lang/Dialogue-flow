@@ -136,7 +136,7 @@ def ler_flipper(texto: str, chave="importado", nome=None, categoria=None, marca=
             else:
                 continue
             adicionar_comando(perfil, comando(b["name"], sinal), indice)
-        except (KeyError, ValueError, ErroSinal, protocolos.ErroProtocolo):
+        except Exception:  # noqa: BLE001 — um sinal ruim não derruba o perfil inteiro
             erros += 1
     if comentarios and not nome:
         perfil["nome"] = comentarios[0][:80]

@@ -150,7 +150,7 @@ class Catalogo:
             for i, c in enumerate(perfil.get("comandos", [])):
                 try:
                     sid = self._id_sinal(c["sinal"])
-                except (ErroSinal, ValueError):
+                except Exception:  # noqa: BLE001
                     continue
                 meta = {k: c[k] for k in ("parametro", "passo", "efeitos", "risco") if k in c}
                 linhas.append((pid, c["chave"], c.get("base", c["chave"]), c.get("rotulo"), c.get("nome_original"),
@@ -406,7 +406,7 @@ def importar_flipper(cat: Catalogo, raiz: str, arquivos: list[str] | None = None
             p["nome"] = m["nome"]
             cat.adicionar_perfil(p)
             ok += 1
-        except (formatos.ErroFormato, OSError, ValueError):
+        except Exception:  # noqa: BLE001 — um arquivo ruim não derruba o catálogo
             falhas += 1
         if progresso and i % 200 == 0:
             progresso(i, len(arquivos))

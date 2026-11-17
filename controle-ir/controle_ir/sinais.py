@@ -57,7 +57,7 @@ def normalizar_pulsos(valores) -> list[int]:
     while len(out) >= 2 and out[0] > MAX_PULSO_US:
         out = out[2:]
     out = [v if v <= MAX_PULSO_US else (MAX_PULSO_US if i % 2 == 0 else 100000) for i, v in enumerate(out)]
-    if len(out) % 2 == 0:
+    if out and len(out) % 2 == 0:
         out.pop()  # descarta a pausa final
     if not out:
         raise ErroSinal("sinal sem pulsos")

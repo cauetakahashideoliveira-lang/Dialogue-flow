@@ -126,10 +126,10 @@
     "semantic_hash": "7412aa1ac0ae2377aea28c4b62ac429f"
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1794956124.4819458,
-    "seen": 1794956844.9042485,
-    "ast_hash": "000167b8658bcfbf7c886310644422e0",
-    "semantic_hash": "000167b8658bcfbf7c886310644422e0"
+    "mtime": 1794959665.4532053,
+    "seen": 1794959800.1613872,
+    "ast_hash": "8744c6cb6bc0988f2415255af33f0732",
+    "semantic_hash": "8744c6cb6bc0988f2415255af33f0732"
   },
   "README.md": {
     "mtime": 1794925870.514911,
@@ -168,22 +168,22 @@
     "semantic_hash": "09165dcf0ee44de671233cc16032275b"
   },
   "docs/estado-atual.md": {
-    "mtime": 1794956261.321954,
-    "seen": 1794956844.9042563,
-    "ast_hash": "416e0c248e3b074460d5d4ed760150b4",
-    "semantic_hash": "416e0c248e3b074460d5d4ed760150b4"
+    "mtime": 1794959727.060559,
+    "seen": 1794959800.161391,
+    "ast_hash": "4b07c74fef918c19e3b95489e202a036",
+    "semantic_hash": "4b07c74fef918c19e3b95489e202a036"
   },
   "ferramentas/gree_variante.py": {
-    "mtime": 1794956104.3699446,
-    "seen": 1794956844.9042451,
-    "ast_hash": "e2470ab9a5a12b1e05950f2770b9b5d4",
-    "semantic_hash": "e2470ab9a5a12b1e05950f2770b9b5d4"
+    "mtime": 1794959643.415899,
+    "seen": 1794959800.1613839,
+    "ast_hash": "3f36a8e34f263ae659f33951370b670f",
+    "semantic_hash": "3f36a8e34f263ae659f33951370b670f"
   },
   "docs/aparelhos/README.md": {
-    "mtime": 1794956167.8779483,
-    "seen": 1794956844.9042509,
-    "ast_hash": "9ddac5aadb39180ca057083869958e21",
-    "semantic_hash": "9ddac5aadb39180ca057083869958e21"
+    "mtime": 1794959727.0609648,
+    "seen": 1794959800.1613886,
+    "ast_hash": "193ecde0227818b31415e88f57d438b9",
+    "semantic_hash": "193ecde0227818b31415e88f57d438b9"
   },
   "docs/aparelhos/escritorio/ar-do-escritorio.md": {
     "mtime": 1794956216.5259514,
@@ -198,10 +198,10 @@
     "semantic_hash": "7c2a8bc963ad7b2f6e4fcc35c9a7e58e"
   },
   "docs/aparelhos/quarto/ar-do-quarto.md": {
-    "mtime": 1794956180.7699492,
-    "seen": 1794956844.904254,
-    "ast_hash": "24bf6dc04cff17137198f84b78155fd8",
-    "semantic_hash": "24bf6dc04cff17137198f84b78155fd8"
+    "mtime": 1794959727.0597863,
+    "seen": 1794959800.16139,
+    "ast_hash": "31dab3196dfd26aa1904dbe2acb17e4f",
+    "semantic_hash": "31dab3196dfd26aa1904dbe2acb17e4f"
   },
   "docs/aparelhos/quarto/tv-do-quarto.md": {
     "mtime": 1794956207.6219509,

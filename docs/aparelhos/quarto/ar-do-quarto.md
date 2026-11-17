@@ -30,6 +30,9 @@
 | ligar 16 °C (frio, automática) | sinal enviado; usado como base dos extras |
 | **Oscilar** (extra) | **funcionou** |
 | **Visor desligado** (extra) | **funcionou** |
+| **Turbo** (extra, com oscilação e visor apagado) | **funcionou** |
+| 18 °C + oscilar (sinal avulso, não salvo) | sinal enviado, sem confirmação |
+| oscilar + visor apagado em 16 °C (sinal avulso, não salvo) | sinal enviado; o mesmo estado está no Turbo, que funcionou |
 
 ## Comandos extras (criados a partir da captura real)
 
@@ -37,15 +40,20 @@
 |---|---|---|---|
 | Oscilar (16 °C, frio, ventilação automática) | `oscilacao_alternar` | `49 00 20 50 01 20 00 50` | liga a oscilação vertical e fixa 16 °C, frio, automática |
 | Visor desligado (16 °C, frio, ventilação automática) | `x_luz` | `09 00 00 50 00 20 00 50` | apaga o visor e fixa 16 °C, frio, automática |
+| Turbo (16 °C, frio, automática, oscilando, visor apagado) | `modo_turbo` | `49 00 10 50 01 20 00 50` | liga o turbo com oscilação e visor apagado; fixa 16 °C, frio, automática |
 
 Gerados com `ferramentas/gree_variante.py`: sinal real de "frio/automática/16 °C" (`09 00 20 50 00 20 00 50`)
-com só os bits trocados (oscilar = byte 0 `0x40` + byte 4 `0x01`; visor = byte 2 `0x20` apagado).
+com só os bits trocados (oscilar = byte 0 `0x40` + byte 4 `0x01`; visor = byte 2 `0x20` apagado;
+turbo = byte 2 `0x10`).
 Os tempos são os do controle original (cabeçalho ~9600/4850 µs, pausa ~21500 µs). Duas tentativas anteriores
 com tempos genéricos do ESPHome (9000/4000 µs, 19000 µs) **não funcionaram**.
 
 ## Ressalvas (importante para quem opera)
 
 - Os extras **fixam 16 °C, frio, ventilação automática**. Mandar "oscilar" com o aparelho em 23 °C o leva a 16 °C.
+- Cada extra manda o estado inteiro: `oscilacao_alternar` acende o visor; `x_luz` desliga a oscilação;
+  `modo_turbo` liga turbo + oscilação + visor apagado. Para outra combinação, gere com a ferramenta
+  (`--oscilar`, `--visor-desligado`, `--turbo`, juntos ou separados).
 - Qualquer `controlar` normal (mudar temperatura, modo ou ventilação) usa os sinais do perfil, que têm
   **visor aceso e oscilação desligada**. Depois disso, mande o extra de novo se o usuário quiser.
 - A chave `oscilacao_alternar` está registrada como "alternar", mas o quadro **liga** a oscilação (não alterna).
@@ -57,4 +65,5 @@ com tempos genéricos do ESPHome (9000/4000 µs, 19000 µs) **não funcionaram**
 - "Ligue o ar do quarto em 16 graus." → `controlar(aparelho="ar do quarto", ligar=true, definir={temperatura:16})`
 - "Coloca a pá do ar do quarto para oscilar." → `controlar(aparelho="ar do quarto", teclas=["oscilacao_alternar"])`
 - "Apaga o visor do ar do quarto." → `controlar(aparelho="ar do quarto", teclas=["x_luz"])`
+- "Liga o turbo do ar do quarto." → `controlar(aparelho="ar do quarto", teclas=["modo_turbo"])`
 - "Desligue o ar do quarto." → `controlar(aparelho="ar do quarto", ligar=false)`

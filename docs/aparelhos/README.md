@@ -8,7 +8,7 @@ sinais extras e ressalvas. Atualizado em 17/11/2026.
 
 | Cômodo | Nome exato no conector | Aparelho físico | Perfil (controle) | Ficha |
 |---|---|---|---|---|
-| Quarto | `ar do quarto` | Ar-condicionado **Gree** GWH09KF | SmartIR `climate/1184` "Gree GWH09KF" (catálogo nº 105) + oscilação e visor gerados | [quarto/ar-do-quarto.md](quarto/ar-do-quarto.md) |
+| Quarto | `ar do quarto` | Ar-condicionado **Gree** GWH09KF | SmartIR `climate/1184` "Gree GWH09KF" (catálogo nº 105) + oscilação, visor e turbo gerados | [quarto/ar-do-quarto.md](quarto/ar-do-quarto.md) |
 | Quarto | `tv do quarto` | TV **Samsung** (Samsung32, endereço 0x07) | Flipper-IRDB "Samsung TV Full" (catálogo nº 2331) + ligar/desligar diretos + macro Netflix | [quarto/tv-do-quarto.md](quarto/tv-do-quarto.md) |
 | Escritório | `ar do escritório` | Ar-condicionado **Carrier** | SmartIR "Carrier Unknown" (catálogo nº 94) | [escritorio/ar-do-escritorio.md](escritorio/ar-do-escritorio.md) |
 | Laboratório | `ar condicionado laboratório` | Ar-condicionado **Midea** | o mesmo "Carrier Unknown" (nº 94) + oscilação do perfil Ferroli/York | [laboratorio/ar-condicionado-laboratorio.md](laboratorio/ar-condicionado-laboratorio.md) |

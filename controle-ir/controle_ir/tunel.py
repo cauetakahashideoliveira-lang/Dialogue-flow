@@ -38,7 +38,7 @@ class Tunel:
         if self.modo == "cloudflare":
             return ["cloudflared", "tunnel", "--no-autoupdate", "run", "--token", self.cfg["token"]]
         if self.modo == "ngrok":
-            cmd = ["ngrok", "http", f"--url={self.cfg['dominio']}", str(self.porta), "--log", "stdout"]
+            cmd = ["ngrok", "http", f"--url={self.cfg['dominio']}", alvo, "--log", "stdout"]
             # no Android o ngrok não acha o DNS; termux-chroot expõe um /etc/resolv.conf
             if self.cfg.get("chroot", True) and shutil.which("termux-chroot"):
                 cmd = ["termux-chroot"] + cmd

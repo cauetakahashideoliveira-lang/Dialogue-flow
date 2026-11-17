@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1794932715.5601509,
-    "seen": 1794932723.8550365,
-    "ast_hash": "8581550446d2e9d88d526b0d5ec45e59",
+    "mtime": 1794933477.5654664,
+    "seen": 1794933485.4631202,
+    "ast_hash": "fbc2467e52e06b670775a088bfca3cad",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -84,9 +84,9 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/tunel.py": {
-    "mtime": 1794932217.7991452,
-    "seen": 1794932235.777671,
-    "ast_hash": "ad62c51b0f1265d08f0c2409adb2ab65",
+    "mtime": 1794933477.5596929,
+    "seen": 1794933485.4631426,
+    "ast_hash": "cf0f935de907b6245aedfa6cbacc21cf",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/vocabulario.py": {

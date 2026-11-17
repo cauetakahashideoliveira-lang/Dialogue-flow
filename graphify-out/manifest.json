@@ -1,0 +1,176 @@
+{
+  "controle-ir/controle_ir/__init__.py": {
+    "mtime": 1794921188.0662706,
+    "seen": 1794924161.7817595,
+    "ast_hash": "58a3f04e98b4c30e4845e719c5353f63",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/__main__.py": {
+    "mtime": 1794921407.9102836,
+    "seen": 1794924161.7817667,
+    "ast_hash": "470ebc9c3d9621d3ace3882ed82730bd",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/aparelhos.py": {
+    "mtime": 1794920895.558253,
+    "seen": 1794924161.78177,
+    "ast_hash": "d99fb56c5d14147cca3f31ae85f3c56d",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/catalogo.py": {
+    "mtime": 1794921537.8307216,
+    "seen": 1794924161.7817717,
+    "ast_hash": "eec947d981d6c1cc8b914b69b4d972c8",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/cli.py": {
+    "mtime": 1794921398.190283,
+    "seen": 1794924161.781773,
+    "ast_hash": "928ae9692252f7472bcd269820fdf7a2",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/controle.py": {
+    "mtime": 1794921831.3409214,
+    "seen": 1794924161.7817743,
+    "ast_hash": "17b53200ab4b8d11077f7a5844a55aff",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/descoberta.py": {
+    "mtime": 1794921111.8909142,
+    "seen": 1794924161.7817757,
+    "ast_hash": "fc04ac2209775a88ed1b367e27b88f23",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/emissor.py": {
+    "mtime": 1794920835.6262496,
+    "seen": 1794924161.781777,
+    "ast_hash": "a2b9fdc5275336fc88170fdea43baa6a",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/formatos.py": {
+    "mtime": 1794920765.2502453,
+    "seen": 1794924161.7817776,
+    "ast_hash": "0fb92543fe076f5b974435cf1def5871",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/mcp.py": {
+    "mtime": 1794921241.1022737,
+    "seen": 1794924161.7817793,
+    "ast_hash": "c6dd280273a041029e445e46c13f9751",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/protocolos.py": {
+    "mtime": 1794919279.8941274,
+    "seen": 1794924161.7817805,
+    "ast_hash": "ceadbcf302a63e7b7c41276752c154c5",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/servico.py": {
+    "mtime": 1794921831.317344,
+    "seen": 1794924161.7817817,
+    "ast_hash": "b9a75966172dd85a858cff7e8976ed0d",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/servidor.py": {
+    "mtime": 1794921286.2422764,
+    "seen": 1794924161.7817829,
+    "ast_hash": "6713a441d23c9ed33ad05fe4cf5b3771",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/sinais.py": {
+    "mtime": 1794921910.2626631,
+    "seen": 1794924161.781784,
+    "ast_hash": "664799e37884a3116882c9d989e4787a",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/tunel.py": {
+    "mtime": 1794921339.2382796,
+    "seen": 1794924161.781785,
+    "ast_hash": "e051f9e929a60fb9a4dfd531947c61c1",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/vocabulario.py": {
+    "mtime": 1794921831.3204868,
+    "seen": 1794924161.7817862,
+    "ast_hash": "d38e4efacee01fad6f65a628c24b10d7",
+    "semantic_hash": ""
+  },
+  "controle-ir/dados/origem.json": {
+    "mtime": 1794921943.5632224,
+    "seen": 1794924161.781787,
+    "ast_hash": "60460a62d7f954e6223f31b43b81e74e",
+    "semantic_hash": ""
+  },
+  "controle-ir/instalar.sh": {
+    "mtime": 1794921821.022044,
+    "seen": 1794924161.7817883,
+    "ast_hash": "56152f53d148853f78bfa0c0dfb18fa1",
+    "semantic_hash": ""
+  },
+  "ferramentas/construir_catalogo.py": {
+    "mtime": 1794920818.8161838,
+    "seen": 1794924161.7817898,
+    "ast_hash": "a72b7185020b819a3347838bc5be26aa",
+    "semantic_hash": ""
+  },
+  "ferramentas/empacotar.sh": {
+    "mtime": 1794921714.830758,
+    "seen": 1794924161.7817907,
+    "ast_hash": "2333872112bdd146515e4318dae4b00e",
+    "semantic_hash": ""
+  },
+  "ferramentas/verificar_cliente_mcp.py": {
+    "mtime": 1794921831.3223088,
+    "seen": 1794924161.7817917,
+    "ast_hash": "7412aa1ac0ae2377aea28c4b62ac429f",
+    "semantic_hash": ""
+  },
+  "testes/test_controle_ir.py": {
+    "mtime": 1794921831.3416498,
+    "seen": 1794924161.7817929,
+    "ast_hash": "f66d6499fb93acc02ce6971db12bd8e9",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1794922040.966971,
+    "seen": 1794924161.7817948,
+    "ast_hash": "6e20c958367e025bdbfdd22117d8a6b9",
+    "semantic_hash": ""
+  },
+  "controle-ir/LICENCAS/Flipper-IRDB-CC0.txt": {
+    "mtime": 1794921714.8263018,
+    "seen": 1794924161.7817957,
+    "ast_hash": "473a7959b44c2f42c375d904305b6307",
+    "semantic_hash": ""
+  },
+  "controle-ir/LICENCAS/LEIA-ME.md": {
+    "mtime": 1794921714.8292084,
+    "seen": 1794924161.781797,
+    "ast_hash": "d929a2297e7b073605d645a0700b806b",
+    "semantic_hash": ""
+  },
+  "controle-ir/LICENCAS/SmartIR-MIT.txt": {
+    "mtime": 1794921714.8223019,
+    "seen": 1794924161.781798,
+    "ast_hash": "88cf957db27eda18f70b8068a0048f4f",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/painel.html": {
+    "mtime": 1794921325.1102786,
+    "seen": 1794924161.781799,
+    "ast_hash": "84117035f3104e2c838f7b22b04095d7",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1794924182.9325147,
+    "seen": 1794924184.1914392,
+    "ast_hash": "b01b5423c56de3248f6bc0c4d239d609",
+    "semantic_hash": ""
+  },
+  "docs/estado-atual.md": {
+    "mtime": 1794924182.9323816,
+    "seen": 1794924184.1914477,
+    "ast_hash": "0302c5fb355c8bfbec9d91105cffa923",
+    "semantic_hash": ""
+  }
+}

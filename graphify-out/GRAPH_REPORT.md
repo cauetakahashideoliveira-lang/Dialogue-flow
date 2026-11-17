@@ -1,7 +1,7 @@
 # Graph Report - Dialogue-flow  (2026-11-17)
 
 ## Corpus Check
-- 26 files · ~31,159 words
+- 26 files · ~31,215 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 2 file(s) not represented in the graph (top: (none) 1, .gz 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c1144e99`
+- Built from commit: `b2870fdd`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -49,14 +49,14 @@
 10. `agora()` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `preparar()` --uses--> `Servico`  [INFERRED]
-  ferramentas/verificar_cliente_mcp.py → controle-ir/controle_ir/servico.py
-- `novo_servico()` --calls--> `Servico`  [INFERRED]
-  testes/test_controle_ir.py → controle-ir/controle_ir/servico.py
 - `preparar()` --uses--> `EmissorSimulado`  [INFERRED]
   ferramentas/verificar_cliente_mcp.py → controle-ir/controle_ir/emissor.py
 - `novo_servico()` --calls--> `EmissorSimulado`  [INFERRED]
   testes/test_controle_ir.py → controle-ir/controle_ir/emissor.py
+- `preparar()` --uses--> `Servico`  [INFERRED]
+  ferramentas/verificar_cliente_mcp.py → controle-ir/controle_ir/servico.py
+- `novo_servico()` --calls--> `Servico`  [INFERRED]
+  testes/test_controle_ir.py → controle-ir/controle_ir/servico.py
 - `TestControle` --uses--> `Sinal`  [INFERRED]
   testes/test_controle_ir.py → controle-ir/controle_ir/sinais.py
 

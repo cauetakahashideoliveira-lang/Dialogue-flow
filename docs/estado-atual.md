@@ -19,15 +19,16 @@
 ## Aparelhos salvos
 | Nome | Tipo | Perfil | Como foi achado |
 |---|---|---|---|
-| ar condicionado laboratório (antes "escritório") | ar-condicionado | Carrier (catálogo nº 94, SmartIR) | busca Carrier, tentativa nº 1 (reteste nº 5 apitou) |
+| escritório | ar-condicionado Carrier | Carrier (catálogo nº 94, SmartIR) | busca Carrier, tentativa nº 1 (reteste nº 5 apitou) |
+| ar condicionado laboratório | ar-condicionado **Midea** | o mesmo perfil Carrier nº 94 (Midea aceita os códigos) | comandos enviados no laboratório: ventilação média, 17 °C e 20 °C reagiram |
 
-- ar condicionado laboratório aceita: modo frio/calor/desumidificar/automático/ventilar; 17–30 °C; ventilação automática/baixa/média/alta; desligar. Sem oscilação.
+- escritório aceita: modo frio/calor/desumidificar/automático/ventilar; 17–30 °C; ventilação automática/baixa/média/alta; desligar. Sem oscilação.
 - Testado pelo usuário: ligar 18 °C, desligar, ligar 18 °C, mudar para 22 °C (preservou frio + automática).
 
 ## Frases
-1. "Ligue o ar do laboratório em 23 °C, modo frio, ventilação baixa."
+1. "Ligue o ar do escritório em 23 °C, modo frio, ventilação baixa."
 2. "Agora mude só para 22 °C."
-3. "Desligue o ar do laboratório."
+3. "Desligue o ar do escritório."
 
 ## Pendências possíveis
 - Início automático com Termux:Boot (ainda não configurado).

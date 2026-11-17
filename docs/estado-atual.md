@@ -24,7 +24,7 @@
 3. "Desligue o ar do escritório."
 
 ## Pendências possíveis
-- URL fixa (ngrok/Cloudflare) e início automático (Termux:Boot).
+- URL fixa: ngrok configurado pelo usuário (v1.0.2 usa termux-chroot automaticamente). Início automático (Termux:Boot) pendente.
 - Resumo dos aparelhos nas instruções do MCP para economizar chamadas no chat.
 
 ## Anúncio dos testes (v1.0.1)

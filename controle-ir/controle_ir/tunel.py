@@ -38,7 +38,11 @@ class Tunel:
         if self.modo == "cloudflare":
             return ["cloudflared", "tunnel", "--no-autoupdate", "run", "--token", self.cfg["token"]]
         if self.modo == "ngrok":
-            return ["ngrok", "http", f"--url={self.cfg['dominio']}", str(self.porta), "--log", "stdout"]
+            cmd = ["ngrok", "http", f"--url={self.cfg['dominio']}", str(self.porta), "--log", "stdout"]
+            # no Android o ngrok não acha o DNS; termux-chroot expõe um /etc/resolv.conf
+            if self.cfg.get("chroot", True) and shutil.which("termux-chroot"):
+                cmd = ["termux-chroot"] + cmd
+            return cmd
         return None
 
     def iniciar(self):
@@ -56,8 +60,9 @@ class Tunel:
         espera = 3
         while not self.parar_evento.is_set():
             cmd = self.comando()
-            if not cmd or not shutil.which(cmd[0]):
-                self.ultimo_erro = f"{cmd[0] if cmd else 'túnel'} não está instalado (pkg install cloudflared)"
+            prog = next((c for c in (cmd or []) if c != "termux-chroot"), None)
+            if not cmd or not shutil.which(prog):
+                self.ultimo_erro = f"{prog or 'túnel'} não está instalado"
                 self.log(self.ultimo_erro)
                 return
             if self.modo in ("cloudflare", "ngrok"):

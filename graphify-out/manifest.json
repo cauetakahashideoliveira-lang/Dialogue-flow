@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1794924836.9114423,
-    "seen": 1794924838.5461864,
-    "ast_hash": "7bfff802e01c7ffbe14768a56daf4699",
+    "mtime": 1794932217.8058693,
+    "seen": 1794932235.7776377,
+    "ast_hash": "47706bb76b3d86ad9cf33ead00834df0",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -24,9 +24,9 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/cli.py": {
-    "mtime": 1794924781.9624977,
-    "seen": 1794924838.5462055,
-    "ast_hash": "47c4d2bfd2ff2532f2da26b85d105b01",
+    "mtime": 1794932217.7996113,
+    "seen": 1794932235.7776554,
+    "ast_hash": "55b442482e21a8c1cf852c25e0162541",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/controle.py": {
@@ -84,9 +84,9 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/tunel.py": {
-    "mtime": 1794921339.2382796,
-    "seen": 1794924161.781785,
-    "ast_hash": "e051f9e929a60fb9a4dfd531947c61c1",
+    "mtime": 1794932217.7991452,
+    "seen": 1794932235.777671,
+    "ast_hash": "ad62c51b0f1265d08f0c2409adb2ab65",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/vocabulario.py": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1794924836.9092913,
-    "seen": 1794924838.546239,
-    "ast_hash": "a81f1e9066c112d213f6a8cc973cd60b",
+    "mtime": 1794932231.803619,
+    "seen": 1794932235.7776916,
+    "ast_hash": "edae89ae8b14cdf1ea5b8708e805eb20",
     "semantic_hash": ""
   }
 }

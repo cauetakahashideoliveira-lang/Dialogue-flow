@@ -424,7 +424,11 @@ def main(argv=None):
             if not a.dominio:
                 print("use: controle-ir tunel ngrok --dominio seu-nome.ngrok-free.app")
                 return 1
-            t.update(dominio=a.dominio)
+            dom = a.dominio.strip().removeprefix("https://").removeprefix("http://").strip("/")
+            if dom.startswith("rd_") or "." not in dom:
+                print("Isso parece o código interno (rd_...). Use o endereço, ex.: nome-1234.ngrok-free.app")
+                return 1
+            t.update(dominio=dom, url=f"https://{dom}")
         c["tunel"] = t
         salvar_config(c)
         print(f"Túnel configurado: {a.modo}. Reinicie com: controle-ir parar; controle-ir")

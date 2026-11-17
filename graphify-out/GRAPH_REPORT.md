@@ -1,7 +1,7 @@
 # Graph Report - Dialogue-flow  (2026-11-17)
 
 ## Corpus Check
-- 26 files · ~30,925 words
+- 26 files · ~30,991 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 2 file(s) not represented in the graph (top: (none) 1, .gz 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `323e93de`
+- Built from commit: `6d6c461f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -44,8 +44,8 @@
 3. `Descoberta` - 37 edges
 4. `Catalogo` - 34 edges
 5. `Controlador` - 27 edges
-6. `criar_servidor()` - 24 edges
-7. `normalizar()` - 24 edges
+6. `normalizar()` - 24 edges
+7. `criar_servidor()` - 24 edges
 8. `iniciar()` - 22 edges
 9. `EmissorSimulado` - 22 edges
 10. `agora()` - 18 edges

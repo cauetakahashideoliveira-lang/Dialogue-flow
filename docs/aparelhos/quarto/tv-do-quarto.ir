@@ -1,0 +1,30 @@
+Filetype: IR signals file
+Version: 1
+#
+# tv do quarto (Samsung, Samsung32 endereço 0x07) — comandos adicionados ou confirmados em 17/11/2026.
+# O resto vem do perfil "Samsung TV Full" (catálogo nº 2331).
+#
+name: Ligar_(direto)
+type: parsed
+protocol: Samsung32
+address: 07 00 00 00
+command: 99 00 00 00
+#
+name: Desligar_(direto)
+type: parsed
+protocol: Samsung32
+address: 07 00 00 00
+command: 98 00 00 00
+#
+name: Smart_hub
+type: parsed
+protocol: Samsung32
+address: 07 00 00 00
+command: 79 00 00 00
+#
+name: Ok
+type: parsed
+protocol: Samsung32
+address: 07 00 00 00
+command: 68 00 00 00
+#

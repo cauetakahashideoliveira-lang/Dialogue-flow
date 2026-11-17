@@ -530,6 +530,10 @@ class TestGreeVariante(unittest.TestCase):
         self.assertEqual(b[2] & 0x20, 0)
         self.assertEqual(b[7] >> 4, self.g.checksum(b))
 
+    def test_turbo_liga_bit_0x10_do_byte_2(self):
+        r = self.g.gerar("frio", "automatica", 16, oscilar=True, visor_desligado=True, turbo=True)
+        self.assertEqual(r["bytes"], "49 00 10 50 01 20 00 50")
+
     def test_quadro_duplo_e_recusado(self):
         with self.assertRaises(self.g.ErroGree):
             self.g.gerar("frio", "baixa", 18, oscilar=True)

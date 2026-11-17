@@ -20,7 +20,7 @@
 | Nome | Tipo | Perfil | Como foi achado |
 |---|---|---|---|
 | escritório | ar-condicionado Carrier | Carrier (catálogo nº 94, SmartIR) | busca Carrier, tentativa nº 1 (reteste nº 5 apitou) |
-| ar condicionado laboratório | ar-condicionado **Midea** | o mesmo perfil Carrier nº 94 (Midea aceita os códigos) | comandos enviados no laboratório: ventilação média, 17 °C e 20 °C reagiram |
+| ar condicionado laboratório | ar-condicionado **Midea** | o mesmo perfil Carrier nº 94 (Midea aceita os códigos) | comandos enviados no laboratório: ventilação média, 17 °C e 20 °C reagiram; **oscilação** adicionada (tecla alternar do perfil Ferroli/York, busca de oscilação em todas as marcas, tentativa nº 1) |
 
 - escritório aceita: modo frio/calor/desumidificar/automático/ventilar; 17–30 °C; ventilação automática/baixa/média/alta; desligar. Sem oscilação.
 - Testado pelo usuário: ligar 18 °C, desligar, ligar 18 °C, mudar para 22 °C (preservou frio + automática).

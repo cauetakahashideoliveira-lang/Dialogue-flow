@@ -1,0 +1,2 @@
+Origem: https://github.com/Zavelinski/claude-code-godmode (commit 05b71cf403481861414324f2eae1cb7ece205ae2), licença MIT.
+Instalado só o SKILL.md, sem o hook UserPromptSubmit (godmode-tracker.js).

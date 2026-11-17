@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1794921188.0662706,
-    "seen": 1794924161.7817595,
-    "ast_hash": "58a3f04e98b4c30e4845e719c5353f63",
+    "mtime": 1794924836.9114423,
+    "seen": 1794924838.5461864,
+    "ast_hash": "7bfff802e01c7ffbe14768a56daf4699",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -24,9 +24,9 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/cli.py": {
-    "mtime": 1794921398.190283,
-    "seen": 1794924161.781773,
-    "ast_hash": "928ae9692252f7472bcd269820fdf7a2",
+    "mtime": 1794924781.9624977,
+    "seen": 1794924838.5462055,
+    "ast_hash": "47c4d2bfd2ff2532f2da26b85d105b01",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/controle.py": {
@@ -54,9 +54,9 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/mcp.py": {
-    "mtime": 1794921241.1022737,
-    "seen": 1794924161.7817793,
-    "ast_hash": "c6dd280273a041029e445e46c13f9751",
+    "mtime": 1794924797.2336147,
+    "seen": 1794924838.5462132,
+    "ast_hash": "c15a4fd1ac0b97c011c5a789918b3dc2",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/protocolos.py": {
@@ -72,9 +72,9 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/servidor.py": {
-    "mtime": 1794921286.2422764,
-    "seen": 1794924161.7817829,
-    "ast_hash": "6713a441d23c9ed33ad05fe4cf5b3771",
+    "mtime": 1794924781.9620867,
+    "seen": 1794924838.546217,
+    "ast_hash": "65f92cfec5793e9c12886b84bcecbab5",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/sinais.py": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1794924182.9323816,
-    "seen": 1794924184.1914477,
-    "ast_hash": "0302c5fb355c8bfbec9d91105cffa923",
+    "mtime": 1794924836.9092913,
+    "seen": 1794924838.546239,
+    "ast_hash": "a81f1e9066c112d213f6a8cc973cd60b",
     "semantic_hash": ""
   }
 }

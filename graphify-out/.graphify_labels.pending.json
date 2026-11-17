@@ -1,5 +1,5 @@
 {
-  "0": "Sinal",
+  "0": "vocabulario.py",
   "1": "servico.py",
   "2": "cli.py",
   "3": "Servico",
@@ -10,7 +10,14 @@
   "8": "Estado atual da instalação (17/11/2026)",
   "9": "Controle IR do POCO + Claude",
   "10": "CLAUDE.md",
+  "11": "protocolos.py",
   "12": "instalar.sh",
+  "13": "ErroEmissor",
   "14": "LEIA-ME.md",
-  "15": "empacotar.sh"
+  "15": "empacotar.sh",
+  "16": "ServidorMCP",
+  "17": "Notificador",
+  "18": "TestServidorMCP",
+  "19": "TestProtocolos",
+  "20": "TestVocabulario"
 }

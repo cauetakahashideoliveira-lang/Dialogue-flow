@@ -214,7 +214,7 @@ def iniciar(args):
         print(f"Emissor infravermelho encontrado ({faixas}).")
     else:
         print(f"ATENÇÃO: emissor indisponível — {disp.get('motivo')}")
-    notificar = Notificador()
+    notificar = Notificador(voz=c.get("voz", True))
     servico = Servico(str(PASTA), emissor, cat_mod.Catalogo(PASTA / "catalogo.sqlite"), notificar)
     try:
         srv = criar_servidor(servico, c["segredo"], porta)
@@ -324,6 +324,8 @@ def main(argv=None):
     p.add_argument("--sem-tunel", action="store_true")
     for n in ("copiar", "pausar", "retomar", "painel", "status", "url", "parar", "novo-segredo", "testar-emissor"):
         sub.add_parser(n)
+    pv = sub.add_parser("voz", help="liga/desliga o número falado a cada teste")
+    pv.add_argument("estado", choices=["sim", "nao"])
     pc = sub.add_parser("catalogo")
     pc.add_argument("acao", choices=["reconstruir", "ampliar", "info"])
     pc.add_argument("--sim", action="store_true")
@@ -388,6 +390,11 @@ def main(argv=None):
         c["segredo"] = secrets.token_urlsafe(32)
         salvar_config(c)
         print("Novo segredo criado. Reinicie o serviço e atualize a URL do conector no Claude.")
+        return 0
+    if cmd == "voz":
+        c["voz"] = a.estado == "sim"
+        salvar_config(c)
+        print(f"Voz {'ligada' if c['voz'] else 'desligada'}. Reinicie o serviço (sair e controle-ir).")
         return 0
     if cmd == "testar-emissor":
         print(json.dumps(EmissorTermux().disponivel(), ensure_ascii=False))

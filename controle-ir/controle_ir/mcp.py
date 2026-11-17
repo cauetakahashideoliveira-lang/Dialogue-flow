@@ -29,6 +29,9 @@ Responda ao usuário em português.
 - Descoberta: buscar inicia testes no celular. Antes, explique que Enter sozinho no Termux pausa na hora.
   Se o usuário disser "ligou"/"apitou"/"reagiu", chame pausar imediatamente e mostre os suspeitos; se houver
   mais de um, use retestar com um número por vez e só então confirmar o que o usuário identificar.
+- O celular fala em voz alta e mostra o número de cada envio ("1", "2", "3"...). Esse número é o mesmo do
+  histórico: se o usuário disser "foi o 5", chame pausar (se ainda estiver testando), depois retestar([5]) para
+  ele confirmar e, se reagir de novo, confirmar(numero=5).
 - Nunca use permitir_servico sem pedido explícito do usuário."""
 
 

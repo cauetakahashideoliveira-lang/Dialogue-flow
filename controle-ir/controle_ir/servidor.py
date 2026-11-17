@@ -30,51 +30,69 @@ LIMITE_CORPO = 2_000_000
 
 
 class Notificador:
-    """Notificação persistente do Termux com o botão “Reagiu — pausar”."""
+    """Anuncia cada envio no celular: número falado em voz alta, linha grande no
+    Termux e notificação persistente com o botão “Reagiu — pausar”."""
 
-    def __init__(self, comando_cli: str = "controle-ir"):
+    def __init__(self, comando_cli: str = "controle-ir", voz: bool = True, console: bool = True):
         self.ok = bool(shutil.which("termux-notification"))
+        self.voz = voz and bool(shutil.which("termux-tts-speak"))
+        self.console = console
         self.cli = comando_cli
         self.ultimo = 0.0
         self.trava = threading.Lock()
 
-    def _rodar(self, args):
-        if not self.ok:
+    def _rodar(self, args, sempre=False):
+        if not (self.ok or sempre):
             return
         try:
             subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError:
-            self.ok = False
+            if not sempre:
+                self.ok = False
+
+    def falar(self, texto: str):
+        if self.voz:
+            self._rodar(["termux-tts-speak", "-l", "pt", "-r", "1.2", texto], sempre=True)
 
     def __call__(self, ev: dict):
         tipo = ev.get("tipo")
-        with self.trava:
-            agora = time.monotonic()
-            if tipo == "teste" and agora - self.ultimo < 0.8:
-                return
-            self.ultimo = agora
         if tipo in ("teste", "reteste", "distincao"):
+            n = ev["n"]
             if tipo == "teste":
                 marcas = ", ".join(ev.get("marcas") or [])[:60]
-                txt = f"Tentativa {ev['n']} · candidato {ev['posicao']}/{ev['total']}"
+                txt = f"Nº {n} · candidato {ev['posicao']}/{ev['total']}"
                 if ev.get("funcao"):
                     txt += f" · {ev['funcao']}"
                 if marcas:
                     txt += f" · {marcas}"
                 if ev.get("status") == "erro":
                     txt += " · ERRO no envio"
+                fala = str(n) if ev.get("status") != "erro" else f"{n}, erro"
             elif tipo == "reteste":
-                txt = f"Reteste da tentativa {ev['repete']} (novo número {ev['n']})"
+                txt = f"Nº {n} · reteste do nº {ev['repete']}"
+                fala = f"{n}, reteste do {ev['repete']}"
             else:
-                txt = f"Distinção: {ev.get('teste')} — variante {ev.get('variante')} (nº {ev['n']})"
-            self._rodar(["termux-notification", "--id", "controle-ir-busca", "--title", "Controle IR — testando",
+                txt = f"Nº {n} · distinção {ev.get('teste')} — variante {ev.get('variante')}"
+                fala = f"{n}, variante {ev.get('variante')}"
+            self.falar(fala)
+            if self.console:
+                print(f"  ▶ {n:>3}   {txt}", flush=True)
+            with self.trava:
+                agora = time.monotonic()
+                if tipo == "teste" and agora - self.ultimo < 0.8:
+                    return
+                self.ultimo = agora
+            self._rodar(["termux-notification", "--id", "controle-ir-busca", "--title", f"Controle IR — nº {n}",
                          "--content", txt, "--ongoing", "--alert-once", "--priority", "high",
                          "--button1", "Reagiu — pausar", "--button1-action", f"{self.cli} pausar",
                          "--button2", "Painel", "--button2-action", f"{self.cli} painel"])
         elif tipo in ("pausado", "lote", "concluido"):
-            txt = {"pausado": "Busca pausada. Diga ao Claude o que aconteceu.",
+            txt = {"pausado": "Busca pausada. Diga ao Claude qual número funcionou.",
                    "lote": f"Lote concluído ({ev.get('testados')}/{ev.get('total')}). Nada reagiu?",
                    "concluido": "Todos os candidatos foram testados."}[tipo]
+            self.falar({"pausado": "pausado", "lote": "fim do lote", "concluido": "fim dos testes"}[tipo])
+            if self.console:
+                print(f"  ■ {txt}", flush=True)
             self._rodar(["termux-notification", "--id", "controle-ir-busca", "--title", "Controle IR",
                          "--content", txt, "--button1", "Continuar", "--button1-action", f"{self.cli} retomar",
                          "--button2", "Painel", "--button2-action", f"{self.cli} painel"])

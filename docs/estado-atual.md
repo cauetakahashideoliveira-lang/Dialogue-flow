@@ -26,3 +26,8 @@
 ## Pendências possíveis
 - URL fixa (ngrok/Cloudflare) e início automático (Termux:Boot).
 - Resumo dos aparelhos nas instruções do MCP para economizar chamadas no chat.
+
+## Anúncio dos testes (v1.0.1)
+- Cada envio da busca é falado em voz alta (termux-tts-speak) e mostrado no Termux como "▶ N".
+- O número falado = número do histórico: "foi o 5" → pausar, retestar([5]), confirmar(5).
+- Desligar a voz: `controle-ir voz nao`.

@@ -19,15 +19,15 @@
 ## Aparelhos salvos
 | Nome | Tipo | Perfil | Como foi achado |
 |---|---|---|---|
-| escritório | ar-condicionado | Carrier (catálogo nº 94, SmartIR) | busca Carrier, tentativa nº 1 (reteste nº 5 apitou) |
+| ar condicionado laboratório (antes "escritório") | ar-condicionado | Carrier (catálogo nº 94, SmartIR) | busca Carrier, tentativa nº 1 (reteste nº 5 apitou) |
 
-- escritório aceita: modo frio/calor/desumidificar/automático/ventilar; 17–30 °C; ventilação automática/baixa/média/alta; desligar. Sem oscilação.
+- ar condicionado laboratório aceita: modo frio/calor/desumidificar/automático/ventilar; 17–30 °C; ventilação automática/baixa/média/alta; desligar. Sem oscilação.
 - Testado pelo usuário: ligar 18 °C, desligar, ligar 18 °C, mudar para 22 °C (preservou frio + automática).
 
 ## Frases
-1. "Ligue o ar do escritório em 23 °C, modo frio, ventilação baixa."
+1. "Ligue o ar do laboratório em 23 °C, modo frio, ventilação baixa."
 2. "Agora mude só para 22 °C."
-3. "Desligue o ar do escritório."
+3. "Desligue o ar do laboratório."
 
 ## Pendências possíveis
 - Início automático com Termux:Boot (ainda não configurado).
@@ -42,3 +42,4 @@
 - `curl` com `CANNOT LINK EXECUTABLE`: `apt update && apt full-upgrade`.
 - Download do ZIP em cache do GitHub: usar URL com o hash do commit (`.../raw/<hash>/dist/controle-ir.zip`).
 - Domínio do ngrok: usar o endereço `*.ngrok-free.app`, não o código `rd_…`.
+- Faixa real do perfil: 17–30 °C (16 °C não existe). Oscilação não disponível; opções: testar perfis Carrier/Midea/Springer com swing ou importar captura.

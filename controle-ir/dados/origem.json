@@ -1,0 +1,17 @@
+{
+  "smartir": {
+    "repositorio": "https://github.com/smartHomeHub/SmartIR",
+    "commit": "3dca407e3c475b57c02c08b97ae521a4ef0bbf43",
+    "licenca": "MIT",
+    "perfis": 489,
+    "ignorados": 23
+  },
+  "flipper-irdb-cc0": {
+    "repositorio": "https://github.com/Lucaslhm/Flipper-IRDB",
+    "commit": "d126fb1b6f1e114c52b4a8c19839ea65e3a9c24d",
+    "licenca": "CC0-1.0",
+    "a_partir_do_commit": "2319685f2cbf0cd3f809609622cade14d24fb819",
+    "perfis": 143,
+    "ignorados": 0
+  }
+}

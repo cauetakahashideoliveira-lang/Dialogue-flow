@@ -2,9 +2,13 @@
   "0": "Catalogo",
   "1": "Sinal",
   "4": "cli.py",
+  "7": "Sinal",
+  "8": "TestServidorMCP",
   "16": "PathLike",
-  "23": "ServidorMCP",
+  "23": "TestVocabulario",
   "24": "TestSegundoPlano",
   "25": "godmode-tracker.js",
-  "26": "ValueError"
+  "26": "ValueError",
+  "27": "PathLike",
+  "28": "RuntimeError"
 }

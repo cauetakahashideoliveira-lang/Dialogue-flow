@@ -116,7 +116,8 @@ Regras que o servidor aplica:
   `permitir_servico=true`.
 
 ### Descoberta
-* Pausar: **Enter sozinho** no Termux, o botão **Reagiu — pausar** no painel ou na notificação, ou dizer ao Claude.
+* Pausar: **Enter sozinho** no Termux (na tela do serviço ou no console, quando ele roda em segundo plano), o
+  botão **Reagiu — pausar** no painel ou na notificação, ou dizer ao Claude.
 * Suspeitos: o último sinal e os enviados dentro da janela de reação (`intervalo + 10 s`).
 * Vários perfis com o mesmo sinal: `confirmar` propõe **testes de distinção** com outra função
   (volume, mudo, cor…); `distinguir(teste, variante)` envia cada variante.

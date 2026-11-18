@@ -29,7 +29,8 @@ Responda ao usuário em português.
 - Se o usuário disser que usou o controle original, chame registrar_estado(controle_original_usado=true).
 - Em "precisa_confirmacao", explique o motivo e pergunte; não reenvie sem a resposta.
 - Em "parcial", diga quais etapas já saíram e não as repita.
-- Descoberta: buscar inicia testes no celular. Antes, explique que Enter sozinho no Termux pausa na hora.
+- Descoberta: buscar inicia testes no celular. Antes, explique que o botão "Reagiu — pausar" da notificação
+  (ou Enter sozinho no console do controle-ir no Termux) pausa na hora.
   Se o usuário disser "ligou"/"apitou"/"reagiu", chame pausar imediatamente e mostre os suspeitos; se houver
   mais de um, use retestar com um número por vez e só então confirmar o que o usuário identificar.
 - O celular fala em voz alta e mostra o número de cada envio ("1", "2", "3"...). Esse número é o mesmo do

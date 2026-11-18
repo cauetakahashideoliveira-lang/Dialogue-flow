@@ -626,7 +626,7 @@ class TestSegundoPlano(unittest.TestCase):
         self.pasta = home / ".controle-ir"
         self.pasta.mkdir(parents=True)
         shutil.copy(catalogo_base(), self.pasta / "catalogo.sqlite")
-        (self.pasta / "catalogo.versao").write_text(__version__ + ":" + str(BASE.stat().st_mtime))
+        (self.pasta / "catalogo.versao").write_text("catalogo-1:" + str(BASE.stat().st_mtime))
         so = socket.socket()
         so.bind(("127.0.0.1", 0))
         self.porta = so.getsockname()[1]
@@ -709,6 +709,16 @@ class TestSegundoPlano(unittest.TestCase):
         finally:
             outro.kill()
             outro.wait()
+
+    def test_atualizar_programa_nao_refaz_catalogo(self):
+        base = str(BASE.stat().st_mtime)
+        versao = self.pasta / "catalogo.versao"
+        versao.write_text("1.0.6:" + base)  # carimbo gravado pela 1.0.6 no celular
+        self.assertIn("já está atualizado", self.cli("catalogo", "atualizar")[1])
+        versao.write_text("1.0.6:123.0")  # base diferente: refaz
+        self.assertIn("importados", self.cli("catalogo", "atualizar")[1])
+        self.assertTrue(versao.read_text().startswith("catalogo-1:"))
+        self.assertIn("já está atualizado", self.cli("catalogo", "atualizar")[1])
 
     def test_atalhos_do_widget_ligar_e_desligar(self):
         self.assertEqual(self.cli("atalhos")[0], 0)

@@ -55,7 +55,7 @@ if controle-ir status 2>/dev/null | grep -q '^Serviço: rodando'; then
 fi
 
 etapa "4/7 Preparando os perfis de controle…"
-if ! controle-ir catalogo reconstruir; then
+if ! controle-ir catalogo atualizar; then
   falha "preparação dos perfis" "Não consegui montar o catálogo. Confira o espaço livre do celular."
 fi
 ok "catálogo base pronto (SmartIR + Flipper-IRDB CC0)"

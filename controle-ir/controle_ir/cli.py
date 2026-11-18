@@ -11,7 +11,7 @@
     controle-ir pausar|retomar   controla a busca em andamento
     controle-ir painel           abre o painel no navegador do celular
     controle-ir status           mostra o estado
-    controle-ir catalogo reconstruir|ampliar|info
+    controle-ir catalogo reconstruir|atualizar|ampliar|info
     controle-ir importar ARQUIVO [--aparelho NOME | --nome NOME]
     controle-ir tunel rapido | cloudflare --token T --url URL | ngrok --dominio D
     controle-ir novo-segredo     invalida a URL antiga e gera outra
@@ -467,15 +467,30 @@ def reconstruir_catalogo(silencioso=False) -> dict:
         Path(str(tmp) + suf).unlink(missing_ok=True)
         Path(str(destino) + suf).unlink(missing_ok=True)
     os.replace(tmp, destino)
-    (PASTA / "catalogo.versao").write_text(__version__ + ":" + str(base.stat().st_mtime if base.exists() else 0))
+    (PASTA / "catalogo.versao").write_text(_carimbo_catalogo())
     return r
 
 
-def catalogo_atual() -> bool:
+# Mude só quando a montagem do catálogo mudar (importadores, esquema): atualizar o programa não refaz o catálogo.
+FORMATO_CATALOGO = "catalogo-1"
+_CARIMBOS_ANTIGOS = ("1.0.4", "1.0.5", "1.0.6")  # versões que gravavam o número do programa; mesmo catálogo
+
+
+def _carimbo_catalogo() -> str:
     base = DADOS / "base.jsonl.gz"
+    return FORMATO_CATALOGO + ":" + str(base.stat().st_mtime if base.exists() else 0)
+
+
+def catalogo_atual() -> bool:
     v = PASTA / "catalogo.versao"
-    esperado = __version__ + ":" + str(base.stat().st_mtime if base.exists() else 0)
-    return (PASTA / "catalogo.sqlite").exists() and v.exists() and v.read_text() == esperado
+    if not ((PASTA / "catalogo.sqlite").exists() and v.exists()):
+        return False
+    atual = v.read_text().strip()
+    esperado = _carimbo_catalogo()
+    if atual == esperado:
+        return True
+    prefixo, _, base = atual.partition(":")
+    return prefixo in _CARIMBOS_ANTIGOS and base == esperado.partition(":")[2]
 
 
 def ampliar_catalogo(confirmado=False, incluir_convertidos=True):
@@ -723,7 +738,7 @@ def main(argv=None):
     pv = sub.add_parser("voz", help="liga/desliga o número falado a cada teste")
     pv.add_argument("estado", choices=["sim", "nao"])
     pc = sub.add_parser("catalogo")
-    pc.add_argument("acao", choices=["reconstruir", "ampliar", "info"])
+    pc.add_argument("acao", choices=["reconstruir", "atualizar", "ampliar", "info"])
     pc.add_argument("--sim", action="store_true")
     pc.add_argument("--sem-convertidos", action="store_true")
     pi = sub.add_parser("importar")
@@ -818,6 +833,11 @@ def main(argv=None):
     if cmd == "catalogo":
         if a.acao == "reconstruir":
             print(json.dumps(reconstruir_catalogo(), ensure_ascii=False))
+        elif a.acao == "atualizar":  # só refaz se a base ou o formato mudaram (usado pelo instalador)
+            if catalogo_atual():
+                print("O catálogo já está atualizado (nada a refazer).")
+            else:
+                print(json.dumps(reconstruir_catalogo(), ensure_ascii=False))
         elif a.acao == "ampliar":
             ampliar_catalogo(a.sim, not a.sem_convertidos)
         else:

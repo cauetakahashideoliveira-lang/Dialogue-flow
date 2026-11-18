@@ -24,9 +24,9 @@
     "semantic_hash": "f663f17f7f72ef3d2bf1b48b8afa022b"
   },
   "controle-ir/controle_ir/cli.py": {
-    "mtime": 1795042884.3488898,
-    "seen": 1795042928.4270074,
-    "ast_hash": "e8dd6174291aa27f9d894fe3d30ab548",
+    "mtime": 1795043188.270787,
+    "seen": 1795043219.0565047,
+    "ast_hash": "34687d1c9e2ce3f60e793637589a55d2",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/controle.py": {
@@ -102,9 +102,9 @@
     "semantic_hash": "60460a62d7f954e6223f31b43b81e74e"
   },
   "controle-ir/instalar.sh": {
-    "mtime": 1795042884.349559,
-    "seen": 1795042928.4270244,
-    "ast_hash": "d1c8e28dd953bd8f35b6913aed83c311",
+    "mtime": 1795043188.271251,
+    "seen": 1795043219.0565193,
+    "ast_hash": "a62ea69b0848f9d8d8807a0809cad68c",
     "semantic_hash": ""
   },
   "ferramentas/construir_catalogo.py": {
@@ -126,9 +126,9 @@
     "semantic_hash": "7412aa1ac0ae2377aea28c4b62ac429f"
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1795042894.400811,
-    "seen": 1795042928.4270306,
-    "ast_hash": "c5a1c91306effb60d5c50c3ab0cc42ed",
+    "mtime": 1795043188.2789817,
+    "seen": 1795043219.0565248,
+    "ast_hash": "eb05a3a25ccc5e51e681a057e63fa9cc",
     "semantic_hash": ""
   },
   "README.md": {
@@ -168,9 +168,9 @@
     "semantic_hash": "09165dcf0ee44de671233cc16032275b"
   },
   "docs/estado-atual.md": {
-    "mtime": 1795042926.682386,
-    "seen": 1795042928.4270449,
-    "ast_hash": "c192c2f1f9a2a37636c01dc55e77984f",
+    "mtime": 1795043217.5272546,
+    "seen": 1795043219.0565374,
+    "ast_hash": "cb08171e10d3481fbe2e8a2f1cf5e97e",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {

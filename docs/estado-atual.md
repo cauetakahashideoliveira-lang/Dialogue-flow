@@ -5,7 +5,7 @@
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
-- Servidor no celular na versão 1.0.4. O repositório tem a **1.0.7**: ligar/desligar com um toque (Termux:Widget), início automático com Termux:Boot,
+- Servidor no celular na versão 1.0.6 (atualizado em 18/11, ~20h). O repositório tem a **1.0.7**: ligar/desligar com um toque (Termux:Widget), início automático com Termux:Boot,
   serviço em segundo plano com console, e resumo dos aparelhos nas instruções do conector. A 1.0.5 só corrigia
   a resposta de `editar_aparelho` quando o sinal já existe. **Falta atualizar o celular** (ver "Pendências").
 
@@ -41,7 +41,7 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
 
 ## Pendências
 - **Atualizar o celular para a 1.0.7** (a linha de instalação com o hash do commit; o instalador encerra o
-  serviço antigo sozinho e reconstrói o catálogo, o que leva alguns minutos com o ampliado).
+  serviço antigo sozinho; desde a 1.0.7 o catálogo só é refeito se a base mudar).
 - **Pôr os atalhos na tela inicial:** instalar o app Termux:Widget (F-Droid) → tela inicial → Widgets →
   Termux:Widget → "Termux shortcut" → "Ligar Controle IR" (e "Desligar Controle IR").
 - **Opcional — início automático no celular** (gasta mais bateria, serviço sempre ligado): instalar o app Termux:Boot (F-Droid) e abri-lo uma vez; HyperOS →

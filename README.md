@@ -168,6 +168,11 @@ O servidor relê as pastas a cada chamada: não precisa reiniciar.
 * `atualizar_sistema(ref=<commit>)` / `controle-ir atualizar --ref <commit>`: baixa o pacote do commit, guarda a
   versão atual em `~/controle-ir.anterior`, instala e religa. Se o acesso não voltar: atalho **Reverter Controle IR**
   (só shell) ou `controle-ir reverter`.
+* **Modo autônomo (rédea solta):** `controle-ir exec modo autonomo` no celular, uma vez. A partir daí o Claude
+  pesquisa, cria a ferramenta, roda, observa e ajusta na mesma conversa **sem pedir** a cada passo, e as
+  capacidades que ele cria já entram ativas. O console mostra um aviso de que o modo está ligado, toda ação
+  continua no `auditoria.jsonl`, e `controle-ir exec travar` (ou "trava tudo" no chat) é o freio imediato.
+  Perfis: `autonomo` | `cauteloso` (padrão, pede o que age) | `leitura` (só olhar).
 * **De qualquer aparelho (iPad, web, celular):** quando algo pede aprovação, o Claude pergunta no chat e, com o
   seu sim, aprova (`autorizar`); "libera por 2 horas" para de perguntar nesse tempo. Toda aprovação feita
   assim aparece como notificação no celular e fica no histórico. `travar` encerra tudo de qualquer lugar.

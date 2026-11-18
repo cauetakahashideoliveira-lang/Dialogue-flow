@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795045659.3619347,
-    "seen": 1795045689.370274,
-    "ast_hash": "d568d168bcdde6d6c55d4d1c44ba0fa9",
+    "mtime": 1795045903.6389158,
+    "seen": 1795045933.3695917,
+    "ast_hash": "3e4ea62e739a581d44bd6ae10d822d6b",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -24,9 +24,9 @@
     "semantic_hash": "f663f17f7f72ef3d2bf1b48b8afa022b"
   },
   "controle-ir/controle_ir/cli.py": {
-    "mtime": 1795045617.41579,
-    "seen": 1795045689.3702824,
-    "ast_hash": "6ecd8f0abb9291fb806ba514ddeb21bb",
+    "mtime": 1795045819.898371,
+    "seen": 1795045933.3696,
+    "ast_hash": "784866144cf31ed855c6754ca7cee47f",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/controle.py": {
@@ -54,9 +54,9 @@
     "semantic_hash": "91ccb5e9b53ecfb24d8263f1b519395a"
   },
   "controle-ir/controle_ir/mcp.py": {
-    "mtime": 1795045617.4151857,
-    "seen": 1795045689.3702908,
-    "ast_hash": "9bf278b37674f8322cb2d5b898150ff1",
+    "mtime": 1795045819.8973122,
+    "seen": 1795045933.3696084,
+    "ast_hash": "b3448038a6499658fbde9bd423153f8c",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/protocolos.py": {
@@ -66,9 +66,9 @@
     "semantic_hash": "ceadbcf302a63e7b7c41276752c154c5"
   },
   "controle-ir/controle_ir/servico.py": {
-    "mtime": 1795045617.4146578,
-    "seen": 1795045689.3702936,
-    "ast_hash": "4c0eb7a989a9d16278eca9a8975ba95a",
+    "mtime": 1795045819.8969998,
+    "seen": 1795045933.3696108,
+    "ast_hash": "0eb96e2376b597a750dcbc27ed71e202",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/servidor.py": {
@@ -126,15 +126,15 @@
     "semantic_hash": "7412aa1ac0ae2377aea28c4b62ac429f"
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1795045617.4166574,
-    "seen": 1795045689.3703082,
-    "ast_hash": "8bdfe7e624e7d0a22fd382c956074ee2",
+    "mtime": 1795045846.3634706,
+    "seen": 1795045933.3696246,
+    "ast_hash": "3a98c50477114909ba5dfa89fd0f468c",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795045659.355971,
-    "seen": 1795045689.370311,
-    "ast_hash": "b81b0f1529dcfcd2d97fcce3cf8bcc21",
+    "mtime": 1795045903.6321886,
+    "seen": 1795045933.369627,
+    "ast_hash": "04e0bd2f2ce6780248337bfbba0288f9",
     "semantic_hash": ""
   },
   "controle-ir/LICENCAS/Flipper-IRDB-CC0.txt": {
@@ -162,15 +162,15 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795044740.139605,
-    "seen": 1795044742.236823,
-    "ast_hash": "4774107d70632bb08d2d28094e052308",
+    "mtime": 1795045903.6336086,
+    "seen": 1795045933.3696256,
+    "ast_hash": "170ae4450211e16e8b0e4e883db90f02",
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795045659.35682,
-    "seen": 1795045689.3703256,
-    "ast_hash": "f326c74ce6fe9a3fc1419d24c73d66e5",
+    "mtime": 1795045903.6331964,
+    "seen": 1795045933.36964,
+    "ast_hash": "815f7f8ad331877e5672c76b1e138600",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -252,15 +252,15 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/execucao.py": {
-    "mtime": 1795045617.4141035,
-    "seen": 1795045689.370288,
-    "ast_hash": "2abcd32195f64c49e5c6a24f948e30f3",
+    "mtime": 1795045819.8964849,
+    "seen": 1795045933.3696058,
+    "ast_hash": "6589d6af368a99810066160007017e36",
     "semantic_hash": ""
   },
   "docs/modo-deus.md": {
-    "mtime": 1795045659.3565614,
-    "seen": 1795045689.3703268,
-    "ast_hash": "7cec2d32a7c4098e5de99e14582980dc",
+    "mtime": 1795045903.6328137,
+    "seen": 1795045933.3696415,
+    "ast_hash": "68d7461759863ae82c0af4d7fa4569dc",
     "semantic_hash": ""
   }
 }

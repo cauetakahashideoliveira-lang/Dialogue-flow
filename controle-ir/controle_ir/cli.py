@@ -8,6 +8,7 @@
     controle-ir ligar|desligar   liga em segundo plano / encerra, com aviso na tela (atalhos do Termux:Widget)
     controle-ir capacidade listar|ver|aprovar|recusar|remover|executar [NOME] [--args JSON] [--abrir]
     controle-ir exec politica|historico|aprovar ID|negar ID|liberar MIN|travar|destravar|classe C MODO
+    controle-ir exec modo autonomo|cauteloso|leitura   perfil de autonomia (autonomo = rédea solta, um comando)
     controle-ir exec remoto chat|codigo|desligada   como o Claude pode aprovar (padrão: chat, basta o seu sim)
     controle-ir exec codigo configurar|mostrar|remover  código do app autenticador (só no modo "codigo")
     controle-ir atualizar [--ref HASH]   instala do GitHub em segundo plano (a versão atual vira a "anterior")
@@ -347,6 +348,19 @@ def exec_cli(a) -> int:
         p["travado"] = False
         pol.gravar(p)
         _aviso("Execução destravada (vale a política por classe)")
+        return 0
+    if a.acao == "modo":
+        if a.valor not in pol.PERFIS:
+            print(f"Perfil atual: {p.get('perfil') or 'personalizado'}  "
+                  f"(use: controle-ir exec modo {'|'.join(pol.PERFIS)})")
+            print("  autonomo  = rédea solta: tudo roda sem perguntar e as capacidades novas já entram ativas")
+            print("  cauteloso = pede aprovação para rede, pacotes, sistema e código novo (padrão)")
+            print("  leitura   = só comandos de leitura; o resto é negado")
+            return 0
+        np = pol.aplicar_perfil(a.valor)
+        _aviso({"autonomo": "Modo AUTÔNOMO ligado: o Claude age sem pedir. Freio: controle-ir exec travar",
+                "cauteloso": "Modo cauteloso: o Claude pede aprovação para o que age.",
+                "leitura": "Modo leitura: só olhar; ações negadas."}[a.valor])
         return 0
     if a.acao == "remoto":
         if a.valor not in ("chat", "codigo", "desligada"):
@@ -787,6 +801,12 @@ def _iniciar(args, trava):
     _soltar_inicio(trava)
     if avisar:
         _aviso("Controle IR ligado — pode pedir ao Claude")
+    try:
+        from .execucao import Politica
+        if Politica(PASTA).ler().get("perfil") == "autonomo":
+            print("  ⚠ modo AUTÔNOMO ativo: o Claude executa sem pedir. Freio: controle-ir exec travar", flush=True)
+    except Exception:  # noqa: BLE001
+        pass
     _termux("termux-wake-lock")
     inicio = time.time()
 
@@ -921,7 +941,7 @@ def main(argv=None):
     pk.add_argument("--sha", help="aprovar: início do SHA-256 revisado (a notificação envia)")
     pe = sub.add_parser("exec", help="política de execução, aprovações, trava e histórico")
     pe.add_argument("acao", choices=["politica", "historico", "aprovar", "negar", "liberar", "travar", "destravar",
-                                     "classe", "codigo", "remoto"])
+                                     "classe", "codigo", "remoto", "modo"])
     pe.add_argument("valor", nargs="?")
     pe.add_argument("modo", nargs="?")
     pe.add_argument("--aprovar")

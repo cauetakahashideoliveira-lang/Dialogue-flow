@@ -80,6 +80,25 @@ class Politica:
         # "codigo" = exige o código do app autenticador; "desligada" = só no celular
         if p.get("aprovacao_remota") not in ("chat", "codigo", "desligada"):
             p["aprovacao_remota"] = "chat"
+        p["auto_capacidades"] = bool(p.get("auto_capacidades"))  # modo autônomo ativa código novo sem tocar no celular
+        return p
+
+    # perfis prontos (só mudam no celular): autônomo = rédea solta; cauteloso = pergunta o que age; leitura = só olhar
+    PERFIS = {
+        "autonomo": {"classes": {c: "permitir" for c in CLASSES}, "auto_capacidades": True, "aprovacao_remota": "chat"},
+        "cauteloso": {"classes": dict(PADRAO), "auto_capacidades": False, "aprovacao_remota": "chat"},
+        "leitura": {"classes": {**{c: "negar" for c in CLASSES}, "leitura": "permitir"}, "auto_capacidades": False,
+                    "aprovacao_remota": "chat"},
+    }
+
+    def aplicar_perfil(self, nome: str) -> dict:
+        if nome not in self.PERFIS:
+            raise ValueError(f"perfil deve ser um de: {', '.join(self.PERFIS)}")
+        p = self.ler()
+        p.update(self.PERFIS[nome])
+        p["perfil"] = nome
+        p["travado"] = False
+        self.gravar(p)
         return p
 
     def gravar(self, p: dict):
@@ -101,7 +120,8 @@ class Politica:
     def resumo(self) -> dict:
         p = self.ler()
         lib = float(p["liberado_ate"] or 0)
-        return {"travado": p["travado"], "classes": p["classes"], "aprovacao_remota": p["aprovacao_remota"],
+        return {"travado": p["travado"], "perfil": p.get("perfil"), "classes": p["classes"],
+                "auto_capacidades": p["auto_capacidades"], "aprovacao_remota": p["aprovacao_remota"],
                 "liberado_ate": time.strftime("%H:%M", time.localtime(lib)) if lib > time.time() else None,
                 "como_mudar": "no celular: controle-ir exec classe <classe> permitir|perguntar|negar · "
                               "controle-ir exec liberar <minutos> · controle-ir exec travar|destravar · "

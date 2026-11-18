@@ -43,9 +43,11 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
 5. "Liga a TV do quarto." / "Abre a Netflix na TV."
 
 ## Pendências
+- **O usuário quer autonomia máxima ("modo deus")**: ligar `controle-ir exec modo autonomo` no celular, e então
+  agir sem pedir aprovação a cada passo (freio: `travar`). Linha ética: só o que é dele ou autorizado.
 - O usuário também usa o Claude no iPad e quer aprovar pelo chat sem código: padrão `aprovacao_remota: chat`
   (o Claude pergunta, ele diz sim). Não configurar TOTP a menos que ele peça.
-- **Instalar a 1.0.11** (capacidades, execução governada, atualizar/reverter, aprovação no celular ou por
+- **Instalar a 1.0.12** (capacidades, execução governada, atualizar/reverter, aprovação no celular ou por
   código do autenticador de outro aparelho, origens). É a última instalação colando a linha: depois, `atualizar_sistema(ref)` pelo Claude. Ver
   `docs/modo-deus.md` (§8 próximos experimentos, §9 perguntas).
 - Gravar as ressalvas como observação de cada aparelho (`editar_aparelho(observacao=…)`) para chegarem ao

@@ -487,7 +487,15 @@ class Servico:
 
     def propor_capacidade(self, nome, manifesto=None, arquivos=None) -> dict:
         try:
-            return self.reg.propor(str(nome), manifesto or {}, arquivos or {})
+            r = self.reg.propor(str(nome), manifesto or {}, arquivos or {})
+            if self.exec.politica.ler().get("auto_capacidades"):  # modo autônomo: ativa na hora (consentido no celular)
+                self.reg.aprovar(str(nome), r["sha256"][:16])
+                self.exec.auditar({"evento": "capacidade_auto_aprovada", "capacidade": nome, "sha": r["sha256"][:16]})
+                self.exec.notificar({"tipo": "alerta", "texto": f"Capacidade “{nome}” criada e ativada (modo autônomo)"})
+                return {**r, "status": "ativa", "auto_aprovada": True,
+                        "observacao": "Modo autônomo: a capacidade já está ativa. Para desligar: controle-ir exec "
+                                      "modo cauteloso (no celular)."}
+            return r
         except ErroCapacidade as e:
             raise ErroUso(str(e)) from e
 

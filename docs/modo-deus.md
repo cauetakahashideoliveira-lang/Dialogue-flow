@@ -182,6 +182,20 @@ https://www.github.com/mjg59/python-broadlink.
 
 ## 7. Autonomia com responsabilidade
 
+**Modo autônomo** (`controle-ir exec modo autonomo`, ligado uma vez no celular com consentimento físico): o Claude
+age sem pedir aprovação a cada passo — executa qualquer classe e ativa as capacidades que cria na hora. É o "modo
+deus" na prática: uma intenção vira pesquisa → ferramenta → execução → observação → ajuste numa conversa só. O que
+sustenta isso com segurança, sem atrito recorrente:
+- **Consentimento é único e físico:** o perfil só muda no celular; nenhuma ferramenta MCP o altera.
+- **Freio sempre a um comando:** `travar` nega tudo e encerra tarefas, de qualquer aparelho, sem código.
+- **Tudo auditado:** `auditoria.jsonl` e `tarefas/` registram cada ação; o console avisa que o modo está ligado.
+- **Só o Claude alcança o conector:** `origens exigir` aceita apenas `160.79.104.0/21`.
+- **Recuperável:** `atualizar_sistema` guarda a versão anterior; o atalho Reverter volta mesmo se o Python quebrar.
+O teto deixa de ser "quantas vezes você autoriza" e passa a ser só o que o hardware/OS permitem (§6) e a linha
+ética: agir sobre o que é seu ou que você tem permissão para acessar — nunca invadir rede, conta ou equipamento de terceiros.
+
+
+
 - **O Claude pede, o usuário concede:** pelo toque no celular ou pelo sim no chat (de qualquer aparelho).
   Classes e modo de aprovação só mudam no celular (há teste disso).
 - **Classes:** leitura roda direto; rede, pacotes e livre perguntam (ou rodam dentro de uma janela "liberar N min");

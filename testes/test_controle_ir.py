@@ -800,6 +800,36 @@ class TestExecucao(unittest.TestCase):
         with self.assertRaises(ValueError):  # bloqueada após 5 erros
             au.verificar(totp(seg, (t + 90) // 30), t + 90)
 
+    def test_modo_autonomo_executa_sem_pedir_e_ativa_capacidade(self):
+        from controle_ir.capacidades import resumo_instrucoes  # noqa: F401
+        self.ex.politica.aplicar_perfil("autonomo")
+        self.assertEqual(self.s.politica()["perfil"], "autonomo")
+        # comando que normalmente pediria aprovação (rede) roda direto
+        r = self.s.executar_comando("echo autonomo; true", aguardar=10)
+        self.assertEqual(r["status"], "concluida")
+        self.assertEqual(self.s.exec.politica.decidir("pacotes"), "permitir")
+        # capacidade proposta já entra ativa
+        eco = {"manifesto": {"titulo": "Eco", "descricao": "x", "executar": "principal.py",
+                             "entrada": {"type": "object", "properties": {"texto": {"type": "string"}},
+                                         "required": ["texto"]}},
+               "arquivos": {"principal.py": "import json,sys\nprint(json.dumps({'e': json.load(sys.stdin)['texto']}))\n"}}
+        out = self.s.propor_capacidade("eco", **eco)
+        self.assertEqual(out["status"], "ativa")
+        self.assertTrue(out["auto_aprovada"])
+        self.assertEqual(self.s.executar_capacidade("eco", {"texto": "ok"})["resultado"], {"e": "ok"})
+        # o freio volta a barrar tudo, mesmo autônomo
+        self.s.travar()
+        self.assertEqual(self.s.executar_comando("ls", aguardar=1)["status"], "negada")
+        # cauteloso volta a pedir e não auto-ativa
+        self.ex.politica.aplicar_perfil("cauteloso")
+        self.assertEqual(self.s.executar_comando("ping -c1 1.1.1.1", aguardar=0)["status"], "aguardando_aprovacao")
+        self.s.propor_capacidade("eco2", manifesto=eco["manifesto"], arquivos=eco["arquivos"])
+        self.assertEqual(self.s.capacidades("listar")["capacidades"][0].get("estado") if False else
+                         next(c["estado"] for c in self.s.capacidades("listar")["capacidades"] if c["nome"] == "eco2"),
+                         "aguardando_aprovacao")
+        aud = (Path(self.pasta) / "auditoria.jsonl").read_text()
+        self.assertIn("capacidade_auto_aprovada", aud)
+
     def test_aprovar_pelo_chat_padrao_e_desligada(self):
         r = self.s.executar_comando("echo pelo chat", aguardar=0)
         self.assertEqual(r["status"], "aguardando_aprovacao")

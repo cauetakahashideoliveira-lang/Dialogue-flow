@@ -1,4 +1,9 @@
 {
+  "permissions": {
+    "allow": [
+      "mcp__Controle_master__*"
+    ]
+  },
   "hooks": {
     "UserPromptSubmit": [
       {

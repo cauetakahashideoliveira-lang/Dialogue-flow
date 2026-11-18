@@ -76,6 +76,10 @@ class Politica:
         p["classes"] = {**PADRAO, **{k: v for k, v in (p.get("classes") or {}).items() if k in CLASSES}}
         p.setdefault("travado", False)
         p.setdefault("liberado_ate", 0)
+        # aprovação vinda do Claude (qualquer aparelho): "chat" = basta o "sim" do usuário na conversa;
+        # "codigo" = exige o código do app autenticador; "desligada" = só no celular
+        if p.get("aprovacao_remota") not in ("chat", "codigo", "desligada"):
+            p["aprovacao_remota"] = "chat"
         return p
 
     def gravar(self, p: dict):
@@ -97,12 +101,12 @@ class Politica:
     def resumo(self) -> dict:
         p = self.ler()
         lib = float(p["liberado_ate"] or 0)
-        return {"travado": p["travado"], "classes": p["classes"],
+        return {"travado": p["travado"], "classes": p["classes"], "aprovacao_remota": p["aprovacao_remota"],
                 "liberado_ate": time.strftime("%H:%M", time.localtime(lib)) if lib > time.time() else None,
                 "como_mudar": "no celular: controle-ir exec classe <classe> permitir|perguntar|negar · "
-                              "controle-ir exec liberar <minutos> · controle-ir exec travar|destravar. De outro "
-                              "aparelho: autorizar(codigo do app autenticador, tarefa|liberar_minutos|capacidade) "
-                              "e travar (sem código)."}
+                              "controle-ir exec liberar <minutos> · controle-ir exec travar|destravar · "
+                              "controle-ir exec remoto chat|codigo|desligada. De qualquer aparelho: "
+                              "autorizar(tarefa|liberar_minutos|capacidade|destravar) e travar."}
 
 
 # ------------------------------------------------------------- autorização remota (TOTP, RFC 6238)

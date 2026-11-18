@@ -507,23 +507,28 @@ class Servico:
             raise ErroUso(str(e)) from e
 
     def politica(self) -> dict:
-        return {**self.exec.politica.resumo(), "autorizacao_remota": self.exec.autorizacao.estado()}
+        return {**self.exec.politica.resumo(), "codigo_autenticador": self.exec.autorizacao.estado()}
 
-    def autorizar(self, codigo, tarefa=None, liberar_minutos=None, capacidade=None, sha=None,
+    def autorizar(self, codigo=None, tarefa=None, liberar_minutos=None, capacidade=None, sha=None,
                   destravar=False) -> dict:
-        """Aprovação vinda de outro aparelho: exige o código de 6 dígitos do app autenticador do usuário."""
+        """Aprovação pelo Claude, de qualquer aparelho. Modo "chat" (padrão): basta o sim do usuário na conversa;
+        modo "codigo": exige o código de 6 dígitos do app autenticador; "desligada": só no celular."""
         if not any([tarefa, liberar_minutos, capacidade, destravar]):
             raise ErroUso("informe o que autorizar: tarefa, liberar_minutos, capacidade (com sha) ou destravar")
         if capacidade and not sha:
             raise ErroUso("para aprovar uma capacidade, informe o sha devolvido por propor_capacidade (o código "
                           "que o usuário viu)")
-        try:
-            ok = self.exec.autorizacao.verificar(codigo)
-        except ValueError as e:
-            raise ErroUso(str(e)) from e
-        if not ok:
-            self.exec.auditar({"evento": "autorizacao_remota", "resultado": "codigo_invalido"})
-            raise ErroUso("código inválido ou já usado; peça ao usuário o código atual do app autenticador")
+        modo = self.exec.politica.ler()["aprovacao_remota"]
+        if modo == "desligada":
+            raise ErroUso("a aprovação pelo Claude está desligada neste celular: aprove pela notificação")
+        if modo == "codigo":
+            try:
+                ok = self.exec.autorizacao.verificar(codigo)
+            except ValueError as e:
+                raise ErroUso(str(e)) from e
+            if not ok:
+                self.exec.auditar({"evento": "autorizacao_remota", "resultado": "codigo_invalido"})
+                raise ErroUso("código inválido ou já usado; peça ao usuário o código atual do app autenticador")
         feito = {}
         pol = self.exec.politica
         if destravar or liberar_minutos:
@@ -547,7 +552,7 @@ class Servico:
             except ErroCapacidade as e:
                 raise ErroUso(str(e)) from e
         resumo = {k: (v if not isinstance(v, dict) else v.get("status")) for k, v in feito.items()}
-        self.exec.auditar({"evento": "autorizacao_remota", "resultado": "ok", "feito": resumo})
+        self.exec.auditar({"evento": "autorizacao_remota", "resultado": "ok", "modo": modo, "feito": resumo})
         self.exec.notificar({"tipo": "alerta", "texto": f"Autorizado de outro aparelho: {resumo}"})
         return {"autorizado": True, **feito}
 

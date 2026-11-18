@@ -777,7 +777,7 @@ class TestExecucao(unittest.TestCase):
         Execucao(Path(self.pasta))  # serviço reiniciou
         self.assertEqual(self.s.tarefa(r["id"])["status"], "interrompida")
         nomes = " ".join(t["name"] for t in FERRAMENTAS)
-        for proibido in ("liberar", "destravar", "aprovar", "classe"):  # só por autorizar(código) ou no celular
+        for proibido in ("liberar", "destravar", "aprovar", "classe", "remoto"):  # classes e modo: só no celular
             self.assertNotIn(proibido, nomes)
         self.assertIn("politica", nomes)
 
@@ -800,22 +800,40 @@ class TestExecucao(unittest.TestCase):
         with self.assertRaises(ValueError):  # bloqueada após 5 erros
             au.verificar(totp(seg, (t + 90) // 30), t + 90)
 
+    def test_aprovar_pelo_chat_padrao_e_desligada(self):
+        r = self.s.executar_comando("echo pelo chat", aguardar=0)
+        self.assertEqual(r["status"], "aguardando_aprovacao")
+        self.assertEqual(self.s.politica()["aprovacao_remota"], "chat")
+        out = self.s.autorizar(tarefa=r["id"])  # sem código: basta o sim do usuário na conversa
+        self.assertEqual(out["tarefa"]["status"], "executando")
+        with self.assertRaises(Exception):
+            self.s.autorizar()  # precisa dizer o que aprovar
+        p = self.ex.politica.ler()
+        p["aprovacao_remota"] = "desligada"
+        self.ex.politica.gravar(p)
+        with self.assertRaises(Exception):
+            self.s.autorizar(liberar_minutos=10)
+        self.assertIn('"modo": "chat"', (Path(self.pasta) / "auditoria.jsonl").read_text())
+
     def test_autorizar_de_outro_aparelho_e_travar(self):
         from controle_ir.execucao import totp
+        p = self.ex.politica.ler()
+        p["aprovacao_remota"] = "codigo"
+        self.ex.politica.gravar(p)
         seg = self.ex.autorizacao.configurar()
         cod = lambda: totp(seg, int(time.time() // 30))  # noqa: E731
         r = self.s.executar_comando("echo remoto", aguardar=0)
         self.assertEqual(r["status"], "aguardando_aprovacao")
         with self.assertRaises(Exception):
-            self.s.autorizar("111111", tarefa=r["id"])
-        out = self.s.autorizar(cod(), tarefa=r["id"])
+            self.s.autorizar(codigo="111111", tarefa=r["id"])
+        out = self.s.autorizar(codigo=cod(), tarefa=r["id"])
         self.assertEqual(out["tarefa"]["status"], "executando")
         with self.assertRaises(Exception):  # código já usado
-            self.s.autorizar(cod(), liberar_minutos=10)
+            self.s.autorizar(codigo=cod(), liberar_minutos=10)
         self.assertTrue(self.s.travar()["travado"])
         self.assertEqual(self.s.executar_comando("ls", aguardar=1)["status"], "negada")
         self.ex.autorizacao._gravar({**self.ex.autorizacao._ler(), "ultimo": 0})  # próximo passo de 30 s
-        self.s.autorizar(cod(), destravar=True, liberar_minutos=5)
+        self.s.autorizar(codigo=cod(), destravar=True, liberar_minutos=5)
         self.assertEqual(self.s.executar_comando("echo livre; true", aguardar=10)["status"], "concluida")
         aud = (Path(self.pasta) / "auditoria.jsonl").read_text()
         self.assertIn("autorizacao_remota", aud)

@@ -8,7 +8,8 @@
     controle-ir ligar|desligar   liga em segundo plano / encerra, com aviso na tela (atalhos do Termux:Widget)
     controle-ir capacidade listar|ver|aprovar|recusar|remover|executar [NOME] [--args JSON] [--abrir]
     controle-ir exec politica|historico|aprovar ID|negar ID|liberar MIN|travar|destravar|classe C MODO
-    controle-ir exec codigo configurar|mostrar|remover   aprovar de outro aparelho (código do autenticador)
+    controle-ir exec remoto chat|codigo|desligada   como o Claude pode aprovar (padrão: chat, basta o seu sim)
+    controle-ir exec codigo configurar|mostrar|remover  código do app autenticador (só no modo "codigo")
     controle-ir atualizar [--ref HASH]   instala do GitHub em segundo plano (a versão atual vira a "anterior")
     controle-ir reverter         volta para a versão anterior (também pelo atalho "Reverter Controle IR")
     controle-ir origens [observar|exigir]   de onde vêm as chamadas do Claude; exigir = só a rede da Anthropic
@@ -346,6 +347,16 @@ def exec_cli(a) -> int:
         p["travado"] = False
         pol.gravar(p)
         _aviso("Execução destravada (vale a política por classe)")
+        return 0
+    if a.acao == "remoto":
+        if a.valor not in ("chat", "codigo", "desligada"):
+            print(f"Aprovação pelo Claude: {p['aprovacao_remota']}  (use: controle-ir exec remoto chat|codigo|desligada)")
+            return 0
+        p["aprovacao_remota"] = a.valor
+        pol.gravar(p)
+        print({"chat": "Aprovação pelo chat ligada: basta dizer sim ao Claude, de qualquer aparelho.",
+               "codigo": "Aprovação pelo Claude exige o código do app autenticador (controle-ir exec codigo configurar).",
+               "desligada": "Aprovação só no celular, pela notificação."}[a.valor])
         return 0
     if a.acao == "codigo":
         from .execucao import Autorizacao, totp
@@ -910,7 +921,7 @@ def main(argv=None):
     pk.add_argument("--sha", help="aprovar: início do SHA-256 revisado (a notificação envia)")
     pe = sub.add_parser("exec", help="política de execução, aprovações, trava e histórico")
     pe.add_argument("acao", choices=["politica", "historico", "aprovar", "negar", "liberar", "travar", "destravar",
-                                     "classe", "codigo"])
+                                     "classe", "codigo", "remoto"])
     pe.add_argument("valor", nargs="?")
     pe.add_argument("modo", nargs="?")
     pe.add_argument("--aprovar")

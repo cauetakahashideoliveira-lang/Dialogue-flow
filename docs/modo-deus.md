@@ -182,14 +182,13 @@ https://www.github.com/mjg59/python-broadlink.
 
 ## 7. Autonomia com responsabilidade
 
-- **O Claude pede, o usuário concede:** no celular (toque) ou de outro aparelho com o código do autenticador.
-  Nenhuma ferramenta muda as classes da política, e nenhuma aprova sem código (há teste disso).
+- **O Claude pede, o usuário concede:** pelo toque no celular ou pelo sim no chat (de qualquer aparelho).
+  Classes e modo de aprovação só mudam no celular (há teste disso).
 - **Classes:** leitura roda direto; rede, pacotes e livre perguntam (ou rodam dentro de uma janela "liberar N min");
   sistema (atualizar) sempre pergunta. Ajuste fino: `controle-ir exec classe rede permitir`.
-- **De qualquer aparelho:** o conector funciona igual no iPad, na web e no celular (é chamado pela nuvem da
-  Anthropic). Aprovar de longe exige o código de 6 dígitos do app autenticador do usuário (TOTP, RFC 6238):
-  `autorizar(codigo, …)`. O código vale uma vez, então nem o Claude nem quem tiver a URL consegue reutilizá-lo.
-  5 erros bloqueiam 15 min e alertam no celular. `travar` (freio) não exige código.
+- **De qualquer aparelho:** o conector funciona igual no iPad, na web e no celular. Aprovações pelo chat
+  (padrão `chat`): o Claude pergunta, o usuário diz sim, o Claude chama `autorizar`; o celular notifica e
+  audita. Opcional mais rígido: modo `codigo` (TOTP de app autenticador, uso único, bloqueio após 5 erros).
 - **Parar tudo:** `controle-ir exec travar`, o atalho "Desligar Controle IR" ou o botão Desligar da notificação.
 - **Histórico:** `controle-ir exec historico`; tarefas em `~/.controle-ir/tarefas/<id>.json` e `.log`.
 - **Recuperação:** atualização guarda `~/controle-ir.anterior`; o atalho "Reverter Controle IR" (só shell) volta.

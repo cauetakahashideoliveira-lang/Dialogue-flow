@@ -14,6 +14,7 @@ from pathlib import Path
 from . import __version__, formatos, vocabulario
 from .aparelhos import Aparelhos, ErroAparelho, agora, capacidades, hora_legivel, resumo_aparelho
 from .capacidades import ErroCapacidade, Registro
+from .execucao import Execucao
 from .catalogo import Catalogo
 from .controle import Controlador, executar
 from .descoberta import Descoberta, ErroDescoberta
@@ -34,6 +35,7 @@ class Servico:
         self.aparelhos = Aparelhos(self.pasta / "aparelhos.json")
         self.desc = Descoberta(self.cat, emissor, self.pasta / "sessao.json", notificar)
         self.reg = Registro(Path(__file__).resolve().parent.parent / "capacidades", self.pasta, notificar)
+        self.exec = Execucao(self.pasta, notificar)
         self.trava_envio = threading.Lock()
         self.ultima_requisicao_claude: float | None = None
         self.url_publica: str | None = None
@@ -488,6 +490,34 @@ class Servico:
             return self.reg.propor(str(nome), manifesto or {}, arquivos or {})
         except ErroCapacidade as e:
             raise ErroUso(str(e)) from e
+
+    # ------------------------------------------------------------- execução governada
+    def executar_comando(self, comando, aguardar=30, tempo_limite=120, pasta=None, motivo=None) -> dict:
+        try:
+            return self.exec.pedir(comando, aguardar, tempo_limite, pasta, motivo=motivo)
+        except ValueError as e:
+            raise ErroUso(str(e)) from e
+
+    def tarefa(self, id=None, parar=False, linhas=60) -> dict:  # noqa: A002 — nome do argumento no MCP
+        try:
+            if id is None:
+                return {"tarefas": self.exec.listar(15)}
+            return self.exec.parar(str(id)) if parar else self.exec.estado(str(id), int(linhas or 60))
+        except KeyError as e:
+            raise ErroUso(str(e)) from e
+
+    def politica(self) -> dict:
+        return self.exec.politica.resumo()
+
+    def atualizar_sistema(self, ref, motivo=None, aguardar=40) -> dict:
+        import re
+        if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._/-]{3,79}$", str(ref or "")):
+            raise ErroUso("ref deve ser o hash do commit (recomendado) ou o nome do branch")
+        r = self.exec.pedir(f"controle-ir atualizar --ref {ref}", aguardar=aguardar, tempo_limite=60, classe="sistema",
+                            motivo=motivo or f"atualizar o controle-ir para {ref}")
+        r["depois"] = ("Se aprovada, o serviço reinicia em ~1 min com a versão nova; confirme com consultar "
+                       "(campo servidor.versao). Se não voltar, o usuário toca no atalho “Reverter Controle IR”.")
+        return r
 
     # ------------------------------------------------------------- painel
     def estado_painel(self) -> dict:

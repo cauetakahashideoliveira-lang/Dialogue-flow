@@ -682,6 +682,91 @@ class TestCapacidades(unittest.TestCase):
         self.assertIn("- eco: devolve o texto", r["result"]["instructions"])
 
 
+
+class TestExecucao(unittest.TestCase):
+    """Execução governada: o Claude pede, o celular concede (política só muda no aparelho)."""
+
+    def setUp(self):
+        self.s, self.pasta = novo_servico(com_base=False)
+        self.ex = self.s.exec
+
+    def test_classificacao(self):
+        from controle_ir.execucao import classificar
+        for cmd, c in (("ls -la", "leitura"), ("getprop ro.product.model", "leitura"), ("pkg list-installed", "leitura"),
+                       ("pkg install nmap", "pacotes"), ("ping -c 3 1.1.1.1", "rede"), ("rm -rf x", "livre"),
+                       ("ls; rm x", "livre"), ("cat a | sh", "livre"), ("echo $HOME", "livre"),
+                       ("grep -r segredo /", "livre"), ("python3 x.py", "livre")):
+            self.assertEqual(classificar(cmd), c, cmd)
+
+    def test_leitura_roda_direto_e_audita(self):
+        r = self.s.executar_comando("ls /", aguardar=10)
+        self.assertEqual((r["status"], r["classe"]), ("concluida", "leitura"))
+        self.assertIn("tmp", r["saida"])
+        aud = (Path(self.pasta) / "auditoria.jsonl").read_text()
+        self.assertIn('"evento": "pedido"', aud)
+        self.assertIn('"evento": "fim"', aud)
+
+    def test_perguntar_aprovar_negar(self):
+        threading.Timer(0.5, lambda: self.ex.decidir("1", True)).start()
+        r = self.s.executar_comando("echo ok; echo fim", aguardar=10, motivo="teste")
+        self.assertEqual((r["status"], r["decisao"]), ("concluida", "aprovada"))
+        self.assertTrue(r["saida"].endswith("fim"))
+        r = self.s.executar_comando("echo nao", aguardar=0)
+        self.assertEqual(r["status"], "aguardando_aprovacao")
+        self.ex.decidir(r["id"], False)
+        self.assertEqual(self.s.tarefa(r["id"])["status"], "negada")
+
+    def test_liberar_travar_sistema_e_tempo(self):
+        pol = self.ex.politica
+        p = pol.ler()
+        p["liberado_ate"] = time.time() + 60
+        pol.gravar(p)
+        self.assertEqual(self.s.executar_comando("echo livre; true", aguardar=10)["status"], "concluida")
+        self.assertEqual(self.s.atualizar_sistema("abc1234", "teste", aguardar=0)["status"], "aguardando_aprovacao")
+        with self.assertRaises(Exception):
+            self.s.atualizar_sistema("x; rm -rf ~")
+        r = self.s.executar_comando("sleep 5; echo", aguardar=0, tempo_limite=1)
+        time.sleep(2.5)
+        self.assertEqual(self.s.tarefa(r["id"])["status"], "tempo_esgotado")
+        r = self.s.executar_comando("sleep 30; echo", aguardar=0.3)
+        self.assertEqual(r["status"], "executando")
+        p["travado"] = True
+        pol.gravar(p)
+        self.assertEqual(self.ex.parar_todas(), 1)
+        time.sleep(0.5)
+        self.assertEqual(self.s.tarefa(r["id"])["status"], "parada")
+        self.assertEqual(self.s.executar_comando("ls", aguardar=1)["status"], "negada")
+
+    def test_reinicio_marca_interrompida_e_mcp_nao_muda_politica(self):
+        from controle_ir.execucao import Execucao
+        from controle_ir.mcp import FERRAMENTAS
+        r = self.s.executar_comando("echo x", aguardar=0)
+        Execucao(Path(self.pasta))  # serviço reiniciou
+        self.assertEqual(self.s.tarefa(r["id"])["status"], "interrompida")
+        nomes = " ".join(t["name"] for t in FERRAMENTAS)
+        for proibido in ("liberar", "travar", "destravar", "aprovar"):
+            self.assertNotIn(proibido, nomes)
+        self.assertIn("politica", nomes)
+
+    def test_reverter_so_shell(self):
+        from controle_ir.cli import REVERTER_SH
+        home = Path(tempfile.mkdtemp())
+        (home / "controle-ir").mkdir()
+        (home / "controle-ir" / "v").write_text("nova")
+        (home / "controle-ir.anterior").mkdir()
+        (home / "controle-ir.anterior" / "v").write_text("antiga")
+        binp = home / "bin"
+        binp.mkdir()
+        for nome in ("termux-toast", "controle-ir"):
+            (binp / nome).write_text("#!/bin/sh\necho \"$0 $*\" >> \"$HOME/chamadas\"\n")
+            (binp / nome).chmod(0o755)
+        env = dict(os.environ, HOME=str(home), PATH=f"{binp}:{os.environ['PATH']}")
+        self.assertEqual(subprocess.run(["sh", "-c", REVERTER_SH], env=env).returncode, 0)
+        self.assertEqual((home / "controle-ir" / "v").read_text(), "antiga")
+        self.assertEqual((home / "controle-ir.quebrada" / "v").read_text(), "nova")
+        self.assertIn("controle-ir ligar", (home / "chamadas").read_text())
+
+
 @unittest.skipUnless(hasattr(os, "fork") and sys.platform.startswith("linux"), "precisa de Linux (como o Termux)")
 class TestSegundoPlano(unittest.TestCase):
     """Início automático (Termux:Boot), serviço em segundo plano, console e parar — num HOME temporário."""

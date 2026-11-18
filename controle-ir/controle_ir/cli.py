@@ -7,6 +7,9 @@
     controle-ir log [-n N]       últimas linhas do registro do serviço em segundo plano
     controle-ir ligar|desligar   liga em segundo plano / encerra, com aviso na tela (atalhos do Termux:Widget)
     controle-ir capacidade listar|ver|aprovar|recusar|remover|executar [NOME] [--args JSON] [--abrir]
+    controle-ir exec politica|historico|aprovar ID|negar ID|liberar MIN|travar|destravar|classe C MODO
+    controle-ir atualizar [--ref HASH]   instala do GitHub em segundo plano (a versão atual vira a "anterior")
+    controle-ir reverter         volta para a versão anterior (também pelo atalho "Reverter Controle IR")
     controle-ir atalhos [--silencioso]   cria os atalhos "Ligar/Desligar Controle IR" para o Termux:Widget
     controle-ir copiar           copia a URL privada do conector
     controle-ir pausar|retomar   controla a busca em andamento
@@ -41,6 +44,7 @@ PASTA = Path(os.environ.get("CONTROLE_IR_DIR", Path.home() / ".controle-ir"))
 PACOTE = Path(__file__).resolve().parent.parent
 DADOS = PACOTE / "dados"
 URL_FLIPPER = "https://codeload.github.com/Lucaslhm/Flipper-IRDB/zip/refs/heads/main"
+REPO = "https://github.com/cauetakahashideoliveira-lang/Dialogue-flow"
 PREFIXO_TERMUX = os.environ.get("PREFIX") or "/data/data/com.termux/files/usr"
 LIMITE_LOG = 1_000_000
 # conexões com o próprio servidor nunca passam por proxy (HTTP_PROXY do ambiente)
@@ -224,6 +228,18 @@ def inicio_automatico(acao: str, silencioso: bool = False) -> int:
 
 ATALHOS = {"Ligar Controle IR": "ligar", "Desligar Controle IR": "desligar"}
 
+# Só shell: funciona mesmo se uma atualização quebrar o Python do controle-ir.
+REVERTER_SH = """# Volta para a versão anterior do controle-ir (use se uma atualização cortar o acesso)
+A="$HOME/controle-ir.anterior"
+if [ ! -d "$A" ]; then termux-toast "Controle IR: não há versão anterior"; exit 1; fi
+PID=$(grep -o '"pid": *[0-9]*' "$HOME/.controle-ir/servidor.json" 2>/dev/null | grep -o '[0-9]*$')
+[ -n "$PID" ] && grep -q controle_ir "/proc/$PID/cmdline" 2>/dev/null && kill "$PID" && sleep 3
+rm -rf "$HOME/controle-ir.quebrada"
+mv "$HOME/controle-ir" "$HOME/controle-ir.quebrada" && mv "$A" "$HOME/controle-ir"
+termux-toast "Controle IR: versão anterior restaurada"
+exec controle-ir ligar
+"""
+
 
 def pasta_atalhos() -> Path:
     # Termux:Widget lista ~/.shortcuts; os de ~/.shortcuts/tasks rodam sem abrir o terminal
@@ -236,11 +252,11 @@ def criar_atalhos(silencioso: bool = False) -> int:
     for d in (pasta.parent, pasta):
         os.chmod(d, 0o700)  # o Termux:Widget recusa pastas que outros apps podem gravar
     cli = Path(PREFIXO_TERMUX) / "bin" / "controle-ir"
-    for nome, acao in ATALHOS.items():
-        corpo = (f"#!{PREFIXO_TERMUX}/bin/sh\n"
-                 f"# Atalho do Termux:Widget criado por: controle-ir atalhos\n"
-                 + ("termux-wake-lock\n" if acao == "ligar" else "")
-                 + f"exec \"{cli}\" {acao}\n")
+    corpos = {nome: (f"#!{PREFIXO_TERMUX}/bin/sh\n# Atalho do Termux:Widget criado por: controle-ir atalhos\n"
+                     + ("termux-wake-lock\n" if acao == "ligar" else "") + f"exec \"{cli}\" {acao}\n")
+              for nome, acao in ATALHOS.items()}
+    corpos["Reverter Controle IR"] = f"#!{PREFIXO_TERMUX}/bin/sh\n" + REVERTER_SH
+    for nome, corpo in corpos.items():
         arq = pasta / nome
         tmp = arq.with_name(arq.name + ".novo")
         tmp.write_text(corpo)
@@ -255,6 +271,86 @@ def criar_atalhos(silencioso: bool = False) -> int:
     print("  3. Arraste o “Termux shortcut” (1 ícone) e escolha “Ligar Controle IR”; repita com “Desligar”.")
     print("  Ligar avisa “Controle IR ligado” em alguns segundos; desligar libera a bateria (sem wake lock).")
     return 0
+
+
+def atualizar(ref: str) -> int:
+    """Baixa o pacote do commit/branch, guarda a versão atual em ~/controle-ir.anterior, instala e religa.
+    Roda desligado deste processo: sobrevive ao instalador encerrar o serviço que pediu a atualização."""
+    import re
+    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._/-]{3,79}$", ref or ""):
+        print("ref inválida: use o hash do commit")
+        return 1
+    log = PASTA / "atualizacao.log"
+    PASTA.mkdir(parents=True, exist_ok=True)
+    script = f"""set -e
+termux-wake-lock 2>/dev/null || true
+echo "=== atualização para {ref}: $(date) ==="
+cd "${{TMPDIR:-$HOME}}"
+curl -fL --retry 3 -o cir-atualizacao.zip "{REPO}/raw/{ref}/dist/controle-ir.zip"
+unzip -tq cir-atualizacao.zip
+rm -rf "$HOME/controle-ir.anterior"
+cp -a "$HOME/controle-ir" "$HOME/controle-ir.anterior"
+unzip -oq cir-atualizacao.zip 'controle-ir/*' -d "$HOME"
+CONTROLE_IR_SEM_INICIAR=1 bash "$HOME/controle-ir/instalar.sh" </dev/null
+nohup controle-ir ligar >/dev/null 2>&1 &
+echo "=== concluída: $(date) ==="
+"""
+    with open(log, "ab") as f:
+        subprocess.Popen(["bash", "-c", script], stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                         start_new_session=True)
+    print(f"Atualização para {ref} iniciada em segundo plano; o serviço reinicia em ~1 min. "
+          "Registro: ~/.controle-ir/atualizacao.log · se o acesso não voltar: atalho “Reverter Controle IR”.")
+    return 0
+
+
+def exec_cli(a) -> int:
+    from .execucao import CLASSES, Politica
+    pol = Politica(PASTA)
+    p = pol.ler()
+    if a.acao == "politica":
+        print(json.dumps(pol.resumo(), ensure_ascii=False, indent=1))
+        return 0
+    if a.acao == "historico":
+        arq = PASTA / "auditoria.jsonl"
+        linhas = arq.read_text().splitlines()[-a.n:] if arq.exists() else []
+        print("\n".join(linhas) or "(sem histórico)")
+        return 0
+    if a.acao in ("aprovar", "negar"):
+        r = _api("exec_decidir", {"id": a.valor, "aprovar": a.acao == "aprovar"}, sair=False)
+        _termux("termux-notification-remove", f"controle-ir-exec-{a.valor}")
+        _aviso(f"Tarefa {a.valor}: " + ("executando" if a.acao == "aprovar" else "negada") if "erro" not in r
+               else f"Tarefa {a.valor}: {r['erro']}")
+        return 0
+    if a.acao == "liberar":
+        minutos = max(1, min(int(a.valor or 30), 480))
+        p["liberado_ate"] = time.time() + minutos * 60
+        p["travado"] = False
+        pol.gravar(p)
+        if a.aprovar:
+            _api("exec_decidir", {"id": a.aprovar, "aprovar": True}, sair=False)
+            _termux("termux-notification-remove", f"controle-ir-exec-{a.aprovar}")
+        _aviso(f"Execução liberada por {minutos} min (exceto atualizações)")
+        return 0
+    if a.acao == "travar":
+        p["travado"], p["liberado_ate"] = True, 0
+        pol.gravar(p)
+        r = _api("exec_parar_todas", sair=False)
+        _aviso(f"Execução TRAVADA ({r.get('paradas', 0)} tarefa(s) encerrada(s))")
+        return 0
+    if a.acao == "destravar":
+        p["travado"] = False
+        pol.gravar(p)
+        _aviso("Execução destravada (vale a política por classe)")
+        return 0
+    if a.acao == "classe":
+        if a.valor not in CLASSES or a.modo not in ("permitir", "perguntar", "negar"):
+            print(f"use: controle-ir exec classe <{'|'.join(CLASSES)}> <permitir|perguntar|negar>")
+            return 1
+        p["classes"][a.valor] = a.modo
+        pol.gravar(p)
+        print(f"Classe {a.valor}: {a.modo}")
+        return 0
+    return 1
 
 
 def capacidade_cli(a) -> int:
@@ -683,6 +779,10 @@ def _iniciar(args, trava):
         print("Abrindo o túnel seguro… (pode levar até 30 s)", flush=True)
 
     def encerrar(*_):
+        try:
+            servico.exec.parar_todas()
+        except Exception:  # noqa: BLE001
+            pass
         tunel.parar()
         notificar.limpar()
         notificar.servico_ativo(None, encerrar=True)
@@ -773,6 +873,16 @@ def main(argv=None):
     pk.add_argument("nome", nargs="?")
     pk.add_argument("--args", default="{}")
     pk.add_argument("--abrir", action="store_true", help="ver: abre o código num visualizador do Android")
+    pe = sub.add_parser("exec", help="política de execução, aprovações, trava e histórico")
+    pe.add_argument("acao", choices=["politica", "historico", "aprovar", "negar", "liberar", "travar", "destravar",
+                                     "classe"])
+    pe.add_argument("valor", nargs="?")
+    pe.add_argument("modo", nargs="?")
+    pe.add_argument("--aprovar")
+    pe.add_argument("-n", type=int, default=30)
+    pu = sub.add_parser("atualizar", help="instala do GitHub a versão de um commit e religa o serviço")
+    pu.add_argument("--ref", default="main")
+    sub.add_parser("reverter", help="volta para a versão anterior (~/controle-ir.anterior)")
     pa = sub.add_parser("atalhos", help="cria os atalhos Ligar/Desligar para o Termux:Widget")
     pa.add_argument("--silencioso", action="store_true")
     pl = sub.add_parser("log", help="últimas linhas do registro do serviço em segundo plano")
@@ -812,6 +922,12 @@ def main(argv=None):
         return criar_atalhos(a.silencioso)
     if cmd == "capacidade":
         return capacidade_cli(a)
+    if cmd == "exec":
+        return exec_cli(a)
+    if cmd == "atualizar":
+        return atualizar(a.ref)
+    if cmd == "reverter":
+        return subprocess.call(["sh", "-c", REVERTER_SH])
     if cmd == "ligar":
         if servico_ativo():
             _aviso("Controle IR já está ligado")

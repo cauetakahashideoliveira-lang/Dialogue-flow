@@ -86,6 +86,19 @@ class Notificador:
                          "--content", txt, "--ongoing", "--alert-once", "--priority", "high",
                          "--button1", "Reagiu — pausar", "--button1-action", f"{self.cli} pausar",
                          "--button2", "Painel", "--button2-action", f"{self.cli} painel"])
+        elif tipo == "exec_aprovacao":
+            ident = ev["id"]
+            self.falar("pedido para executar")
+            if self.console:
+                print(f"  ⚑ tarefa {ident} ({ev.get('classe')}) aguarda aprovação: {ev.get('comando', '')[:120]}",
+                      flush=True)
+            txt = (ev.get("motivo") + " — " if ev.get("motivo") else "") + ev.get("comando", "")
+            self._rodar(["termux-notification", "--id", f"controle-ir-exec-{ident}", "--title",
+                         f"Claude quer executar ({ev.get('classe')})", "--content", txt[:300], "--priority", "high",
+                         "--button1", "Executar", "--button1-action", f"{self.cli} exec aprovar {ident}",
+                         "--button2", "Negar", "--button2-action", f"{self.cli} exec negar {ident}",
+                         "--button3", "Liberar 30 min", "--button3-action",
+                         f"{self.cli} exec liberar 30 --aprovar {ident}"])
         elif tipo == "capacidade_proposta":
             nome = ev["nome"]
             self.falar("nova capacidade para aprovar")
@@ -143,6 +156,8 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
         "intervalo": lambda d: servico.desc.ajustar_intervalo(float(d["intervalo"])),
         "tecla": lambda d: servico.controlar(d["aparelho"], teclas=[d["tecla"]]),
         "importar": lambda d: servico.importar(d["conteudo"], d.get("nome"), d.get("categoria"), d.get("marca")),
+        "exec_decidir": lambda d: servico.exec.decidir(str(d["id"]), bool(d.get("aprovar"))),
+        "exec_parar_todas": lambda d: {"paradas": servico.exec.parar_todas()},
     }
 
     class Manipulador(BaseHTTPRequestHandler):

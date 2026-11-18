@@ -37,7 +37,14 @@ Responda ao usuário em português.
 - O celular fala em voz alta e mostra o número de cada envio ("1", "2", "3"...). Esse número é o mesmo do
   histórico: se o usuário disser "foi o 5", chame pausar (se ainda estiver testando), depois retestar([5]) para
   ele confirmar e, se reagir de novo, confirmar(numero=5).
-- Nunca use permitir_servico sem pedido explícito do usuário."""
+- Nunca use permitir_servico sem pedido explícito do usuário.
+- executar_comando roda uma linha de shell no Termux do celular, conforme a política que o usuário define no
+  aparelho (veja politica). Use para investigar o ambiente (pacotes, arquivos, sensores, rede), instalar o que
+  falta e testar. Se vier "aguardando_aprovacao", peça ao usuário para tocar em Executar na notificação e
+  consulte tarefa(id). Nunca tente contornar a política nem pedir que ela seja afrouxada sem motivo.
+- Quando uma solução funcionar e for reutilizável, transforme-a em capacidade (propor_capacidade) e registre o
+  resultado confirmado com capacidades(acao="anotar").
+- atualizar_sistema(ref=<hash do commit>) instala no celular uma versão nova publicada no GitHub (com aprovação)."""
 
 
 def _obj(props: dict, req: list | None = None, desc: str | None = None) -> dict:
@@ -186,6 +193,29 @@ FERRAMENTAS = [
                           "conteudo": dict(S, description="texto: Pronto, Broadlink, '38000: 9000 4500 ...'"),
                           "vezes": I}),
      "annotations": EMITE},
+    {"name": "executar_comando", "title": "Executar um comando no celular",
+     "description": "Roda uma linha de shell no Termux (bash) como tarefa numerada, conforme a política do aparelho: "
+                    "leitura roda direto; rede, pacotes e o resto podem pedir aprovação no celular. Espera até "
+                    "'aguardar' segundos (máx. 55) e devolve status e o fim da saída; tarefas longas continuam "
+                    "rodando — acompanhe com tarefa(id).",
+     "inputSchema": _obj({"comando": S, "aguardar": dict(N, description="segundos para esperar (padrão 30)"),
+                          "tempo_limite": dict(N, description="segundos até encerrar (padrão 120, máx. 3600)"),
+                          "pasta": dict(S, description="diretório de trabalho (padrão: home do Termux)"),
+                          "motivo": dict(S, description="por que (aparece na notificação de aprovação)")},
+                         ["comando"]),
+     "annotations": {**EMITE, "destructiveHint": True}},
+    {"name": "tarefa", "title": "Acompanhar ou parar uma tarefa",
+     "description": "Sem id: lista as tarefas recentes. Com id: status e saída (últimas 'linhas'); parar=true encerra.",
+     "inputSchema": _obj({"id": S, "parar": B, "linhas": I}), "annotations": ALTERA},
+    {"name": "politica", "title": "Política de execução do celular",
+     "description": "O que roda direto, o que pede aprovação e o que é negado, por classe (leitura, rede, pacotes, "
+                    "sistema, livre). Só o usuário muda, no celular.",
+     "inputSchema": _obj({}), "annotations": SO_LEITURA},
+    {"name": "atualizar_sistema", "title": "Atualizar o controle-ir no celular",
+     "description": "Baixa do GitHub a versão do commit indicado, instala e reinicia o serviço (pede aprovação no "
+                    "celular; a versão anterior fica guardada para o atalho Reverter).",
+     "inputSchema": _obj({"ref": dict(S, description="hash do commit"), "motivo": S}, ["ref"]),
+     "annotations": {**EMITE, "destructiveHint": True}},
     {"name": "capacidades", "title": "Capacidades extras do celular",
      "description": "Lista as capacidades plugáveis (diagnóstico de rede, estado do celular e as criadas depois), "
                     "com argumentos, acessos e notas; 'ver' mostra o código; 'anotar' registra um resultado confirmado.",
@@ -299,6 +329,11 @@ class ServidorMCP:
         desconhecidos = set(args) - _ARGS[nome]
         args = {k: v for k, v in args.items() if k in _ARGS[nome]}
         self.log(f"ferramenta {nome}", json.dumps(args, ensure_ascii=False)[:300])
+        try:
+            self.servico.exec.auditar({"evento": "ferramenta", "ferramenta": nome,
+                                       "args": json.dumps(args, ensure_ascii=False, default=str)[:300]})
+        except Exception:  # noqa: BLE001 — auditoria nunca bloqueia
+            pass
         try:
             r = getattr(self.servico, nome)(**args)
             if desconhecidos:

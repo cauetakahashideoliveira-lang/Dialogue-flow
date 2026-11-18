@@ -88,6 +88,11 @@ fi
 
 controle-ir atalhos --silencioso && ok "atalhos “Ligar/Desligar Controle IR” prontos para o Termux:Widget"
 
+if [ -n "${CONTROLE_IR_SEM_INICIAR:-}" ]; then
+  ok "instalado; o serviço será aberto em seguida pela atualização"
+  exit 0
+fi
+
 etapa "7/7 Iniciando o servidor…"
 mkdir -p "$HOME/.termux"
 if controle-ir inicio-automatico status >/dev/null 2>&1; then

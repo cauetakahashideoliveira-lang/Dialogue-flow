@@ -5,6 +5,8 @@
     controle-ir iniciar [--fundo]  inicia nesta sessão (--fundo: sem console, saída em servico.log)
     controle-ir inicio-automatico sim|nao|status   abre o serviço sozinho quando o celular liga (Termux:Boot)
     controle-ir log [-n N]       últimas linhas do registro do serviço em segundo plano
+    controle-ir ligar|desligar   liga em segundo plano / encerra, com aviso na tela (atalhos do Termux:Widget)
+    controle-ir atalhos [--silencioso]   cria os atalhos "Ligar/Desligar Controle IR" para o Termux:Widget
     controle-ir copiar           copia a URL privada do conector
     controle-ir pausar|retomar   controla a busca em andamento
     controle-ir painel           abre o painel no navegador do celular
@@ -217,6 +219,47 @@ def inicio_automatico(acao: str, silencioso: bool = False) -> int:
     print("  A partir de agora,  controle-ir  também abre o serviço em segundo plano: fechar o Termux")
     print("  ou usar CTRL+C no console não derruba mais o conector. Para encerrar: controle-ir parar")
     return 0
+
+
+ATALHOS = {"Ligar Controle IR": "ligar", "Desligar Controle IR": "desligar"}
+
+
+def pasta_atalhos() -> Path:
+    # Termux:Widget lista ~/.shortcuts; os de ~/.shortcuts/tasks rodam sem abrir o terminal
+    return Path.home() / ".shortcuts" / "tasks"
+
+
+def criar_atalhos(silencioso: bool = False) -> int:
+    pasta = pasta_atalhos()
+    pasta.mkdir(parents=True, exist_ok=True)
+    for d in (pasta.parent, pasta):
+        os.chmod(d, 0o700)  # o Termux:Widget recusa pastas que outros apps podem gravar
+    cli = Path(PREFIXO_TERMUX) / "bin" / "controle-ir"
+    for nome, acao in ATALHOS.items():
+        corpo = (f"#!{PREFIXO_TERMUX}/bin/sh\n"
+                 f"# Atalho do Termux:Widget criado por: controle-ir atalhos\n"
+                 + ("termux-wake-lock\n" if acao == "ligar" else "")
+                 + f"exec \"{cli}\" {acao}\n")
+        arq = pasta / nome
+        tmp = arq.with_name(arq.name + ".novo")
+        tmp.write_text(corpo)
+        os.chmod(tmp, 0o700)
+        os.replace(tmp, arq)
+    if silencioso:
+        return 0
+    print("✔ Atalhos criados: “Ligar Controle IR” e “Desligar Controle IR”.")
+    print("  Para pôr na tela inicial (uma vez só):")
+    print("  1. Instale o app Termux:Widget do F-Droid (mesma fonte do Termux).")
+    print("  2. Toque e segure num espaço vazio da tela inicial → Widgets → Termux:Widget.")
+    print("  3. Arraste o “Termux shortcut” (1 ícone) e escolha “Ligar Controle IR”; repita com “Desligar”.")
+    print("  Ligar avisa “Controle IR ligado” em alguns segundos; desligar libera a bateria (sem wake lock).")
+    return 0
+
+
+def _aviso(texto: str):
+    """Aviso curto na tela do celular (termux-toast); no terminal também imprime."""
+    print(texto, flush=True)
+    _termux("termux-toast", "-s", texto)
 
 
 def _redirecionar_para_log():
@@ -514,11 +557,15 @@ def _iniciar(args, trava):
     fundo = bool(getattr(args, "fundo", False))
     tty = bool(sys.stdin and sys.stdin.isatty())
     ativo = servico_ativo()
+    avisar = bool(getattr(args, "avisar", False))
     if ativo:
         _soltar_inicio(trava)
         if tty and not fundo:
             return console(ativo, None)
-        print("O serviço já está rodando; nada a fazer.")
+        if avisar:
+            _aviso("Controle IR já está ligado")
+        else:
+            print("O serviço já está rodando; nada a fazer.")
         return 0
     if fundo:
         _redirecionar_para_log()
@@ -545,6 +592,8 @@ def _iniciar(args, trava):
         sys.exit(1)
     threading.Thread(target=srv.serve_forever, name="http", daemon=True).start()
     _soltar_inicio(trava)
+    if avisar:
+        _aviso("Controle IR ligado — pode pedir ao Claude")
     _termux("termux-wake-lock")
     inicio = time.time()
 
@@ -665,6 +714,10 @@ def main(argv=None):
     pb = sub.add_parser("inicio-automatico", help="abre o serviço quando o celular liga (app Termux:Boot)")
     pb.add_argument("acao", nargs="?", default="status", choices=["sim", "nao", "status"])
     pb.add_argument("--silencioso", action="store_true")
+    sub.add_parser("ligar", help="liga em segundo plano e avisa na tela (atalho do Termux:Widget)")
+    sub.add_parser("desligar", help="encerra o serviço e avisa na tela (libera a bateria)")
+    pa = sub.add_parser("atalhos", help="cria os atalhos Ligar/Desligar para o Termux:Widget")
+    pa.add_argument("--silencioso", action="store_true")
     pl = sub.add_parser("log", help="últimas linhas do registro do serviço em segundo plano")
     pl.add_argument("-n", type=int, default=40)
     pv = sub.add_parser("voz", help="liga/desliga o número falado a cada teste")
@@ -698,6 +751,19 @@ def main(argv=None):
         return iniciar(a)
     if cmd == "inicio-automatico":
         return inicio_automatico(a.acao, a.silencioso)
+    if cmd == "atalhos":
+        return criar_atalhos(a.silencioso)
+    if cmd == "ligar":
+        if servico_ativo():
+            _aviso("Controle IR já está ligado")
+            return 0
+        _aviso("Ligando o Controle IR…")
+        a = ap.parse_args(["iniciar", "--fundo"])
+        a.avisar = True
+        return iniciar(a)
+    if cmd == "desligar":
+        _aviso("Controle IR desligado" if parar_servico() else "Controle IR já estava desligado")
+        return 0
     if cmd == "log":
         return mostrar_log(a.n)
     c = carregar_config()

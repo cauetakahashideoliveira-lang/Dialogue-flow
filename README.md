@@ -55,6 +55,20 @@ Requisitos: **Termux** e **Termux:API**, ambos do F-Droid (mesma fonte).
 **HyperOS/MIUI:** Configurações → Apps → Termux (e Termux:API) → Economia de bateria → **Sem restrições**;
 ative também **Início automático**. O serviço segura um *wake lock* enquanto roda.
 
+### Ligar e desligar com um toque (Termux:Widget)
+
+Para economizar bateria, deixe o serviço desligado e ligue só quando for usar:
+
+1. Instale o app **Termux:Widget** do F-Droid (mesma fonte do Termux).
+2. O instalador já cria os atalhos (ou rode `controle-ir atalhos`).
+3. Toque e segure num espaço vazio da tela inicial → **Widgets** → **Termux:Widget** → arraste o
+   **Termux shortcut** e escolha **Ligar Controle IR**; repita com **Desligar Controle IR**.
+
+**Ligar** abre o serviço em segundo plano e avisa "Controle IR ligado" na tela; **Desligar** encerra tudo e solta o
+*wake lock* (o que mais gasta bateria). A notificação "Controle IR ativo" também tem o botão **Desligar**.
+No terminal: `controle-ir ligar` / `controle-ir desligar`. Com o serviço desligado o Claude não alcança o celular:
+ligar precisa ser no celular.
+
 ### Início automático quando o celular liga (Termux:Boot)
 
 1. Instale o app **Termux:Boot** do F-Droid (mesma fonte do Termux) e **abra-o uma vez**.
@@ -64,7 +78,7 @@ ative também **Início automático**. O serviço segura um *wake lock* enquanto
 
 O comando cria `~/.termux/boot/controle-ir`, que segura o *wake lock* e roda `controle-ir iniciar --fundo`:
 o serviço sobe sem console, grava o registro em `~/.controle-ir/servico.log` (sem o segredo; veja com
-`controle-ir log`) e mostra a notificação fixa **Controle IR ativo** (botões *Painel* e *Copiar URL*).
+`controle-ir log`) e mostra a notificação fixa **Controle IR ativo** (botões *Painel*, *Copiar URL* e *Desligar*).
 Com o início automático ativado, digitar `controle-ir` também abre o serviço em segundo plano e mostra só o
 **console**: Enter pausa a busca, `c` continua, `copiar`, `url`, `painel`, `log`; `sair`, CTRL+C ou fechar o Termux
 fecham só o console, e o conector continua no ar. `parar` (no console) ou `controle-ir parar` encerra o serviço.
@@ -137,7 +151,8 @@ Regras que o servidor aplica:
   nomeado da Cloudflare) ou `controle-ir tunel ngrok --dominio seu-nome.ngrok-free.app` (ngrok com domínio
   estático e `ngrok config add-authtoken` feito antes).
 * Outros comandos: `controle-ir painel`, `controle-ir status`, `controle-ir pausar`, `controle-ir catalogo ampliar`,
-  `controle-ir importar arquivo.ir`, `controle-ir parar`, `controle-ir inicio-automatico sim|nao`, `controle-ir log`.
+  `controle-ir importar arquivo.ir`, `controle-ir parar`, `controle-ir ligar|desligar`, `controle-ir atalhos`,
+  `controle-ir inicio-automatico sim|nao`, `controle-ir log`.
 
 ## Segurança
 * O servidor escuta só em `127.0.0.1`; o acesso externo exige a URL com segredo de 256 bits (ou
@@ -153,7 +168,7 @@ Regras que o servidor aplica:
 | 161.666 sinais do catálogo base convertem para transmissão válida (≤ 2 s) | Tempo de resposta do Termux:API em cada envio |
 | Planejador: ar-condicionado SmartIR (pedido composto, só temperatura, oscilação ausente, desligar), ventilador Flipper (alternância, saturação, falha no meio), projetor (HDMI 2 direto), fita LED (cor) | Notificação e botões no HyperOS |
 | Descoberta: pausa < 3 s, suspeitos, reteste, confirmação, distinção até 1 perfil, lote, retomada após reinício | Túnel `cloudflared` na rede do celular |
-| MCP: 43 testes automatizados (incluindo resumo dos aparelhos e serviço em segundo plano) + cliente oficial do SDK MCP (protocolo 2026-07-28 negociado para 2025-11-25) | Cadastro do conector na sua conta do Claude |
+| MCP: 44 testes automatizados (incluindo resumo dos aparelhos e serviço em segundo plano) + cliente oficial do SDK MCP (protocolo 2026-07-28 negociado para 2025-11-25) | Cadastro do conector na sua conta do Claude |
 | Instalação completa num Termux simulado (pacotes, emissor, catálogo, túnel, `copiar`, `pausar` pela notificação) | Termux:Boot abrindo o serviço quando o HyperOS liga |
 | Segundo plano: registro sem segredo (600), instância única, console por pty, `parar` sem matar pid reaproveitado | |
 

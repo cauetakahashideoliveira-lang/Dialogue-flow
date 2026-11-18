@@ -34,6 +34,9 @@ Os arquivos `.ir` ao lado de cada ficha guardam, no formato Flipper, os sinais *
 6. **Ar do escritório e ar do laboratório usam os mesmos códigos** (perfil nº 94): se os dois estiverem ao
    alcance do celular, um comando para um também chega ao outro.
 
+7. **Conector sem resposta:** o usuário liga o serviço só quando vai usar (bateria). Peça para tocar no atalho
+   **Ligar Controle IR** da tela inicial e tente de novo em alguns segundos.
+
 ## Criar um botão novo (o que funcionou nesta instalação)
 
 - **Ar-condicionado Gree:** não chute quadros pelo protocolo genérico. Parta do sinal real do perfil e troque

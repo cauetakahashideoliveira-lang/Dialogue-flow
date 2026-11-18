@@ -112,7 +112,8 @@ class Notificador:
         self._rodar(["termux-notification", "--id", "controle-ir-servico", "--title", "Controle IR ativo",
                      "--content", f"{txt} · em segundo plano", "--ongoing", "--alert-once", "--priority", "low",
                      "--button1", "Painel", "--button1-action", f"{self.cli} painel",
-                     "--button2", "Copiar URL", "--button2-action", f"{self.cli} copiar"])
+                     "--button2", "Copiar URL", "--button2-action", f"{self.cli} copiar",
+                     "--button3", "Desligar", "--button3-action", f"{self.cli} desligar"])
 
 
 def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str = "127.0.0.1", log=None):

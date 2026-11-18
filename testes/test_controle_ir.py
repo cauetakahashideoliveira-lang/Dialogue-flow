@@ -710,6 +710,30 @@ class TestSegundoPlano(unittest.TestCase):
             outro.kill()
             outro.wait()
 
+    def test_atalhos_do_widget_ligar_e_desligar(self):
+        self.assertEqual(self.cli("atalhos")[0], 0)
+        tarefas = Path(self.env["HOME"]) / ".shortcuts" / "tasks"
+        ligar, desligar = tarefas / "Ligar Controle IR", tarefas / "Desligar Controle IR"
+        self.assertTrue(ligar.read_text().rstrip().endswith(" ligar"))
+        self.assertIn("termux-wake-lock", ligar.read_text())
+        self.assertTrue(desligar.read_text().rstrip().endswith(" desligar"))
+        for f in (ligar, desligar, tarefas, tarefas.parent):
+            self.assertEqual(f.stat().st_mode & 0o777, 0o700)
+        self.assertIn("já estava desligado", self.cli("desligar")[1])
+        p = subprocess.Popen([sys.executable, "-m", "controle_ir", "ligar"], env=self.env, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        try:
+            self.assertTrue(self.esperar(self.saude))
+            self.assertIn("já está ligado", self.cli("ligar")[1])
+            self.assertTrue(self.esperar(lambda: "ligado — pode pedir" in
+                                         (self.pasta / "servico.log").read_text(), 5))
+            self.assertIn("Controle IR desligado", self.cli("desligar")[1])
+            self.assertEqual(p.wait(timeout=10), 0)
+            self.assertFalse(self.saude())
+        finally:
+            if p.poll() is None:
+                p.kill()
+
     def test_console_abre_em_segundo_plano_e_sair_nao_derruba(self):
         import pty
         import select

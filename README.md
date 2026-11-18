@@ -168,6 +168,11 @@ O servidor relê as pastas a cada chamada: não precisa reiniciar.
 * `atualizar_sistema(ref=<commit>)` / `controle-ir atualizar --ref <commit>`: baixa o pacote do commit, guarda a
   versão atual em `~/controle-ir.anterior`, instala e religa. Se o acesso não voltar: atalho **Reverter Controle IR**
   (só shell) ou `controle-ir reverter`.
+* **De outro aparelho (iPad, computador):** tudo que não precisa de aprovação já funciona em qualquer lugar onde
+  o conector estiver ativo. Para aprovar de longe, configure uma vez no celular `controle-ir exec codigo
+  configurar` (chave/QR para o app Senhas do iPad ou outro autenticador) e diga ao Claude o código de 6 dígitos:
+  `autorizar(codigo, tarefa | liberar_minutos | capacidade+sha | destravar)`. Cada código vale uma vez; 5 erros
+  bloqueiam por 15 min e avisam no celular. `travar` funciona de qualquer lugar, sem código.
 * Auditoria de cada ferramenta e tarefa: `~/.controle-ir/auditoria.jsonl`.
 * Visão completa, mapa de oportunidades e limites: [docs/modo-deus.md](docs/modo-deus.md).
 

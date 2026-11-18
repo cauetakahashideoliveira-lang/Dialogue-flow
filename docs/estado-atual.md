@@ -43,8 +43,10 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
 5. "Liga a TV do quarto." / "Abre a Netflix na TV."
 
 ## Pendências
-- **Instalar a 1.0.9** (capacidades, execução governada, atualizar/reverter, aprovações fora do túnel,
-  origens). É a última instalação colando a linha: depois, `atualizar_sistema(ref)` pelo Claude. Ver
+- Depois de instalar: `controle-ir exec codigo configurar` e cadastrar a chave no app Senhas do iPad, para
+  aprovar do iPad com o código de 6 dígitos (o usuário usa o Claude também no iPad).
+- **Instalar a 1.0.10** (capacidades, execução governada, atualizar/reverter, aprovação no celular ou por
+  código do autenticador de outro aparelho, origens). É a última instalação colando a linha: depois, `atualizar_sistema(ref)` pelo Claude. Ver
   `docs/modo-deus.md` (§8 próximos experimentos, §9 perguntas).
 - Gravar as ressalvas como observação de cada aparelho (`editar_aparelho(observacao=…)`) para chegarem ao
   Claude pelo resumo: extras do ar do quarto fixam 16 °C/frio/automática; desligar direto da TV ainda não

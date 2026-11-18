@@ -507,7 +507,60 @@ class Servico:
             raise ErroUso(str(e)) from e
 
     def politica(self) -> dict:
-        return self.exec.politica.resumo()
+        return {**self.exec.politica.resumo(), "autorizacao_remota": self.exec.autorizacao.estado()}
+
+    def autorizar(self, codigo, tarefa=None, liberar_minutos=None, capacidade=None, sha=None,
+                  destravar=False) -> dict:
+        """Aprovação vinda de outro aparelho: exige o código de 6 dígitos do app autenticador do usuário."""
+        if not any([tarefa, liberar_minutos, capacidade, destravar]):
+            raise ErroUso("informe o que autorizar: tarefa, liberar_minutos, capacidade (com sha) ou destravar")
+        if capacidade and not sha:
+            raise ErroUso("para aprovar uma capacidade, informe o sha devolvido por propor_capacidade (o código "
+                          "que o usuário viu)")
+        try:
+            ok = self.exec.autorizacao.verificar(codigo)
+        except ValueError as e:
+            raise ErroUso(str(e)) from e
+        if not ok:
+            self.exec.auditar({"evento": "autorizacao_remota", "resultado": "codigo_invalido"})
+            raise ErroUso("código inválido ou já usado; peça ao usuário o código atual do app autenticador")
+        feito = {}
+        pol = self.exec.politica
+        if destravar or liberar_minutos:
+            p = pol.ler()
+            if destravar:
+                p["travado"] = False
+                feito["destravado"] = True
+            if liberar_minutos:
+                m = max(1, min(int(liberar_minutos), 240))
+                p["liberado_ate"], p["travado"] = time.time() + m * 60, False
+                feito["liberado_minutos"] = m
+            pol.gravar(p)
+        if tarefa:
+            try:
+                feito["tarefa"] = self.exec.decidir(str(tarefa), True)
+            except KeyError as e:
+                raise ErroUso(str(e)) from e
+        if capacidade:
+            try:
+                feito["capacidade"] = self.reg.aprovar(str(capacidade), str(sha))
+            except ErroCapacidade as e:
+                raise ErroUso(str(e)) from e
+        resumo = {k: (v if not isinstance(v, dict) else v.get("status")) for k, v in feito.items()}
+        self.exec.auditar({"evento": "autorizacao_remota", "resultado": "ok", "feito": resumo})
+        self.exec.notificar({"tipo": "alerta", "texto": f"Autorizado de outro aparelho: {resumo}"})
+        return {"autorizado": True, **feito}
+
+    def travar(self) -> dict:
+        """Freio de qualquer lugar (só tira poder): nega tudo e encerra as tarefas em andamento."""
+        p = self.exec.politica.ler()
+        p["travado"], p["liberado_ate"] = True, 0
+        self.exec.politica.gravar(p)
+        n = self.exec.parar_todas()
+        self.exec.auditar({"evento": "travado_remotamente", "tarefas_encerradas": n})
+        self.exec.notificar({"tipo": "alerta", "texto": f"Execução TRAVADA pelo Claude ({n} tarefa(s) encerrada(s))"})
+        return {"travado": True, "tarefas_encerradas": n,
+                "destravar": "no celular: controle-ir exec destravar · ou autorizar(codigo, destravar=true)"}
 
     def atualizar_sistema(self, ref, motivo=None, aguardar=40) -> dict:
         import re

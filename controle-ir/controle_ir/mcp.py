@@ -44,7 +44,11 @@ Responda ao usuário em português.
   consulte tarefa(id). Nunca tente contornar a política nem pedir que ela seja afrouxada sem motivo.
 - Quando uma solução funcionar e for reutilizável, transforme-a em capacidade (propor_capacidade) e registre o
   resultado confirmado com capacidades(acao="anotar").
-- atualizar_sistema(ref=<hash do commit>) instala no celular uma versão nova publicada no GitHub (com aprovação)."""
+- atualizar_sistema(ref=<hash do commit>) instala no celular uma versão nova publicada no GitHub (com aprovação).
+- Se o usuário estiver longe do celular (iPad, computador) e quiser aprovar algo, peça o código de 6 dígitos do
+  app autenticador dele e chame autorizar(codigo, tarefa=… | liberar_minutos=… | capacidade=…, sha=… | destravar).
+  Cada código vale uma vez: nunca o guarde nem o reutilize. Antes de aprovar uma capacidade assim, mostre o código
+  dela ao usuário. travar() funciona sem código e encerra tudo."""
 
 
 def _obj(props: dict, req: list | None = None, desc: str | None = None) -> dict:
@@ -211,6 +215,18 @@ FERRAMENTAS = [
      "description": "O que roda direto, o que pede aprovação e o que é negado, por classe (leitura, rede, pacotes, "
                     "sistema, livre). Só o usuário muda, no celular.",
      "inputSchema": _obj({}), "annotations": SO_LEITURA},
+    {"name": "autorizar", "title": "Autorizar de outro aparelho (código do autenticador)",
+     "description": "Aprova uma tarefa, libera a execução por alguns minutos, aprova uma capacidade proposta (com o "
+                    "sha que o usuário viu) ou destrava — exige o código de 6 dígitos que o usuário lê no app "
+                    "autenticador dele (iPad, outro celular). Cada código vale uma vez.",
+     "inputSchema": _obj({"codigo": dict(S, description="6 dígitos ditos pelo usuário agora"), "tarefa": S,
+                          "liberar_minutos": dict(I, description="1–240"), "capacidade": S, "sha": S,
+                          "destravar": B}, ["codigo"]),
+     "annotations": {**ALTERA, "openWorldHint": True}},
+    {"name": "travar", "title": "Travar a execução agora",
+     "description": "Freio de emergência: nega qualquer execução e encerra as tarefas em andamento. Não precisa de "
+                    "código; para destravar, o usuário usa o celular ou autorizar(codigo, destravar=true).",
+     "inputSchema": _obj({}), "annotations": ALTERA},
     {"name": "atualizar_sistema", "title": "Atualizar o controle-ir no celular",
      "description": "Baixa do GitHub a versão do commit indicado, instala e reinicia o serviço (pede aprovação no "
                     "celular; a versão anterior fica guardada para o atalho Reverter).",

@@ -3,8 +3,10 @@
   "1": "sinais.py",
   "2": "servico.py",
   "4": "cli.py",
-  "7": "Sinal",
+  "7": "vocabulario.py",
   "8": "ServidorMCP",
+  "11": "protocolos.py",
+  "13": ".controlar",
   "14": "Modo deus — arquitetura evolutiva e mapa de oportunidades",
   "16": "PathLike",
   "18": "Execucao",
@@ -16,5 +18,10 @@
   "27": "PathLike",
   "28": "RuntimeError",
   "29": "Path",
-  "30": "ValueError"
+  "30": "formatos.py",
+  "31": "Sinal",
+  "32": ".importar",
+  "33": "construir_catalogo.py",
+  "34": "TestGreeVariante",
+  "35": "ValueError"
 }

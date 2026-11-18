@@ -131,6 +131,11 @@ class Notificador:
                          "--content", txt, "--ongoing", "--alert-once", "--priority", "high",
                          "--button1", "Reagiu — pausar", "--button1-action", f"{self.cli} pausar",
                          "--button2", "Painel", "--button2-action", f"{self.cli} painel"])
+        elif tipo == "alerta":
+            if self.console:
+                print(f"  ⚠ {ev.get('texto')}", flush=True)
+            self._rodar(["termux-notification", "--id", "controle-ir-alerta", "--title", "Controle IR",
+                         "--content", str(ev.get("texto"))[:300], "--priority", "high"])
         elif tipo == "exec_aprovacao":
             ident = ev["id"]
             self.falar("pedido para executar")

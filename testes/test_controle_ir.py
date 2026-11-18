@@ -777,9 +777,49 @@ class TestExecucao(unittest.TestCase):
         Execucao(Path(self.pasta))  # serviço reiniciou
         self.assertEqual(self.s.tarefa(r["id"])["status"], "interrompida")
         nomes = " ".join(t["name"] for t in FERRAMENTAS)
-        for proibido in ("liberar", "travar", "destravar", "aprovar"):
+        for proibido in ("liberar", "destravar", "aprovar", "classe"):  # só por autorizar(código) ou no celular
             self.assertNotIn(proibido, nomes)
         self.assertIn("politica", nomes)
+
+    def test_totp_rfc6238_e_uso_unico(self):
+        import base64
+        from controle_ir.execucao import Autorizacao, totp
+        seg = base64.b32encode(b"12345678901234567890").decode()
+        self.assertEqual(totp(seg, 59 // 30, 8), "94287082")  # vetor de teste da RFC 6238 (SHA-1)
+        au = Autorizacao(Path(self.pasta))
+        with self.assertRaises(ValueError):
+            au.verificar("123456")  # não configurada
+        seg = au.configurar()
+        t = 1_800_000_000
+        cod = totp(seg, t // 30)
+        self.assertTrue(au.verificar(cod, t))
+        self.assertFalse(au.verificar(cod, t))  # o mesmo código não vale duas vezes
+        self.assertTrue(au.verificar(totp(seg, t // 30 + 1), t))  # janela de ±30 s
+        for _ in range(5):
+            self.assertFalse(au.verificar("000000", t + 60))
+        with self.assertRaises(ValueError):  # bloqueada após 5 erros
+            au.verificar(totp(seg, (t + 90) // 30), t + 90)
+
+    def test_autorizar_de_outro_aparelho_e_travar(self):
+        from controle_ir.execucao import totp
+        seg = self.ex.autorizacao.configurar()
+        cod = lambda: totp(seg, int(time.time() // 30))  # noqa: E731
+        r = self.s.executar_comando("echo remoto", aguardar=0)
+        self.assertEqual(r["status"], "aguardando_aprovacao")
+        with self.assertRaises(Exception):
+            self.s.autorizar("111111", tarefa=r["id"])
+        out = self.s.autorizar(cod(), tarefa=r["id"])
+        self.assertEqual(out["tarefa"]["status"], "executando")
+        with self.assertRaises(Exception):  # código já usado
+            self.s.autorizar(cod(), liberar_minutos=10)
+        self.assertTrue(self.s.travar()["travado"])
+        self.assertEqual(self.s.executar_comando("ls", aguardar=1)["status"], "negada")
+        self.ex.autorizacao._gravar({**self.ex.autorizacao._ler(), "ultimo": 0})  # próximo passo de 30 s
+        self.s.autorizar(cod(), destravar=True, liberar_minutos=5)
+        self.assertEqual(self.s.executar_comando("echo livre; true", aguardar=10)["status"], "concluida")
+        aud = (Path(self.pasta) / "auditoria.jsonl").read_text()
+        self.assertIn("autorizacao_remota", aud)
+        self.assertIn("travado_remotamente", aud)
 
     def test_reverter_so_shell(self):
         from controle_ir.cli import REVERTER_SH

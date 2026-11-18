@@ -99,8 +99,94 @@ class Politica:
         lib = float(p["liberado_ate"] or 0)
         return {"travado": p["travado"], "classes": p["classes"],
                 "liberado_ate": time.strftime("%H:%M", time.localtime(lib)) if lib > time.time() else None,
-                "como_mudar": "só no celular: controle-ir exec classe <classe> permitir|perguntar|negar · "
-                              "controle-ir exec liberar <minutos> · controle-ir exec travar|destravar"}
+                "como_mudar": "no celular: controle-ir exec classe <classe> permitir|perguntar|negar · "
+                              "controle-ir exec liberar <minutos> · controle-ir exec travar|destravar. De outro "
+                              "aparelho: autorizar(codigo do app autenticador, tarefa|liberar_minutos|capacidade) "
+                              "e travar (sem código)."}
+
+
+# ------------------------------------------------------------- autorização remota (TOTP, RFC 6238)
+def gerar_segredo() -> str:
+    import base64
+    import secrets
+    return base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+
+
+def totp(segredo_b32: str, contador: int, digitos: int = 6) -> str:
+    import base64
+    import hashlib
+    import hmac
+    import struct
+    chave = base64.b32decode(segredo_b32.upper() + "=" * (-len(segredo_b32) % 8))
+    h = hmac.new(chave, struct.pack(">Q", contador), hashlib.sha1).digest()
+    o = h[-1] & 0x0F
+    return str((struct.unpack(">I", h[o:o + 4])[0] & 0x7FFFFFFF) % 10 ** digitos).zfill(digitos)
+
+
+class Autorizacao:
+    """Aprovar de outro aparelho (iPad, computador): o usuário dita no chat o código de 6 dígitos do app
+    autenticador. Cada código vale uma vez; 5 erros em 10 min bloqueiam por 15 min."""
+    PASSO = 30
+
+    def __init__(self, pasta: Path, notificar=None):
+        self.arq = Path(pasta) / "autorizacao.json"
+        self.notificar = notificar or (lambda ev: None)
+        self.trava = threading.Lock()
+
+    def _ler(self) -> dict:
+        try:
+            return json.loads(self.arq.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def _gravar(self, d: dict):
+        self.arq.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.arq.with_suffix(".novo")
+        tmp.write_text(json.dumps(d))
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, self.arq)
+
+    def configurado(self) -> bool:
+        return bool(self._ler().get("segredo"))
+
+    def configurar(self) -> str:
+        seg = gerar_segredo()
+        self._gravar({"segredo": seg, "ultimo": 0, "falhas": []})
+        return seg
+
+    def remover(self):
+        self.arq.unlink(missing_ok=True)
+
+    def estado(self) -> dict:
+        d = self._ler()
+        bloq = float(d.get("bloqueado_ate") or 0)
+        return {"configurada": bool(d.get("segredo")),
+                "bloqueada_ate": time.strftime("%H:%M", time.localtime(bloq)) if bloq > time.time() else None}
+
+    def verificar(self, codigo, agora: float | None = None) -> bool:
+        agora = time.time() if agora is None else agora
+        codigo = "".join(ch for ch in str(codigo or "") if ch.isdigit())
+        with self.trava:
+            d = self._ler()
+            if not d.get("segredo"):
+                raise ValueError("autorização remota não configurada: no celular, rode  controle-ir exec codigo "
+                                 "configurar")
+            if float(d.get("bloqueado_ate") or 0) > agora:
+                raise ValueError("autorização remota bloqueada por excesso de códigos errados; tente às "
+                                 + time.strftime("%H:%M", time.localtime(d["bloqueado_ate"])))
+            atual = int(agora // self.PASSO)
+            for c in (atual - 1, atual, atual + 1):
+                if c > int(d.get("ultimo") or 0) and len(codigo) == 6 and totp(d["segredo"], c) == codigo:
+                    d["ultimo"], d["falhas"] = c, []
+                    self._gravar(d)
+                    return True
+            d["falhas"] = [f for f in d.get("falhas", []) if agora - f < 600] + [agora]
+            if len(d["falhas"]) >= 5:
+                d["bloqueado_ate"], d["falhas"] = agora + 900, []
+                self.notificar({"tipo": "alerta", "texto": "5 códigos de autorização errados: autorização remota "
+                                                          "bloqueada por 15 min"})
+            self._gravar(d)
+            return False
 
 
 class Execucao:
@@ -110,6 +196,7 @@ class Execucao:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.politica = Politica(self.pasta)
         self.notificar = notificar or (lambda ev: None)
+        self.autorizacao = Autorizacao(self.pasta, self.notificar)
         self.trava = threading.Lock()
         self.eventos: dict[str, threading.Event] = {}
         self.procs: dict[str, subprocess.Popen] = {}

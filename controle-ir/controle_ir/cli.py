@@ -8,6 +8,7 @@
     controle-ir ligar|desligar   liga em segundo plano / encerra, com aviso na tela (atalhos do Termux:Widget)
     controle-ir capacidade listar|ver|aprovar|recusar|remover|executar [NOME] [--args JSON] [--abrir]
     controle-ir exec politica|historico|aprovar ID|negar ID|liberar MIN|travar|destravar|classe C MODO
+    controle-ir exec codigo configurar|mostrar|remover   aprovar de outro aparelho (código do autenticador)
     controle-ir atualizar [--ref HASH]   instala do GitHub em segundo plano (a versão atual vira a "anterior")
     controle-ir reverter         volta para a versão anterior (também pelo atalho "Reverter Controle IR")
     controle-ir origens [observar|exigir]   de onde vêm as chamadas do Claude; exigir = só a rede da Anthropic
@@ -345,6 +346,32 @@ def exec_cli(a) -> int:
         p["travado"] = False
         pol.gravar(p)
         _aviso("Execução destravada (vale a política por classe)")
+        return 0
+    if a.acao == "codigo":
+        from .execucao import Autorizacao, totp
+        au = Autorizacao(PASTA)
+        if a.valor == "remover":
+            au.remover()
+            print("Autorização remota desligada: aprovações só no celular.")
+            return 0
+        if a.valor != "configurar":
+            print(json.dumps(au.estado(), ensure_ascii=False))
+            return 0
+        seg = au.configurar()
+        uri = f"otpauth://totp/Controle%20IR:POCO?secret={seg}&issuer=Controle%20IR&digits=6&period=30"
+        print("Autorização remota: cadastre esta chave num app autenticador do aparelho de onde vai aprovar.")
+        print("  iPad/iPhone: Ajustes → Senhas → + (novo) → Código de verificação → Inserir chave de configuração")
+        print("  (ou aponte a câmera para o QR abaixo). Também serve Google/Microsoft Authenticator.")
+        print(f"\n  Chave: {' '.join(seg[i:i + 4] for i in range(0, len(seg), 4))}\n")
+        if shutil.which("qrencode"):
+            subprocess.run(["qrencode", "-t", "ansiutf8", uri])
+        else:
+            print("  (QR: instale com  pkg install libqrencode  e rode de novo)")
+        print("  Não fotografe nem compartilhe a chave: ela gera os códigos de aprovação.")
+        if sys.stdin and sys.stdin.isatty():
+            cod = input("\nDigite o código de 6 dígitos que o app mostra agora (Enter pula): ").strip()
+            if cod:
+                print("✔ Código confere." if au.verificar(cod) else "✖ Não conferiu: confira a hora do aparelho e a chave.")
         return 0
     if a.acao == "classe":
         if a.valor not in CLASSES or a.modo not in ("permitir", "perguntar", "negar"):
@@ -883,7 +910,7 @@ def main(argv=None):
     pk.add_argument("--sha", help="aprovar: início do SHA-256 revisado (a notificação envia)")
     pe = sub.add_parser("exec", help="política de execução, aprovações, trava e histórico")
     pe.add_argument("acao", choices=["politica", "historico", "aprovar", "negar", "liberar", "travar", "destravar",
-                                     "classe"])
+                                     "classe", "codigo"])
     pe.add_argument("valor", nargs="?")
     pe.add_argument("modo", nargs="?")
     pe.add_argument("--aprovar")

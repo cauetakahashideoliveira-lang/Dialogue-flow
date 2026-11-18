@@ -5,9 +5,12 @@
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
-- Servidor no celular na versão 1.0.6 (atualizado em 18/11, ~20h). O repositório tem a **1.0.7**: ligar/desligar com um toque (Termux:Widget), início automático com Termux:Boot,
-  serviço em segundo plano com console, e resumo dos aparelhos nas instruções do conector. A 1.0.5 só corrigia
-  a resposta de `editar_aparelho` quando o sinal já existe. **Falta atualizar o celular** (ver "Pendências").
+- Servidor no celular na versão **1.0.7** (atualizado em 18/11 às 20h08; catálogo mantido, sem reconstruir).
+- **Termux:Widget instalado** com os atalhos "Ligar Controle IR" e "Desligar Controle IR" na tela inicial,
+  testados em 18/11: o usuário liga o serviço só quando vai usar, para poupar bateria. Se o conector não
+  responder (Service Unavailable / Not Found), peça para tocar em "Ligar Controle IR"; logo depois de ligar,
+  as 1–2 primeiras chamadas podem falhar enquanto o túnel abre (repita após alguns segundos).
+- Início automático (Termux:Boot): **não ativado**, por escolha do usuário (bateria).
 
 ## Conector no Claude
 - Nome atual: "Controle master" (sem login, URL com segredo). O antigo "Controle do POCO" foi removido.
@@ -40,18 +43,11 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
 5. "Liga a TV do quarto." / "Abre a Netflix na TV."
 
 ## Pendências
-- **Atualizar o celular para a 1.0.7** (a linha de instalação com o hash do commit; o instalador encerra o
-  serviço antigo sozinho; desde a 1.0.7 o catálogo só é refeito se a base mudar).
-- **Pôr os atalhos na tela inicial:** instalar o app Termux:Widget (F-Droid) → tela inicial → Widgets →
-  Termux:Widget → "Termux shortcut" → "Ligar Controle IR" (e "Desligar Controle IR").
-- **Opcional — início automático no celular** (gasta mais bateria, serviço sempre ligado): instalar o app Termux:Boot (F-Droid) e abri-lo uma vez; HyperOS →
-  Apps → Termux:Boot → Início automático + bateria Sem restrições; responder **s** na etapa 6 do instalador
-  (ou `controle-ir inicio-automatico sim`). Depois, reiniciar o celular e conferir no Claude com `consultar`.
-- Depois da atualização, gravar as ressalvas como observação de cada aparelho (`editar_aparelho(observacao=…)`)
-  para chegarem ao Claude pelo resumo: extras do ar do quarto fixam 16 °C/frio/automática; desligar direto da TV
-  ainda não testado; escritório e laboratório compartilham códigos (este último o resumo já detecta sozinho).
+- Gravar as ressalvas como observação de cada aparelho (`editar_aparelho(observacao=…)`) para chegarem ao
+  Claude pelo resumo: extras do ar do quarto fixam 16 °C/frio/automática; desligar direto da TV ainda não
+  testado (escritório e laboratório compartilham códigos: o resumo já detecta sozinho).
 
-## Implementado no repositório em 18/11 (versões 1.0.6 e 1.0.7, ainda não instaladas no celular)
+## Implementado em 18/11 (versões 1.0.6 e 1.0.7, instaladas no celular)
 - **Ligar/desligar com um toque (1.0.7):** atalhos "Ligar Controle IR" e "Desligar Controle IR" em
   `~/.shortcuts/tasks` para o app Termux:Widget (o instalador cria; `controle-ir atalhos`); `controle-ir
   ligar|desligar` avisam na tela; botão Desligar na notificação. O usuário prefere ligar só quando for usar,

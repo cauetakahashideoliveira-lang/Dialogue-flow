@@ -141,6 +141,24 @@ Regras que o servidor aplica:
   modelo (`importar`) ou um sinal capturado por receptor externo (Flipper Zero, Broadlink, ESPHome; formatos
   `.ir`, Pronto, Broadlink, `38000: 9000 4500 …`).
 
+## Capacidades plugáveis (ferramentas novas sem mexer no núcleo)
+
+Uma capacidade é uma pasta com `capacidade.json` (nome, descrição, argumentos em JSON Schema, acessos, efeito,
+tempo limite) e um script `.py` ou `.sh` que lê os argumentos em JSON na entrada e escreve o resultado em JSON.
+O servidor relê as pastas a cada chamada: não precisa reiniciar.
+
+* **Embutidas** (`controle-ir/capacidades/`): `diagnostico_rede` — Wi-Fi (sinal, frequência, enlace), perda e
+  latência até o roteador e a internet, DNS, download, histórico em `~/.controle-ir/medicoes/rede.jsonl` e um
+  diagnóstico (Wi-Fi × roteador × provedor × DNS) com sugestões reversíveis; `estado_celular` — bateria, Wi-Fi,
+  armazenamento, carga, comandos do Termux:API disponíveis.
+* **No Claude:** `capacidades` (listar, ver código, anotar resultado confirmado), `executar_capacidade` e uma
+  ferramenta `cap_<nome>` por capacidade ativa (aparece nas conversas novas).
+* **Criar durante a conversa:** o Claude escreve o script e chama `propor_capacidade`. Nada roda até você tocar em
+  **Aprovar** na notificação (ou **Ver código** antes). A aprovação grava o SHA-256 dos arquivos: se o código mudar,
+  volta a exigir aprovação. As suas ficam em `~/.controle-ir/capacidades/` e sobrevivem a reinícios e atualizações.
+* Terminal: `controle-ir capacidade listar | ver NOME [--abrir] | aprovar NOME | recusar NOME | remover NOME |
+  executar NOME --args '{"rapido": true}'`.
+
 ## Reabrir, atualizar a URL, URL fixa
 
 * Reabrir o serviço: abra o Termux e digite `controle-ir`.

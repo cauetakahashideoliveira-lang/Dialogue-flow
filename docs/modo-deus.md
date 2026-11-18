@@ -123,6 +123,22 @@ Impacto e esforço de 1 a 5. **M** = multiplicador: aumenta a capacidade de cria
 | Ferramentas do PC direto no chat (Desktop Commander remoto ou MCP próprio com OAuth) | "Procura o PDF da fatura de outubro e resume." | ❓ terceiros/OAuth | 4/2 | M |
 | Claude Code dentro do Termux (comunidade, camada glibc) | (aba Code) "Cria um script que mede o Wi-Fi a cada minuto." | ❓ sem suporte oficial | 5/4 | M |
 
+### Observar o resultado (agir → medir → ajustar)
+| Oportunidade | Pedido de exemplo | Estado | Imp/Esf | M |
+|---|---|---|---|---|
+| Ferramenta `verificar`: após cada ação, chama os observadores disponíveis (rede, bip, foto, consumo) e devolve "confirmado/não confirmado" com evidência | "Liga o ar do quarto em 23 °C e me diz se ligou mesmo." | 🔧 sobre as capacidades | 5/2 | M |
+| Ouvido: detectar o bip do ar (microfone + FFT com numpy/scipy, pacotes oficiais do Termux) e pausar a busca sozinho | "Descobre o código do ar do laboratório sem eu olhar." | ❓ microfone em 2º plano (issue 648) | 5/2 | M |
+| Olho: câmera + visão do Claude (visor do ar, tela da TV); resultado em imagem cabe no conector (~150 mil caracteres) | "Tira uma foto do visor do ar." | ❓ enquadramento | 4/2 | M |
+| Tomada com medição (Tuya ~R$ 48–61; Shelly 1PM/EM na caixa) | "O ar ligou? Quanto gastou nesta semana?" | 🛒 ar de 9.000 BTU costuma ir no disjuntor | 5/2 | M |
+| Ponte ESP32/ESPHome: receptor IR (`climate_ir` gree/midea), estado sincronizado quando você usa o controle original, RF 433, BLE | "Usei o controle original, atualiza o estado." | 🛒 ~R$ 50–70 | 5/3 | M |
+| Termômetro BLE (LYWSD03MMC + firmware pvvx) via ponte: malha fechada de temperatura | "Mantém o quarto em 24 °C até eu acordar." | 🛒 ~R$ 30–50 | 4/2 | M |
+| Celular antigo como sentinela fixa (servidor sempre ligado, microfone, câmera) | "Fica de olho no ar do laboratório." | 🛒 usado ~R$ 150–300 | 4/2 | M |
+
+Fontes desta seção: https://esphome.io/components/climate/climate_ir/ · https://esphome.io/components/sensor/xiaomi_ble.html ·
+https://github.com/termux/termux-api/issues/648 · https://github.com/termux/termux-packages/tree/master/packages/python-scipy ·
+https://support.anthropic.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers ·
+https://www.github.com/mjg59/python-broadlink.
+
 ### O próprio sistema
 | Oportunidade | Estado | Imp/Esf | M |
 |---|---|---|---|
@@ -206,6 +222,8 @@ Impacto e esforço de 1 a 5. **M** = multiplicador: aumenta a capacidade de cria
   usuários de ar split sem Wi-Fi. Diferencial comprovado aqui: gerar o quadro Gree a partir da captura real.
 - **Diagnóstico de internet doméstica com evidência** para levar ao provedor: medições históricas por cômodo,
   separação Wi-Fi × roteador × provedor, relatório. Público: quem sofre com a operadora; pequenos escritórios.
+- **"Ar observável" para anfitriões de Airbnb/pousadas e técnicos de refrigeração (PMOC):** ESP32 com IR,
+  receptor e sensor, mais relatório de uso e temperatura. Hipótese: confirmar demanda e a exigência legal.
 - **Kit "dê sentidos ao celular"** (ESP32 com receptor IR, sensor de temperatura e BLE por USB-C, mais as capacidades
   prontas). Público: entusiastas de automação sem Home Assistant.
 

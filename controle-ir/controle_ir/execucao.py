@@ -203,15 +203,19 @@ class Execucao:
         for f in self.dir.glob("*.json"):  # o serviço reiniciou: o que rodava foi interrompido
             try:
                 t = json.loads(f.read_text())
-                if t.get("status") in ("executando", "aguardando_aprovacao"):
+                if t.get("status") in ("executando", "aguardando_aprovacao", "criando"):
                     t["status"] = "interrompida"
-                    f.write_text(json.dumps(t, ensure_ascii=False))
+                    self._salvar(t)
             except (OSError, ValueError):
                 pass
 
     # ------------------------------------------------------------- registro
     def _salvar(self, t: dict):
-        (self.dir / f"{t['id']}.json").write_text(json.dumps(t, ensure_ascii=False))
+        # atômico: quem lê ao mesmo tempo (travar, tarefa) nunca vê o arquivo pela metade
+        destino = self.dir / f"{t['id']}.json"
+        tmp = destino.with_name(f".{t['id']}.{threading.get_ident()}.tmp")
+        tmp.write_text(json.dumps(t, ensure_ascii=False))
+        os.replace(tmp, destino)
 
     def _ler(self, ident: str) -> dict:
         try:
@@ -228,7 +232,7 @@ class Execucao:
     def _novo_id(self) -> str:
         with self.trava:
             n = 1 + max([int(f.stem) for f in self.dir.glob("*.json") if f.stem.isdigit()] or [0])
-            (self.dir / f"{n}.json").write_text("{}")
+            (self.dir / f"{n}.json").write_text(json.dumps({"id": str(n), "status": "criando"}))
             return str(n)
 
     # ------------------------------------------------------------- pedido

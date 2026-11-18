@@ -1,0 +1,19 @@
+{
+ "nome": "diagnostico_rede",
+ "titulo": "Diagnóstico da conexão de internet",
+ "descricao": "Mede o Wi-Fi (sinal, frequência, velocidade do enlace), perda e latência até o roteador e a internet, tempo de DNS e velocidade de download; compara com as medições anteriores e aponta onde está o problema (Wi-Fi, roteador, provedor ou DNS) com sugestões reversíveis.",
+ "executar": "principal.py",
+ "efeito": "leitura",
+ "acessos": ["rede", "termux-api: wifi-connectioninfo (localização ligada)", "grava ~/.controle-ir/medicoes/rede.jsonl"],
+ "tempo_limite": 90,
+ "entrada": {
+  "type": "object",
+  "properties": {
+   "rapido": {"type": "boolean", "description": "pula o teste de download (padrão false)"},
+   "megabytes": {"type": "integer", "description": "tamanho do download de teste, 1–50 (padrão 10)"},
+   "alvos": {"type": "array", "items": {"type": "string"}, "description": "hosts extras para ping (ex.: IP do computador, de uma câmera)"},
+   "rotulo": {"type": "string", "description": "anotação desta medição (ex.: 'sala, roteador reiniciado')"}
+  },
+  "additionalProperties": false
+ }
+}

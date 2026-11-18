@@ -6,6 +6,7 @@
     controle-ir inicio-automatico sim|nao|status   abre o serviço sozinho quando o celular liga (Termux:Boot)
     controle-ir log [-n N]       últimas linhas do registro do serviço em segundo plano
     controle-ir ligar|desligar   liga em segundo plano / encerra, com aviso na tela (atalhos do Termux:Widget)
+    controle-ir capacidade listar|ver|aprovar|recusar|remover|executar [NOME] [--args JSON] [--abrir]
     controle-ir atalhos [--silencioso]   cria os atalhos "Ligar/Desligar Controle IR" para o Termux:Widget
     controle-ir copiar           copia a URL privada do conector
     controle-ir pausar|retomar   controla a busca em andamento
@@ -254,6 +255,42 @@ def criar_atalhos(silencioso: bool = False) -> int:
     print("  3. Arraste o “Termux shortcut” (1 ícone) e escolha “Ligar Controle IR”; repita com “Desligar”.")
     print("  Ligar avisa “Controle IR ligado” em alguns segundos; desligar libera a bateria (sem wake lock).")
     return 0
+
+
+def capacidade_cli(a) -> int:
+    from .capacidades import ErroCapacidade, Registro
+    reg = Registro(PACOTE / "capacidades", PASTA)
+    try:
+        if a.acao == "listar":
+            for c in reg.listar():
+                print(f"{c['nome']:<24} {c['estado']:<22} {(c.get('descricao') or '')[:70]}")
+            return 0
+        if not a.nome:
+            print("informe o nome da capacidade")
+            return 1
+        if a.acao == "ver":
+            props = reg.propostas / a.nome
+            d = reg.ver(a.nome, proposta=props.is_dir())
+            if a.abrir:
+                txt = PASTA / "capacidade-para-revisar.txt"
+                txt.write_text("\n\n".join(f"===== {k} =====\n{v}" for k, v in d["arquivos"].items()))
+                _termux("termux-open", "--content-type", "text/plain", str(txt))
+            else:
+                for k, v in d["arquivos"].items():
+                    print(f"===== {k} =====\n{v}")
+            return 0
+        if a.acao == "executar":
+            print(json.dumps(reg.executar(a.nome, json.loads(a.args), {"CONTROLE_IR_DIR": str(PASTA)}),
+                             ensure_ascii=False, indent=1))
+            return 0
+        r = getattr(reg, a.acao)(a.nome)
+        _termux("termux-notification-remove", f"controle-ir-cap-{a.nome}")
+        _aviso({"ativa": f"Capacidade {a.nome} aprovada", "recusada": f"Capacidade {a.nome} recusada",
+                "removida": f"Capacidade {a.nome} removida"}[r["status"]])
+        return 0
+    except (ErroCapacidade, ValueError) as e:
+        print(f"Erro: {e}")
+        return 1
 
 
 def _aviso(texto: str):
@@ -731,6 +768,11 @@ def main(argv=None):
     pb.add_argument("--silencioso", action="store_true")
     sub.add_parser("ligar", help="liga em segundo plano e avisa na tela (atalho do Termux:Widget)")
     sub.add_parser("desligar", help="encerra o serviço e avisa na tela (libera a bateria)")
+    pk = sub.add_parser("capacidade", help="capacidades plugáveis: listar, ver, aprovar, recusar, remover, executar")
+    pk.add_argument("acao", choices=["listar", "ver", "aprovar", "recusar", "remover", "executar"])
+    pk.add_argument("nome", nargs="?")
+    pk.add_argument("--args", default="{}")
+    pk.add_argument("--abrir", action="store_true", help="ver: abre o código num visualizador do Android")
     pa = sub.add_parser("atalhos", help="cria os atalhos Ligar/Desligar para o Termux:Widget")
     pa.add_argument("--silencioso", action="store_true")
     pl = sub.add_parser("log", help="últimas linhas do registro do serviço em segundo plano")
@@ -768,6 +810,8 @@ def main(argv=None):
         return inicio_automatico(a.acao, a.silencioso)
     if cmd == "atalhos":
         return criar_atalhos(a.silencioso)
+    if cmd == "capacidade":
+        return capacidade_cli(a)
     if cmd == "ligar":
         if servico_ativo():
             _aviso("Controle IR já está ligado")

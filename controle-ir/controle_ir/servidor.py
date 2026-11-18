@@ -86,6 +86,18 @@ class Notificador:
                          "--content", txt, "--ongoing", "--alert-once", "--priority", "high",
                          "--button1", "Reagiu — pausar", "--button1-action", f"{self.cli} pausar",
                          "--button2", "Painel", "--button2-action", f"{self.cli} painel"])
+        elif tipo == "capacidade_proposta":
+            nome = ev["nome"]
+            self.falar("nova capacidade para aprovar")
+            if self.console:
+                print(f"  ★ capacidade proposta: {nome} — aprove com  controle-ir capacidade aprovar {nome}",
+                      flush=True)
+            self._rodar(["termux-notification", "--id", f"controle-ir-cap-{nome}", "--title",
+                         f"Nova capacidade: {nome}", "--content", (ev.get("descricao") or "")[:200],
+                         "--priority", "high",
+                         "--button1", "Aprovar", "--button1-action", f"{self.cli} capacidade aprovar {nome}",
+                         "--button2", "Ver código", "--button2-action", f"{self.cli} capacidade ver {nome} --abrir",
+                         "--button3", "Recusar", "--button3-action", f"{self.cli} capacidade recusar {nome}"])
         elif tipo in ("pausado", "lote", "concluido"):
             txt = {"pausado": "Busca pausada. Diga ao Claude qual número funcionou.",
                    "lote": f"Lote concluído ({ev.get('testados')}/{ev.get('total')}). Nada reagiu?",

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from . import __version__, formatos, vocabulario
 from .aparelhos import Aparelhos, ErroAparelho, agora, capacidades, hora_legivel, resumo_aparelho
+from .capacidades import ErroCapacidade, Registro
 from .catalogo import Catalogo
 from .controle import Controlador, executar
 from .descoberta import Descoberta, ErroDescoberta
@@ -32,6 +33,7 @@ class Servico:
         self.cat = catalogo or Catalogo(self.pasta / "catalogo.sqlite")
         self.aparelhos = Aparelhos(self.pasta / "aparelhos.json")
         self.desc = Descoberta(self.cat, emissor, self.pasta / "sessao.json", notificar)
+        self.reg = Registro(Path(__file__).resolve().parent.parent / "capacidades", self.pasta, notificar)
         self.trava_envio = threading.Lock()
         self.ultima_requisicao_claude: float | None = None
         self.url_publica: str | None = None
@@ -461,6 +463,31 @@ class Servico:
                 time.sleep(0.3)
         return {"status": "sinal_enviado", "enviados": enviados, "sinal": s.descricao(),
                 "orientacao": "Se funcionou, guarde com editar_aparelho(adicionar_comando={nome, conteudo}) ou importar."}
+
+    # ------------------------------------------------------------- capacidades plugáveis
+    def capacidades(self, acao="listar", nome=None, nota=None) -> dict:
+        try:
+            if acao == "listar":
+                return {"capacidades": self.reg.listar()}
+            if acao == "ver":
+                return self.reg.ver(str(nome))
+            if acao == "anotar":
+                return self.reg.anotar(str(nome), nota or "")
+        except ErroCapacidade as e:
+            raise ErroUso(str(e)) from e
+        raise ErroUso("acao deve ser listar, ver ou anotar")
+
+    def executar_capacidade(self, nome, argumentos=None) -> dict:
+        try:
+            return self.reg.executar(str(nome), argumentos or {}, {"CONTROLE_IR_DIR": str(self.pasta)})
+        except ErroCapacidade as e:
+            raise ErroUso(str(e)) from e
+
+    def propor_capacidade(self, nome, manifesto=None, arquivos=None) -> dict:
+        try:
+            return self.reg.propor(str(nome), manifesto or {}, arquivos or {})
+        except ErroCapacidade as e:
+            raise ErroUso(str(e)) from e
 
     # ------------------------------------------------------------- painel
     def estado_painel(self) -> dict:

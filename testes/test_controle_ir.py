@@ -614,6 +614,74 @@ class TestResumoInstrucoes(unittest.TestCase):
             del self.s.aparelhos.dados["aparelhos"]["quebrado"]
 
 
+
+class TestCapacidades(unittest.TestCase):
+    """Capacidades plugáveis: embutidas, proposta → aprovação no celular → execução, e exposição no MCP."""
+
+    ECO = {"manifesto": {"titulo": "Eco", "descricao": "devolve o texto", "executar": "principal.py",
+                         "entrada": {"type": "object", "properties": {"texto": {"type": "string"},
+                                                                       "dormir": {"type": "number"}},
+                                     "required": ["texto"]}, "tempo_limite": 2},
+           "arquivos": {"principal.py": "import json,sys,time\na=json.load(sys.stdin)\ntime.sleep(a.get('dormir',0))\n"
+                                        "print(json.dumps({'eco': a['texto'].upper()}))\n"}}
+
+    def setUp(self):
+        self.s, self.pasta = novo_servico(com_base=False)
+
+    def test_embutidas_ativas_e_estado_celular_roda(self):
+        nomes = {c["nome"]: c["estado"] for c in self.s.capacidades()["capacidades"]}
+        self.assertEqual(nomes.get("diagnostico_rede"), "ativa")
+        self.assertEqual(nomes.get("estado_celular"), "ativa")
+        r = self.s.executar_capacidade("estado_celular")
+        self.assertEqual(r["status"], "ok")
+        self.assertIn("armazenamento_livre_gb", r["resultado"])
+
+    def test_proposta_so_roda_depois_de_aprovada_e_reaprova_se_mudar(self):
+        r = self.s.propor_capacidade("eco", **self.ECO)
+        self.assertEqual(r["status"], "aguardando_aprovacao")
+        with self.assertRaises(Exception) as e:
+            self.s.executar_capacidade("eco", {"texto": "oi"})
+        self.assertIn("aguarda aprovação", str(e.exception))
+        self.s.reg.aprovar("eco")
+        r = self.s.executar_capacidade("eco", {"texto": "oi"})
+        self.assertEqual((r["status"], r["resultado"]), ("ok", {"eco": "OI"}))
+        (Path(self.pasta) / "capacidades" / "eco" / "principal.py").write_text("print('{}')")
+        with self.assertRaises(Exception) as e:
+            self.s.executar_capacidade("eco", {"texto": "oi"})
+        self.assertIn("alterada_reaprovar", str(e.exception))
+
+    def test_validacao_tempo_limite_e_nomes(self):
+        self.s.propor_capacidade("eco", **self.ECO)
+        self.s.reg.aprovar("eco")
+        for args, msg in (({}, "obrigatório"), ({"texto": 1}, "string"), ({"texto": "a", "x": 1}, "desconhecido")):
+            with self.assertRaises(Exception) as e:
+                self.s.executar_capacidade("eco", args)
+            self.assertIn(msg, str(e.exception))
+        self.assertEqual(self.s.executar_capacidade("eco", {"texto": "a", "dormir": 5})["status"], "tempo_esgotado")
+        for nome, arqs in (("Eco!", {"a.py": ""}), ("diagnostico_rede", {"a.py": ""}), ("ok", {"../x.py": ""}),
+                           ("ok", {"capacidade.json": "{}"})):
+            with self.assertRaises(Exception):
+                self.s.propor_capacidade(nome, {"executar": "a.py"}, arqs)
+        r = self.s.capacidades("anotar", "eco", "funcionou no POCO em 18/11")
+        self.assertEqual(r["notas"][-1]["nota"], "funcionou no POCO em 18/11")
+
+    def test_mcp_expoe_ferramenta_por_capacidade_e_instrucoes(self):
+        from controle_ir.mcp import ServidorMCP
+        m = ServidorMCP(self.s)
+        self.s.propor_capacidade("eco", **self.ECO)
+        nomes = {t["name"] for t in m.tratar({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})[1]["result"]["tools"]}
+        self.assertIn("cap_diagnostico_rede", nomes)
+        self.assertNotIn("cap_eco", nomes)  # ainda não aprovada
+        self.s.reg.aprovar("eco")
+        _, r = m.tratar({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        self.assertIn("cap_eco", {t["name"] for t in r["result"]["tools"]})
+        _, r = m.tratar({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                         "params": {"name": "cap_eco", "arguments": {"texto": "luz"}}})
+        self.assertEqual(r["result"]["structuredContent"]["resultado"], {"eco": "LUZ"})
+        _, r = m.tratar({"jsonrpc": "2.0", "id": 4, "method": "initialize", "params": {}})
+        self.assertIn("- eco: devolve o texto", r["result"]["instructions"])
+
+
 @unittest.skipUnless(hasattr(os, "fork") and sys.platform.startswith("linux"), "precisa de Linux (como o Termux)")
 class TestSegundoPlano(unittest.TestCase):
     """Início automático (Termux:Boot), serviço em segundo plano, console e parar — num HOME temporário."""

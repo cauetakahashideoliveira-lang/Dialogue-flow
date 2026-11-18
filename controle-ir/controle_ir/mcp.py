@@ -13,6 +13,7 @@ import traceback
 
 from . import __version__
 from .aparelhos import resumo_para_instrucoes
+from .capacidades import resumo_instrucoes as resumo_capacidades
 from .servico import ErroUso, Servico
 
 VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
@@ -185,6 +186,25 @@ FERRAMENTAS = [
                           "conteudo": dict(S, description="texto: Pronto, Broadlink, '38000: 9000 4500 ...'"),
                           "vezes": I}),
      "annotations": EMITE},
+    {"name": "capacidades", "title": "Capacidades extras do celular",
+     "description": "Lista as capacidades plugáveis (diagnóstico de rede, estado do celular e as criadas depois), "
+                    "com argumentos, acessos e notas; 'ver' mostra o código; 'anotar' registra um resultado confirmado.",
+     "inputSchema": _obj({"acao": {"type": "string", "enum": ["listar", "ver", "anotar"]}, "nome": S, "nota": S}),
+     "annotations": SO_LEITURA},
+    {"name": "executar_capacidade", "title": "Executar uma capacidade",
+     "description": "Executa uma capacidade ativa pelo nome, com os argumentos do manifesto (veja capacidades). "
+                    "Ex.: {nome:'diagnostico_rede', argumentos:{rapido:true}}.",
+     "inputSchema": _obj({"nome": S, "argumentos": SAIDA}, ["nome"]),
+     "annotations": EMITE},
+    {"name": "propor_capacidade", "title": "Propor uma capacidade nova",
+     "description": "Cria uma capacidade nova (script .py ou .sh que lê JSON na entrada e escreve JSON na saída) e "
+                    "pede aprovação no celular; NADA é executado antes de o usuário tocar em Aprovar. "
+                    "manifesto: {titulo, descricao, executar:'principal.py', efeito:'leitura'|'acao', acessos:[...], "
+                    "tempo_limite, entrada:{type:'object', properties:{...}}}; arquivos: {'principal.py': '...'}. "
+                    "Mostre o código ao usuário e explique o que ele faz antes de propor.",
+     "inputSchema": _obj({"nome": dict(S, description="a-z, 0-9 e _"), "manifesto": SAIDA,
+                          "arquivos": {"type": "object", "additionalProperties": S}}, ["nome", "manifesto", "arquivos"]),
+     "annotations": {**ALTERA, "openWorldHint": True}},
 ]
 for _f in FERRAMENTAS:
     _f["outputSchema"] = SAIDA
@@ -204,7 +224,27 @@ class ServidorMCP:
         except Exception:  # noqa: BLE001 — o resumo nunca pode impedir a conexão
             self.log("falha no resumo dos aparelhos", traceback.format_exc())
             resumo = "Aparelhos salvos: chame consultar para ver a lista."
-        return INSTRUCOES + "\n\n" + resumo
+        try:
+            caps = resumo_capacidades(self.servico.reg.ativas())
+        except Exception:  # noqa: BLE001
+            caps = ""
+        return INSTRUCOES + "\n\n" + resumo + ("\n\n" + caps if caps else "")
+
+    def ferramentas(self) -> list:
+        """Ferramentas fixas + uma ferramenta cap_<nome> por capacidade ativa (aparecem em conversas novas;
+        na conversa atual, executar_capacidade alcança as recém-aprovadas)."""
+        extras = []
+        try:
+            for c in self.servico.reg.ativas():
+                ent = c.get("entrada") or {}
+                extras.append({"name": f"cap_{c['nome']}", "title": c.get("titulo") or c["nome"],
+                               "description": (c.get("descricao") or "")[:800],
+                               "inputSchema": ent if ent.get("type") == "object" else {"type": "object", "properties": {}},
+                               "outputSchema": SAIDA,
+                               "annotations": SO_LEITURA if c.get("efeito", "leitura") == "leitura" else EMITE})
+        except Exception:  # noqa: BLE001
+            self.log("falha ao listar capacidades", traceback.format_exc())
+        return FERRAMENTAS + extras
 
     def tratar(self, corpo) -> tuple[int, object | None]:
         """Recebe o JSON decodificado; devolve (status HTTP, resposta JSON ou None)."""
@@ -239,7 +279,7 @@ class ServidorMCP:
             if metodo == "ping":
                 return {"jsonrpc": "2.0", "id": ident, "result": {}}
             if metodo == "tools/list":
-                return {"jsonrpc": "2.0", "id": ident, "result": {"tools": FERRAMENTAS}}
+                return {"jsonrpc": "2.0", "id": ident, "result": {"tools": self.ferramentas()}}
             if metodo == "tools/call":
                 return {"jsonrpc": "2.0", "id": ident, "result": self.chamar(params.get("name"),
                                                                               params.get("arguments") or {})}
@@ -252,6 +292,8 @@ class ServidorMCP:
             return self._erro(ident, -32603, f"erro interno: {e}")
 
     def chamar(self, nome: str, args: dict) -> dict:
+        if isinstance(nome, str) and nome.startswith("cap_") and nome not in _ARGS:
+            nome, args = "executar_capacidade", {"nome": nome[4:], "argumentos": args}
         if nome not in _ARGS:
             return self._resultado({"erro": f"ferramenta desconhecida: {nome}"}, True)
         desconhecidos = set(args) - _ARGS[nome]

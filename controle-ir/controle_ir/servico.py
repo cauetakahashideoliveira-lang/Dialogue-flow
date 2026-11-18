@@ -75,7 +75,8 @@ class Servico:
                     "ultima_configuracao_completa": est.get("estado_completo"),
                     "confirmado_por_voce": {k: v["valor"] for k, v in est.get("confirmado", {}).items()},
                     "controle_original_usado_em": hora_legivel(est.get("controle_original_em")),
-                    "alternativos": len(a.get("origem", {}).get("alternativos", []))}
+                    "alternativos": len(a.get("origem", {}).get("alternativos", [])),
+                    **({"observacao": a["observacao"]} if a.get("observacao") else {})}
         if perfil is not None:
             p = self.cat.perfil(perfil)
             if not p:
@@ -273,7 +274,7 @@ class Servico:
 
     def editar_aparelho(self, aparelho, renomear=None, adicionar_comando=None, remover_comando=None,
                         renomear_comando=None, faixas=None, macro=None, remover_macro=None, trocar_perfil=None,
-                        configuracao=None, excluir=False) -> dict:
+                        configuracao=None, observacao=None, excluir=False) -> dict:
         a = self._aparelho(aparelho)
         feitos = []
         if excluir:
@@ -371,6 +372,14 @@ class Servico:
                 if k in configuracao:
                     a.setdefault("config", {})[k] = max(0.1, min(float(configuracao[k]), 10.0))
             feitos.append(f"configuração: {a['config']}")
+        if observacao is not None:
+            texto = " ".join(str(observacao).split())[:600]
+            if texto:
+                a["observacao"] = texto
+                feitos.append("observação gravada")
+            else:
+                a.pop("observacao", None)
+                feitos.append("observação apagada")
         if renomear:
             novo_id = vocabulario.slug(renomear)
             if novo_id != a["id"] and novo_id in self.aparelhos.dados["aparelhos"]:

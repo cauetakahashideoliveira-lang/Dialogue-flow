@@ -1,12 +1,13 @@
-# Estado atual da instalação (17/11/2026)
+# Estado atual da instalação (18/11/2026)
 
 ## Celular
 - POCO X8 Pro Max, Android/HyperOS, Termux + Termux:API (F-Droid).
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
-- Servidor no celular na versão 1.0.4. O repositório tem a 1.0.5 (só corrige a resposta de `editar_aparelho`
-  quando o sinal já existe); atualizar o celular é opcional.
+- Servidor no celular na versão 1.0.4. O repositório tem a **1.0.6**: início automático com Termux:Boot,
+  serviço em segundo plano com console, e resumo dos aparelhos nas instruções do conector. A 1.0.5 só corrigia
+  a resposta de `editar_aparelho` quando o sinal já existe. **Falta atualizar o celular** (ver "Pendências").
 
 ## Conector no Claude
 - Nome atual: "Controle master" (sem login, URL com segredo). O antigo "Controle do POCO" foi removido.
@@ -15,7 +16,8 @@
 - A URL é fixa: reiniciar o Termux não exige mexer no Claude. Muda só com `controle-ir novo-segredo` ou
   trocando o domínio no ngrok.
 - O segredo foi regenerado em 17/11 depois de aparecer numa captura de tela.
-- Cuidados: não usar CTRL+C na aba do servidor; não fotografar a caixa com a URL.
+- Cuidados: não usar CTRL+C na aba do servidor (na 1.0.6 com início automático, o console pode ser fechado à
+  vontade); não fotografar a caixa com a URL.
 
 ## Aparelhos salvos
 Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas): **[docs/aparelhos/](aparelhos/README.md)**.
@@ -37,9 +39,28 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
 4. "Ligue o ar do quarto em 16 graus." / "Coloca a pá do ar do quarto para oscilar." / "Apaga o visor do ar do quarto."
 5. "Liga a TV do quarto." / "Abre a Netflix na TV."
 
-## Pendências possíveis
-- Início automático com Termux:Boot (ainda não configurado).
-- Resumo dos aparelhos nas instruções do MCP para economizar chamadas no chat.
+## Pendências
+- **Atualizar o celular para a 1.0.6** (a linha de instalação com o hash do commit; o instalador encerra o
+  serviço antigo sozinho e reconstrói o catálogo, o que leva alguns minutos com o ampliado).
+- **Ativar o início automático no celular:** instalar o app Termux:Boot (F-Droid) e abri-lo uma vez; HyperOS →
+  Apps → Termux:Boot → Início automático + bateria Sem restrições; responder **s** na etapa 6 do instalador
+  (ou `controle-ir inicio-automatico sim`). Depois, reiniciar o celular e conferir no Claude com `consultar`.
+- Depois da atualização, gravar as ressalvas como observação de cada aparelho (`editar_aparelho(observacao=…)`)
+  para chegarem ao Claude pelo resumo: extras do ar do quarto fixam 16 °C/frio/automática; desligar direto da TV
+  ainda não testado; escritório e laboratório compartilham códigos (este último o resumo já detecta sozinho).
+
+## Implementado no repositório em 18/11 (versão 1.0.6, ainda não instalada no celular)
+- **Início automático (Termux:Boot):** `controle-ir inicio-automatico sim|nao|status` cria/remove
+  `~/.termux/boot/controle-ir` (wake lock + `controle-ir iniciar --fundo`).
+- **Segundo plano:** `iniciar --fundo` roda sem console; registro em `~/.controle-ir/servico.log` (permissão 600,
+  sem o segredo; `controle-ir log`); notificação fixa "Controle IR ativo" (Painel, Copiar URL).
+- **Console:** `controle-ir` com o serviço já rodando (ou com o início automático ativado) abre só o console:
+  Enter pausa, `c` continua, `copiar`, `url`, `painel`, `log`, `parar`; `sair`/CTRL+C/fechar o Termux não
+  derrubam o conector. Com isso a ressalva "não usar CTRL+C na aba do servidor" deixa de valer no modo segundo plano.
+- **`controle-ir parar`** confere se o pid é mesmo do controle-ir antes de encerrar e espera o serviço sair.
+- **Resumo dos aparelhos no `initialize` do MCP:** nome exato, valores aceitos, faixas, teclas, botões criados
+  pelo usuário, macros, aparelhos com os mesmos códigos e observação. A regra "chame opcoes antes" virou
+  "chame controlar direto se couber no resumo; opcoes para o último estado ou o que faltar".
 
 ## Anúncio dos testes (v1.0.1)
 - Cada envio da busca é falado em voz alta (termux-tts-speak) e mostrado no Termux como "▶ N".

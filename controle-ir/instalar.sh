@@ -15,14 +15,14 @@ if [ -z "$PREFIX" ] || [ ! -d "$PREFIX/bin" ] || ! command -v pkg >/dev/null 2>&
   falha "verificação do Termux" "Este instalador precisa rodar dentro do app Termux (versão do F-Droid)."
 fi
 
-etapa "1/6 Instalando pacotes (python, cloudflared, termux-api)…"
+etapa "1/7 Instalando pacotes (python, cloudflared, termux-api)…"
 if ! pkg install -y python cloudflared termux-api; then
   falha "instalação de pacotes" "Rode  pkg update -y && pkg upgrade -y  e cole a linha de instalação de novo."
 fi
 command -v python3 >/dev/null || falha "instalação de pacotes" "python3 não foi instalado."
 ok "pacotes instalados"
 
-etapa "2/6 Consultando o emissor infravermelho…"
+etapa "2/7 Consultando o emissor infravermelho…"
 SAIDA="$(timeout 25 termux-infrared-frequencies 2>&1)"
 RC=$?
 if [ $RC -eq 124 ]; then
@@ -38,7 +38,7 @@ case "$SAIDA" in
     falha "consulta ao emissor" "Resposta inesperada do Termux:API: $SAIDA" ;;
 esac
 
-etapa "3/6 Instalando o comando controle-ir…"
+etapa "3/7 Instalando o comando controle-ir…"
 cat > "$PREFIX/bin/controle-ir" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 export PYTHONPATH="$DIR" PYTHONUNBUFFERED=1
@@ -48,14 +48,19 @@ chmod 700 "$PREFIX/bin/controle-ir"
 PYTHONPATH="$DIR" python3 -c "import controle_ir, sqlite3, ssl" 2>"${TMPDIR:-$HOME}/cir-erro.txt" \
   || falha "instalação do comando" "$(cat "${TMPDIR:-$HOME}/cir-erro.txt")"
 ok "comando disponível: controle-ir"
+# atualização: o serviço antigo (nesta ou em outra sessão, ou aberto pelo Termux:Boot) precisa fechar antes
+# de trocar o catálogo, para a versão nova entrar no ar
+if controle-ir status 2>/dev/null | grep -q '^Serviço: rodando'; then
+  controle-ir parar && ok "serviço antigo encerrado (abre de novo no fim)"
+fi
 
-etapa "4/6 Preparando os perfis de controle…"
+etapa "4/7 Preparando os perfis de controle…"
 if ! controle-ir catalogo reconstruir; then
   falha "preparação dos perfis" "Não consegui montar o catálogo. Confira o espaço livre do celular."
 fi
 ok "catálogo base pronto (SmartIR + Flipper-IRDB CC0)"
 
-etapa "5/6 Catálogo ampliado (opcional)"
+etapa "5/7 Catálogo ampliado (opcional)"
 if [ -d "$HOME/.controle-ir/fontes/Flipper-IRDB-main" ]; then
   ok "catálogo ampliado já instalado"
 elif [ -t 0 ]; then
@@ -69,8 +74,24 @@ elif [ -t 0 ]; then
   esac
 fi
 
-etapa "6/6 Iniciando o servidor…"
+etapa "6/7 Início automático quando o celular liga (opcional)"
+if controle-ir inicio-automatico status >/dev/null 2>&1; then
+  controle-ir inicio-automatico sim --silencioso >/dev/null && ok "início automático mantido (script atualizado)"
+elif [ -t 0 ]; then
+  echo "  Com o app Termux:Boot (F-Droid), o serviço abre sozinho em segundo plano quando o celular liga."
+  read -r -p "  Ativar agora? [s/N] " R
+  case "${R:-n}" in
+    s|S|sim|Sim|y|Y) controle-ir inicio-automatico sim ;;
+    *) echo "  Pulado. Para ativar depois: controle-ir inicio-automatico sim";;
+  esac
+fi
+
+etapa "7/7 Iniciando o servidor…"
 mkdir -p "$HOME/.termux"
-echo "  Mantenha o Termux aberto. Para reabrir depois, digite: controle-ir"
+if controle-ir inicio-automatico status >/dev/null 2>&1; then
+  echo "  O serviço roda em segundo plano: pode fechar o Termux. Para ver o console: controle-ir"
+else
+  echo "  Mantenha o Termux aberto. Para reabrir depois, digite: controle-ir"
+fi
 echo "  Dica (HyperOS): Configurações → Apps → Termux → Economia de bateria → Sem restrições."
 exec controle-ir

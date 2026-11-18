@@ -46,13 +46,29 @@ Requisitos: **Termux** e **Termux:API**, ambos do F-Droid (mesma fonte).
 
    *(Alternativa: baixe o ZIP pelo navegador e use `termux-storage-get "$TMPDIR/controle-ir.zip"` para escolhê-lo.)*
 
-2. O instalador mostra 6 etapas: pacotes → emissor → comando → perfis → catálogo ampliado (pergunta **S/n**) →
-   servidor. Se algo falhar ele diz **qual etapa** e o motivo.
+2. O instalador mostra 7 etapas: pacotes → emissor → comando → perfis → catálogo ampliado (pergunta **S/n**) →
+   início automático (pergunta **s/N**, veja abaixo) → servidor. Se algo falhar ele diz **qual etapa** e o motivo.
+   Rodar de novo atualiza: o serviço antigo é encerrado sozinho e aparelhos, catálogo e segredo são mantidos.
 3. No fim aparece a **URL privada** do conector. Digite `copiar` e **Enter**. Não envie a URL a ninguém e
    cubra-a em capturas de tela: ela contém o segredo de acesso ao emissor.
 
 **HyperOS/MIUI:** Configurações → Apps → Termux (e Termux:API) → Economia de bateria → **Sem restrições**;
 ative também **Início automático**. O serviço segura um *wake lock* enquanto roda.
+
+### Início automático quando o celular liga (Termux:Boot)
+
+1. Instale o app **Termux:Boot** do F-Droid (mesma fonte do Termux) e **abra-o uma vez**.
+2. HyperOS: Configurações → Apps → Termux:Boot → **Início automático** ativado e Economia de bateria
+   **Sem restrições**.
+3. No Termux: `controle-ir inicio-automatico sim` (ou responda **s** na etapa 6 do instalador).
+
+O comando cria `~/.termux/boot/controle-ir`, que segura o *wake lock* e roda `controle-ir iniciar --fundo`:
+o serviço sobe sem console, grava o registro em `~/.controle-ir/servico.log` (sem o segredo; veja com
+`controle-ir log`) e mostra a notificação fixa **Controle IR ativo** (botões *Painel* e *Copiar URL*).
+Com o início automático ativado, digitar `controle-ir` também abre o serviço em segundo plano e mostra só o
+**console**: Enter pausa a busca, `c` continua, `copiar`, `url`, `painel`, `log`; `sair`, CTRL+C ou fechar o Termux
+fecham só o console, e o conector continua no ar. `parar` (no console) ou `controle-ir parar` encerra o serviço.
+Para desligar: `controle-ir inicio-automatico nao`. Conferir: `controle-ir status`.
 
 ## Conectar ao Claude
 
@@ -84,6 +100,11 @@ Primeiro teste: peça “use a ferramenta consultar”. A resposta traz as marca
 
 Regras que o servidor aplica:
 
+* **Resumo dos aparelhos ao conectar:** as instruções do conector trazem, para cada aparelho salvo, o nome exato,
+  os valores aceitos (modo, faixa de temperatura, ventilação, entradas…), as teclas, os botões criados por você,
+  as macros, os aparelhos que respondem aos mesmos códigos e a sua observação
+  (`editar_aparelho(observacao="…")`). Assim o Claude chama `controlar` direto e só usa `opcoes` para o último
+  estado ou para algo fora do resumo. O resumo não leva o estado, que mudaria durante a conversa.
 * **Alternância sem estado** (só existe “liga/desliga”): nada é enviado até você dizer o estado atual ou
   autorizar; depois disso o estado presumido evita inverter.
 * **Velocidade 2 com só “+/−”**: com a faixa conhecida (`editar_aparelho(faixas={velocidade:{min:1,max:3}})`),
@@ -115,7 +136,7 @@ Regras que o servidor aplica:
   nomeado da Cloudflare) ou `controle-ir tunel ngrok --dominio seu-nome.ngrok-free.app` (ngrok com domínio
   estático e `ngrok config add-authtoken` feito antes).
 * Outros comandos: `controle-ir painel`, `controle-ir status`, `controle-ir pausar`, `controle-ir catalogo ampliar`,
-  `controle-ir importar arquivo.ir`, `controle-ir parar`.
+  `controle-ir importar arquivo.ir`, `controle-ir parar`, `controle-ir inicio-automatico sim|nao`, `controle-ir log`.
 
 ## Segurança
 * O servidor escuta só em `127.0.0.1`; o acesso externo exige a URL com segredo de 256 bits (ou
@@ -131,8 +152,9 @@ Regras que o servidor aplica:
 | 161.666 sinais do catálogo base convertem para transmissão válida (≤ 2 s) | Tempo de resposta do Termux:API em cada envio |
 | Planejador: ar-condicionado SmartIR (pedido composto, só temperatura, oscilação ausente, desligar), ventilador Flipper (alternância, saturação, falha no meio), projetor (HDMI 2 direto), fita LED (cor) | Notificação e botões no HyperOS |
 | Descoberta: pausa < 3 s, suspeitos, reteste, confirmação, distinção até 1 perfil, lote, retomada após reinício | Túnel `cloudflared` na rede do celular |
-| MCP: 29 testes automatizados + cliente oficial do SDK MCP (protocolo 2026-07-28 negociado para 2025-11-25) | Cadastro do conector na sua conta do Claude |
-| Instalação completa num Termux simulado (pacotes, emissor, catálogo, túnel, `copiar`, `pausar` pela notificação) | |
+| MCP: 43 testes automatizados (incluindo resumo dos aparelhos e serviço em segundo plano) + cliente oficial do SDK MCP (protocolo 2026-07-28 negociado para 2025-11-25) | Cadastro do conector na sua conta do Claude |
+| Instalação completa num Termux simulado (pacotes, emissor, catálogo, túnel, `copiar`, `pausar` pela notificação) | Termux:Boot abrindo o serviço quando o HyperOS liga |
+| Segundo plano: registro sem segredo (600), instância única, console por pty, `parar` sem matar pid reaproveitado | |
 
 ## Desenvolvimento
 

@@ -21,8 +21,11 @@ Os arquivos `.ir` ao lado de cada ficha guardam, no formato Flipper, os sinais *
 
 1. **Use o nome exato da tabela.** "quarto" sozinho é ambíguo (há ar e TV no quarto). Pedido sem cômodo
    ("ligue o ar"): pergunte qual, ou use o único aparelho daquele tipo se só houver um.
-2. **Antes de comandar, chame `opcoes(aparelho)`** e confira a ficha do aparelho: faixas de temperatura
-   diferem (Gree 16–30 °C, Carrier 17–30 °C).
+2. **Valores aceitos:** a partir do servidor 1.0.6, as instruções do conector já trazem o resumo de cada aparelho
+   (valores, faixas, teclas, botões criados, macros, observação); se o pedido couber nele, chame `controlar`
+   direto. Chame `opcoes(aparelho)` para o último estado enviado ou para o que não estiver no resumo (no
+   servidor 1.0.5 ou anterior, chame sempre antes de comandar). Faixas de temperatura diferem
+   (Gree 16–30 °C, Carrier 17–30 °C).
 3. **Ar-condicionado é "estado completo":** cada sinal leva modo + temperatura + ventilação juntos.
    Para mudar um valor, mande só esse valor (`controlar(definir={temperatura: 22})`); o resto vem do último envio.
 4. **`sinal_enviado` não é confirmação física.** Diga "sinal enviado" e deixe o usuário confirmar.
@@ -48,4 +51,6 @@ Os arquivos `.ir` ao lado de cada ficha guardam, no formato Flipper, os sinais *
 ## Manter este índice
 
 Ao cadastrar, renomear ou testar um aparelho: atualize a linha da tabela, a ficha do aparelho e
-`docs/estado-atual.md`; depois `graphify update .` para o grafo refletir a mudança.
+`docs/estado-atual.md`; depois `graphify update .` para o grafo refletir a mudança. Ressalvas que mudam como
+operar (ex.: "os botões extras fixam 16 °C") também vão para `editar_aparelho(observacao="…")`: assim chegam a
+qualquer conversa pelo resumo do conector, mesmo sem acesso a este repositório.

@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -537,6 +539,213 @@ class TestGreeVariante(unittest.TestCase):
     def test_quadro_duplo_e_recusado(self):
         with self.assertRaises(self.g.ErroGree):
             self.g.gerar("frio", "baixa", 18, oscilar=True)
+
+
+class TestResumoInstrucoes(unittest.TestCase):
+    """Resumo dos aparelhos nas instruções do MCP (economiza a chamada opcoes antes de cada pedido)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.s, _ = novo_servico()
+        s = cls.s
+        sinal = lambda c: {"protocolo": "NEC", "endereco": 1, "comando": c}  # noqa: E731
+        s.salvar_aparelho("ar do quarto", perfil=105)
+        s.editar_aparelho("ar do quarto", adicionar_comando={"nome": "Visor desligado (16 °C, frio)",
+                                                             "funcao": "luz", "sinal": sinal(10)})
+        s.editar_aparelho("ar do quarto", observacao="  Os botões extras   fixam 16 °C, frio, automática. ")
+        s.salvar_aparelho("tv do quarto", perfil=613)
+        s.editar_aparelho("tv do quarto", macro={"nome": "abrir Netflix", "descricao": "Smart Hub e OK",
+                                                 "passos": [{"teclas": ["ok"]}]})
+        s.salvar_aparelho("ar do escritório", perfil=94)
+        s.salvar_aparelho("ar condicionado laboratório", perfil=94)
+
+    def test_resumo_traz_nomes_valores_teclas_macros(self):
+        from controle_ir.aparelhos import resumo_para_instrucoes
+        t = resumo_para_instrucoes(self.s.aparelhos.listar())
+        for trecho in ('"ar do quarto"', '"tv do quarto"', '"ar do escritório"', '"ar condicionado laboratório"',
+                       "temperatura 16–30", "temperatura 17–30", "frio|", "abrir Netflix (Smart Hub e OK)",
+                       "Visor desligado (16 °C, frio)", "volume: +/−", "número 0–9",
+                       "observação: Os botões extras fixam 16 °C, frio, automática."):
+            self.assertIn(trecho, t)
+        self.assertNotIn("numero_5", t)  # as teclas 0–9 já estão em "número 0–9"
+        self.assertNotIn("ultimo", t.lower())  # sem estado: ele envelhece durante a conversa
+        # os dois aparelhos do perfil 94 avisam que um envio pode acionar o outro
+        bloco = t.split('"ar do escritório"')[1].split("\n- ")[0]
+        self.assertIn("mesmos códigos de: ar condicionado laboratório", bloco)
+        self.assertNotIn("mesmos códigos", t.split('"ar do quarto"')[1].split("\n- ")[0])
+
+    def test_limites(self):
+        from controle_ir.aparelhos import resumo_para_instrucoes
+        t = resumo_para_instrucoes(self.s.aparelhos.listar(), limite_teclas=3)
+        self.assertIn("veja opcoes)", t)
+        t = resumo_para_instrucoes(self.s.aparelhos.listar(), limite=600)
+        self.assertLessEqual(len(t), 600)
+        self.assertIn("resumo cortado", t)
+        self.assertIn("nenhum ainda", resumo_para_instrucoes([]))
+
+    def test_observacao_em_opcoes_e_apagar(self):
+        s = self.s
+        self.assertEqual(s.opcoes("ar do quarto")["observacao"], "Os botões extras fixam 16 °C, frio, automática.")
+        s.editar_aparelho("ar do escritório", observacao="teste")
+        self.assertEqual(s.opcoes("ar do escritório")["observacao"], "teste")
+        r = s.editar_aparelho("ar do escritório", observacao="")
+        self.assertIn("observação apagada", r["alteracoes"])
+        self.assertNotIn("observacao", s.opcoes("ar do escritório"))
+
+    def test_initialize_entrega_resumo_atualizado(self):
+        from controle_ir.mcp import ServidorMCP
+        m = ServidorMCP(self.s)
+        _, r = m.tratar({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}})
+        ins = r["result"]["instructions"]
+        self.assertIn("chame controlar direto", ins)
+        self.assertIn('"tv do quarto"', ins)
+        self.s.salvar_aparelho("ventilador da sala", perfil=94)
+        try:
+            _, r = m.tratar({"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {}})
+            self.assertIn('"ventilador da sala"', r["result"]["instructions"])
+        finally:
+            self.s.editar_aparelho("ventilador da sala", excluir=True)
+        # um aparelho corrompido não derruba o initialize
+        self.s.aparelhos.dados["aparelhos"]["quebrado"] = {"id": "quebrado", "nome": "quebrado", "perfil": None}
+        try:
+            _, r = m.tratar({"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": {}})
+            self.assertIn("instructions", r["result"])
+        finally:
+            del self.s.aparelhos.dados["aparelhos"]["quebrado"]
+
+
+@unittest.skipUnless(hasattr(os, "fork") and sys.platform.startswith("linux"), "precisa de Linux (como o Termux)")
+class TestSegundoPlano(unittest.TestCase):
+    """Início automático (Termux:Boot), serviço em segundo plano, console e parar — num HOME temporário."""
+
+    def setUp(self):
+        import socket
+        from controle_ir import __version__
+        self.tmp = Path(tempfile.mkdtemp(prefix="cir-fundo-"))
+        home = self.tmp / "home"
+        self.pasta = home / ".controle-ir"
+        self.pasta.mkdir(parents=True)
+        shutil.copy(catalogo_base(), self.pasta / "catalogo.sqlite")
+        (self.pasta / "catalogo.versao").write_text(__version__ + ":" + str(BASE.stat().st_mtime))
+        so = socket.socket()
+        so.bind(("127.0.0.1", 0))
+        self.porta = so.getsockname()[1]
+        so.close()
+        self.segredo = "segredo-do-teste-de-fundo"
+        (self.pasta / "config.json").write_text(json.dumps({"segredo": self.segredo, "porta": self.porta,
+                                                            "tunel": {"modo": "nenhum"}}))
+        self.boot = home / ".termux" / "boot" / "controle-ir"
+        self.env = dict(os.environ, HOME=str(home), CONTROLE_IR_DIR=str(self.pasta),
+                        CONTROLE_IR_BOOT_DIR=str(self.boot.parent), PYTHONPATH=str(RAIZ / "controle-ir"),
+                        PYTHONUNBUFFERED="1")
+
+    def tearDown(self):
+        self.cli("parar")
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def cli(self, *args):
+        r = subprocess.run([sys.executable, "-m", "controle_ir", *args], env=self.env, capture_output=True,
+                           text=True, timeout=60, stdin=subprocess.DEVNULL)
+        return r.returncode, r.stdout + r.stderr
+
+    def saude(self):
+        op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            with op.open(f"http://127.0.0.1:{self.porta}/saude", timeout=1):
+                return True
+        except OSError:
+            return False
+
+    def esperar(self, cond, seg=20):
+        fim = time.time() + seg
+        while time.time() < fim:
+            if cond():
+                return True
+            time.sleep(0.2)
+        return False
+
+    def test_script_do_termux_boot(self):
+        self.assertEqual(self.cli("inicio-automatico")[0], 1)
+        self.assertEqual(self.cli("inicio-automatico", "sim")[0], 0)
+        txt = self.boot.read_text()
+        self.assertTrue(txt.startswith("#!") and txt.rstrip().endswith("iniciar --fundo"))
+        self.assertIn("termux-wake-lock", txt)
+        self.assertEqual(self.boot.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(self.cli("inicio-automatico", "status")[0], 0)
+        self.assertIn("ativado", self.cli("status")[1])
+        self.cli("inicio-automatico", "nao")
+        self.assertFalse(self.boot.exists())
+
+    def test_fundo_log_sem_segredo_instancia_unica_e_parar(self):
+        p = subprocess.Popen([sys.executable, "-m", "controle_ir", "iniciar", "--fundo", "--simulado"], env=self.env,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        try:
+            self.assertTrue(self.esperar(self.saude))
+            est = json.loads((self.pasta / "servidor.json").read_text())
+            self.assertTrue(est["fundo"])
+            self.assertEqual(est["pid"], p.pid)
+            self.assertIn("já está rodando", self.cli("iniciar", "--fundo", "--simulado")[1])
+            self.assertIn("rodando em segundo plano", self.cli("status")[1])
+            log = self.pasta / "servico.log"
+            self.assertIn("em segundo plano", log.read_text())
+            self.assertNotIn(self.segredo, log.read_text())
+            self.assertEqual(log.stat().st_mode & 0o777, 0o600)
+            self.assertIn("Serviço encerrado", self.cli("parar")[1])
+            self.assertEqual(p.wait(timeout=10), 0)
+            self.assertFalse(self.saude())
+            self.assertFalse((self.pasta / "servidor.json").exists())
+        finally:
+            if p.poll() is None:
+                p.kill()
+
+    def test_parar_nao_mata_pid_reaproveitado(self):
+        # servidor.json velho (celular reiniciou) apontando para um processo que não é o controle-ir
+        outro = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        try:
+            (self.pasta / "servidor.json").write_text(json.dumps({"pid": outro.pid, "porta": self.porta}))
+            self.assertIn("não está rodando", self.cli("parar")[1])
+            self.assertIsNone(outro.poll())
+        finally:
+            outro.kill()
+            outro.wait()
+
+    def test_console_abre_em_segundo_plano_e_sair_nao_derruba(self):
+        import pty
+        import select
+        self.cli("inicio-automatico", "sim")
+
+        def abrir_console(comandos, espera_inicial):
+            pid, fd = pty.fork()
+            if pid == 0:  # pragma: no cover — processo filho
+                os.execve(sys.executable, [sys.executable, "-m", "controle_ir"], self.env)
+            saida = bytearray()
+
+            def ler(seg):
+                fim = time.time() + seg
+                while time.time() < fim:
+                    r, _, _ = select.select([fd], [], [], 0.2)
+                    if r:
+                        try:
+                            saida.extend(os.read(fd, 4096))
+                        except OSError:
+                            return
+            ler(espera_inicial)
+            for c in comandos:
+                os.write(fd, c)
+                ler(1.5)
+            _, status = os.waitpid(pid, 0)
+            os.close(fd)
+            return status, saida.decode(errors="replace")
+
+        status, txt = abrir_console([b"\n", b"sair\n"], 1)
+        self.assertEqual(status, 0)
+        self.assertIn("segundo plano", txt)
+        self.assertIn("nada pausado", txt)
+        self.assertTrue(self.esperar(self.saude))
+        status, txt = abrir_console([b"sair\n"], 2)
+        self.assertIn("já está rodando", txt)
+        self.assertTrue(self.saude(), "sair do console não pode encerrar o serviço")
 
 
 if __name__ == "__main__":

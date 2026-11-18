@@ -12,13 +12,16 @@ import json
 import traceback
 
 from . import __version__
+from .aparelhos import resumo_para_instrucoes
 from .servico import ErroUso, Servico
 
 VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 
 INSTRUCOES = """Você controla o emissor infravermelho do celular do usuário (POCO/Android) por este conector.
 Responda ao usuário em português.
-- Antes de comandar um aparelho, chame opcoes(aparelho) para ver os parâmetros, valores aceitos e teclas.
+- Os aparelhos salvos estão resumidos no fim destas instruções (nome exato, valores aceitos, teclas e macros).
+  Se o pedido couber no resumo, chame controlar direto, sem opcoes. Chame opcoes(aparelho) quando precisar do
+  último estado enviado, de uma tecla que não está no resumo, ou se o aparelho não aparecer nele.
 - Pedidos compostos ("23 °C, frio, ventilação baixa") vão numa única chamada controlar com definir={...}.
 - Para mudar só um valor de um perfil de estado completo, envie só esse valor: o resto é preservado do último envio.
 - Se o pedido usar um recurso que o perfil não tem (ex.: oscilação), explique a limitação; não troque a escolha do usuário.
@@ -149,7 +152,8 @@ FERRAMENTAS = [
      "annotations": ALTERA},
     {"name": "editar_aparelho", "title": "Editar aparelho",
      "description": "Renomeia, adiciona tecla (do histórico, sinal bruto, texto ou outro perfil), remove ou renomeia "
-                    "comandos, define faixas (ex.: velocidade min 1 max 3), cria macros, troca o perfil ou exclui.",
+                    "comandos, define faixas (ex.: velocidade min 1 max 3), cria macros, troca o perfil, grava uma "
+                    "observação (ressalvas que o Claude deve saber) ou exclui.",
      "inputSchema": _obj({
          "aparelho": S, "renomear": S,
          "adicionar_comando": _obj({"nome": S, "funcao": S, "numero": I, "conteudo": S, "sinal": SAIDA,
@@ -159,6 +163,8 @@ FERRAMENTAS = [
          "macro": _obj({"nome": S, "descricao": S, "passos": {"type": "array", "items": SAIDA}}),
          "remover_macro": S, "trocar_perfil": I,
          "configuracao": _obj({"intervalo_teclas": N, "espera_apos_ligar": N}),
+         "observacao": dict(S, description="nota sobre o aparelho que aparece no resumo das instruções e em "
+                                           "opcoes (ressalvas, cômodo, o que já foi testado); texto vazio apaga"),
          "excluir": B}, ["aparelho"]),
      "annotations": {**ALTERA, "destructiveHint": True}},
     {"name": "importar", "title": "Importar perfil ou sinal",
@@ -190,6 +196,15 @@ class ServidorMCP:
         self.servico = servico
         self.log = log or (lambda *a: None)
 
+    def instrucoes(self) -> str:
+        """Instruções fixas + resumo dos aparelhos salvos, gerado a cada initialize."""
+        try:
+            resumo = resumo_para_instrucoes(self.servico.aparelhos.listar())
+        except Exception:  # noqa: BLE001 — o resumo nunca pode impedir a conexão
+            self.log("falha no resumo dos aparelhos", traceback.format_exc())
+            resumo = "Aparelhos salvos: chame consultar para ver a lista."
+        return INSTRUCOES + "\n\n" + resumo
+
     def tratar(self, corpo) -> tuple[int, object | None]:
         """Recebe o JSON decodificado; devolve (status HTTP, resposta JSON ou None)."""
         if isinstance(corpo, list):
@@ -219,7 +234,7 @@ class ServidorMCP:
                     "protocolVersion": versao,
                     "capabilities": {"tools": {"listChanged": False}},
                     "serverInfo": {"name": "controle-ir", "title": "Controle do POCO", "version": __version__},
-                    "instructions": INSTRUCOES}}
+                    "instructions": self.instrucoes()}}
             if metodo == "ping":
                 return {"jsonrpc": "2.0", "id": ident, "result": {}}
             if metodo == "tools/list":

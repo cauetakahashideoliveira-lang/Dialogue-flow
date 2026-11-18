@@ -101,6 +101,19 @@ class Notificador:
         if shutil.which("termux-notification-remove"):
             self._rodar(["termux-notification-remove", "controle-ir-busca"])
 
+    def servico_ativo(self, url: str | None, encerrar: bool = False):
+        """Notificação fixa enquanto o serviço roda em segundo plano (sem console no Termux)."""
+        if encerrar:
+            if shutil.which("termux-notification-remove"):
+                self._rodar(["termux-notification-remove", "controle-ir-servico"])
+            return
+        host = urlparse(url).hostname if url else None
+        txt = f"Conector pronto ({host})" if host else "Servidor local ativo (sem túnel)"
+        self._rodar(["termux-notification", "--id", "controle-ir-servico", "--title", "Controle IR ativo",
+                     "--content", f"{txt} · em segundo plano", "--ongoing", "--alert-once", "--priority", "low",
+                     "--button1", "Painel", "--button1-action", f"{self.cli} painel",
+                     "--button2", "Copiar URL", "--button2-action", f"{self.cli} copiar"])
+
 
 def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str = "127.0.0.1", log=None):
     log = log or (lambda *a: None)

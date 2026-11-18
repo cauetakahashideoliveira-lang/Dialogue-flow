@@ -1,1 +1,21 @@
-{"0": "Catálogo e linha de comando", "1": "Formatos e vocabulário", "2": "Módulos do pacote controle-ir", "3": "Descoberta automática", "4": "Sinais IR", "5": "Planejador de pedidos", "6": "Serviço (operações MCP)", "7": "Protocolos IR", "8": "Servidor MCP", "9": "Instalação no celular", "10": "Gerador de variantes Gree", "11": "Ramo: ar do quarto (Gree)", "12": "Emissor infravermelho", "13": "Índice e cômodos + ar do escritório e do laboratório (Carrier nº 94)", "14": "README do projeto", "15": "Contexto para agentes (CLAUDE.md)", "16": "Armazenamento de aparelhos", "17": "Ramo: tv do quarto (Samsung)", "18": "Notificador (voz)", "19": "Túnel HTTPS", "20": "Instalador (instalar.sh)", "21": "Testes de protocolos", "22": "Licenças dos dados"}
+{
+  "2": "Módulos do pacote controle-ir",
+  "3": "Descoberta automática",
+  "5": "Planejador de pedidos",
+  "6": "Serviço (operações MCP)",
+  "7": "Protocolos IR",
+  "8": "Servidor MCP",
+  "9": "Instalação no celular",
+  "10": "Gerador de variantes Gree",
+  "11": "Ramo: ar do quarto (Gree)",
+  "12": "Emissor infravermelho",
+  "13": "Índice e cômodos + ar do escritório e do laboratório (Carrier nº 94)",
+  "14": "README do projeto",
+  "15": "Contexto para agentes (CLAUDE.md)",
+  "17": "Ramo: tv do quarto (Samsung)",
+  "18": "Notificador (voz)",
+  "19": "Túnel HTTPS",
+  "20": "Instalador (instalar.sh)",
+  "21": "Testes de protocolos",
+  "22": "Licenças dos dados"
+}

@@ -5,7 +5,8 @@
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
-- Servidor na versão 1.0.4.
+- Servidor no celular na versão 1.0.4. O repositório tem a 1.0.5 (só corrige a resposta de `editar_aparelho`
+  quando o sinal já existe); atualizar o celular é opcional.
 
 ## Conector no Claude
 - Nome atual: "Controle master" (sem login, URL com segredo). O antigo "Controle do POCO" foi removido.
@@ -17,18 +18,24 @@
 - Cuidados: não usar CTRL+C na aba do servidor; não fotografar a caixa com a URL.
 
 ## Aparelhos salvos
-| Nome | Tipo | Perfil | Como foi achado |
-|---|---|---|---|
-| escritório | ar-condicionado Carrier | Carrier (catálogo nº 94, SmartIR) | busca Carrier, tentativa nº 1 (reteste nº 5 apitou) |
-| ar condicionado laboratório | ar-condicionado **Midea** | o mesmo perfil Carrier nº 94 (Midea aceita os códigos) | comandos enviados no laboratório: ventilação média, 17 °C e 20 °C reagiram; **oscilação** adicionada (tecla alternar do perfil Ferroli/York, busca de oscilação em todas as marcas, tentativa nº 1) |
+Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas): **[docs/aparelhos/](aparelhos/README.md)**.
 
-- escritório aceita: modo frio/calor/desumidificar/automático/ventilar; 17–30 °C; ventilação automática/baixa/média/alta; desligar. Sem oscilação.
-- Testado pelo usuário: ligar 18 °C, desligar, ligar 18 °C, mudar para 22 °C (preservou frio + automática).
+| Cômodo | Nome no conector | Aparelho | Perfil | Ficha |
+|---|---|---|---|---|
+| Quarto | `ar do quarto` | ar-condicionado **Gree** GWH09KF | SmartIR Gree GWH09KF (nº 105) + oscilar, visor desligado e turbo gerados | [ar-do-quarto](aparelhos/quarto/ar-do-quarto.md) |
+| Quarto | `tv do quarto` | TV **Samsung** (Samsung32, 0x07) | Flipper "Samsung TV Full" (nº 2331) + ligar/desligar diretos + macro `abrir Netflix` | [tv-do-quarto](aparelhos/quarto/tv-do-quarto.md) |
+| Escritório | `ar do escritório` | ar-condicionado **Carrier** | SmartIR Carrier Unknown (nº 94) | [ar-do-escritorio](aparelhos/escritorio/ar-do-escritorio.md) |
+| Laboratório | `ar condicionado laboratório` | ar-condicionado **Midea** | o mesmo Carrier nº 94 + oscilação Ferroli/York | [ar-condicionado-laboratorio](aparelhos/laboratorio/ar-condicionado-laboratorio.md) |
+
+- Em 17/11 "escritório" virou `ar do escritório` e "quarto" virou `ar do quarto` (o quarto também tem a TV).
+- Ar do escritório e ar do laboratório usam os mesmos códigos: se os dois estiverem ao alcance, os dois reagem.
 
 ## Frases
 1. "Ligue o ar do escritório em 23 °C, modo frio, ventilação baixa."
 2. "Agora mude só para 22 °C."
 3. "Desligue o ar do escritório."
+4. "Ligue o ar do quarto em 16 graus." / "Coloca a pá do ar do quarto para oscilar." / "Apaga o visor do ar do quarto."
+5. "Liga a TV do quarto." / "Abre a Netflix na TV."
 
 ## Pendências possíveis
 - Início automático com Termux:Boot (ainda não configurado).
@@ -43,4 +50,8 @@
 - `curl` com `CANNOT LINK EXECUTABLE`: `apt update && apt full-upgrade`.
 - Download do ZIP em cache do GitHub: usar URL com o hash do commit (`.../raw/<hash>/dist/controle-ir.zip`).
 - Domínio do ngrok: usar o endereço `*.ngrok-free.app`, não o código `rd_…`.
-- Faixa real do perfil: 17–30 °C (16 °C não existe). Oscilação não disponível; opções: testar perfis Carrier/Midea/Springer com swing ou importar captura.
+- Faixa real do perfil Carrier (escritório/laboratório): 17–30 °C (16 °C não existe). O Gree do quarto vai de 16 a 30 °C.
+- Botão que o perfil não tem num Gree (oscilação, visor): **não** montar o quadro pelos tempos genéricos do
+  ESPHome (falhou duas vezes). Usar `ferramentas/gree_variante.py`, que parte da captura real e troca só os bits.
+- `editar_aparelho` com um sinal que o perfil já tem não duplica a tecla (na 1.0.4 responde "adicionado" mesmo
+  assim). Ex.: o Smart Hub 0x79 já era a tecla `inicio_3` da TV.

@@ -397,6 +397,23 @@ class TestDescoberta(unittest.TestCase):
         e = srv.editar_aparelho("tv velha", adicionar_comando={"nome": "volume +", "numero": h["n"]})
         self.assertTrue(e["alteracoes"])
 
+    def test_adicionar_sinal_repetido_avisa_tecla_existente(self):
+        cat, pasta = self.catalogo_sintetico()
+        srv = Servico(pasta, EmissorSimulado(), cat)
+        srv.desc.iniciar(categoria="tv", intervalo=2, iniciar_pausado=True)
+        srv.desc.s["estado"] = "executando"
+        srv.confirmar(srv.desc.passo()["n"])
+        srv.salvar_aparelho("tv velha", somente_confirmado=True)
+        sinal = {"protocolo": "Samsung32", "endereco": 7, "comando": 0x79}
+        e1 = srv.editar_aparelho("tv velha", adicionar_comando={"nome": "Smart Hub", "funcao": "home", "sinal": sinal})
+        self.assertIn("adicionado", e1["alteracoes"][0])
+        n = len(srv.aparelhos.obter("tv velha")["perfil"]["comandos"])
+        e2 = srv.editar_aparelho("tv velha", adicionar_comando={"nome": "Abrir o Smart Hub", "funcao": "home",
+                                                                "sinal": sinal})
+        self.assertTrue(e2["alteracoes"][0].startswith("nada adicionado"), e2)
+        self.assertIn("inicio", e2["alteracoes"][0])
+        self.assertEqual(len(srv.aparelhos.obter("tv velha")["perfil"]["comandos"]), n)
+
     def test_thread_pausa_imediata(self):
         cat, pasta = self.catalogo_sintetico()
         em = EmissorSimulado()
@@ -483,6 +500,43 @@ class TestServidorMCP(unittest.TestCase):
             self.assertEqual(e.code, 405)
         st, _ = self.post("/api/pausar", {})
         self.assertEqual(st, 401)
+
+
+class TestGreeVariante(unittest.TestCase):
+    """ferramentas/gree_variante.py: sinais que funcionaram no “ar do quarto” (Gree GWH09KF) em 17/11/2026."""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(RAIZ / "ferramentas"))
+        import gree_variante
+        cls.g = gree_variante
+
+    def test_oscilar_muda_so_dois_bits_e_mantem_checksum(self):
+        r = self.g.gerar("frio", "automatica", 16, oscilar=True)
+        self.assertEqual(r["original"], "09 00 20 50 00 20 00 50")
+        self.assertEqual(r["bytes"], "49 00 20 50 01 20 00 50")
+        p = self.g.perfil()
+        e = next(e for e in p["estado_completo"]["estados"]
+                 if (e["modo"], e["ventilacao"], e["temperatura"]) == ("frio", "automatica", 16))
+        _, orig = broadlink_para_pulsos(e["sinal"]["broadlink"])
+        difs = [i for i, (a, b) in enumerate(zip(orig, r["pulsos"])) if a != b]
+        self.assertEqual(difs, [15, 75])  # só os espaços do bit 0x40 do byte 0 e do 0x01 do byte 4
+
+    def test_visor_desligado_e_checksum_recalculado(self):
+        r = self.g.gerar("frio", "automatica", 16, visor_desligado=True)
+        self.assertEqual(r["bytes"], "09 00 00 50 00 20 00 50")
+        r = self.g.gerar("frio", "media", 23, visor_desligado=True, oscilar=True)
+        b = [int(x, 16) for x in r["bytes"].split()]
+        self.assertEqual(b[2] & 0x20, 0)
+        self.assertEqual(b[7] >> 4, self.g.checksum(b))
+
+    def test_turbo_liga_bit_0x10_do_byte_2(self):
+        r = self.g.gerar("frio", "automatica", 16, oscilar=True, visor_desligado=True, turbo=True)
+        self.assertEqual(r["bytes"], "49 00 10 50 01 20 00 50")
+
+    def test_quadro_duplo_e_recusado(self):
+        with self.assertRaises(self.g.ErroGree):
+            self.g.gerar("frio", "baixa", 18, oscilar=True)
 
 
 if __name__ == "__main__":

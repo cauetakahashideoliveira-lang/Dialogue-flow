@@ -319,8 +319,18 @@ class Servico:
                 termo = vocabulario.Termo(termo.chave, str(nome), "tecla")
             cmd = formatos.comando(nome, sinal, termo)
             cmd["adicionado_pelo_usuario"] = True
+            antes = len(a["perfil"]["comandos"])
             c = formatos.adicionar_comando(a["perfil"], cmd)
-            feitos.append(f"comando “{c['rotulo']}” ({c['chave']}, tipo {c['tipo']}) adicionado")
+            if len(a["perfil"]["comandos"]) > antes:
+                feitos.append(f"comando “{c['rotulo']}” ({c['chave']}, tipo {c['tipo']}) adicionado")
+            else:
+                # adicionar_comando ignora a mesma tecla com o mesmo sinal: diga qual tecla já o tem
+                imp = Sinal(cmd["sinal"]).impressao()
+                existente = next((x for x in a["perfil"]["comandos"]
+                                  if x.get("base", x["chave"]) == cmd["chave"] and Sinal(x["sinal"]).impressao() == imp),
+                                 None)
+                ja = f"“{existente['rotulo']}” ({existente['chave']})" if existente else cmd["chave"]
+                feitos.append(f"nada adicionado: “{nome}” tem o mesmo sinal da tecla {ja}, que já existe — use essa chave")
         if remover_comando:
             antes = len(a["perfil"]["comandos"])
             chave = Controlador(a)._resolver_tecla(remover_comando) or remover_comando

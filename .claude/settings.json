@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "mcp__Controle_master",
       "mcp__Controle_master__*"
     ]
   },

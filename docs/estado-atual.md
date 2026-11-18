@@ -43,6 +43,9 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
 5. "Liga a TV do quarto." / "Abre a Netflix na TV."
 
 ## Pendências
+- **Instalar a 1.0.9** (capacidades, execução governada, atualizar/reverter, aprovações fora do túnel,
+  origens). É a última instalação colando a linha: depois, `atualizar_sistema(ref)` pelo Claude. Ver
+  `docs/modo-deus.md` (§8 próximos experimentos, §9 perguntas).
 - Gravar as ressalvas como observação de cada aparelho (`editar_aparelho(observacao=…)`) para chegarem ao
   Claude pelo resumo: extras do ar do quarto fixam 16 °C/frio/automática; desligar direto da TV ainda não
   testado (escritório e laboratório compartilham códigos: o resumo já detecta sozinho).

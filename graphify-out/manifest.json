@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795042884.349754,
-    "seen": 1795042928.4269996,
-    "ast_hash": "b73194bac1c8e9680854c29a76879822",
+    "mtime": 1795044225.108832,
+    "seen": 1795044742.2367923,
+    "ast_hash": "a23bf21bd31e47357e17987eb18ce2ab",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -24,9 +24,9 @@
     "semantic_hash": "f663f17f7f72ef3d2bf1b48b8afa022b"
   },
   "controle-ir/controle_ir/cli.py": {
-    "mtime": 1795043188.270787,
-    "seen": 1795043219.0565047,
-    "ast_hash": "34687d1c9e2ce3f60e793637589a55d2",
+    "mtime": 1795044574.7127914,
+    "seen": 1795044742.2368,
+    "ast_hash": "e78356ce7076d64df647b41b92003afd",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/controle.py": {
@@ -54,9 +54,9 @@
     "semantic_hash": "91ccb5e9b53ecfb24d8263f1b519395a"
   },
   "controle-ir/controle_ir/mcp.py": {
-    "mtime": 1795042183.1212437,
-    "seen": 1795042204.3354177,
-    "ast_hash": "f48c0b19c5971df71ec0b298fb12dcc9",
+    "mtime": 1795044195.919923,
+    "seen": 1795044742.2368083,
+    "ast_hash": "392c4e3569bf3a36b8f749af4dd7c022",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/protocolos.py": {
@@ -66,15 +66,15 @@
     "semantic_hash": "ceadbcf302a63e7b7c41276752c154c5"
   },
   "controle-ir/controle_ir/servico.py": {
-    "mtime": 1795041216.241677,
-    "seen": 1795041721.7101805,
-    "ast_hash": "4d29f9ad4d2764bfed934a4810b5c94c",
+    "mtime": 1795044344.992433,
+    "seen": 1795044742.2368104,
+    "ast_hash": "3b70ae0125f4b417124a6b3f425da19e",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/servidor.py": {
-    "mtime": 1795042884.3493547,
-    "seen": 1795042928.4270177,
-    "ast_hash": "8cf74213ce874773a60a2ced706eae38",
+    "mtime": 1795044574.7118378,
+    "seen": 1795044742.2368116,
+    "ast_hash": "248bc2bc48e60da536d39652e5038a05",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/sinais.py": {
@@ -102,9 +102,9 @@
     "semantic_hash": "60460a62d7f954e6223f31b43b81e74e"
   },
   "controle-ir/instalar.sh": {
-    "mtime": 1795043188.271251,
-    "seen": 1795043219.0565193,
-    "ast_hash": "a62ea69b0848f9d8d8807a0809cad68c",
+    "mtime": 1795044195.9206135,
+    "seen": 1795044742.2368164,
+    "ast_hash": "f72075d10b38c12a60870023e62d652c",
     "semantic_hash": ""
   },
   "ferramentas/construir_catalogo.py": {
@@ -126,15 +126,15 @@
     "semantic_hash": "7412aa1ac0ae2377aea28c4b62ac429f"
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1795043188.2789817,
-    "seen": 1795043219.0565248,
-    "ast_hash": "eb05a3a25ccc5e51e681a057e63fa9cc",
+    "mtime": 1795044589.9637196,
+    "seen": 1795044742.2368221,
+    "ast_hash": "48aa570036bc646d115438525e4cb572",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795042926.6818793,
-    "seen": 1795042928.427033,
-    "ast_hash": "2785d54ac54ee134ce1b07835c8acc68",
+    "mtime": 1795044740.1384354,
+    "seen": 1795044742.236824,
+    "ast_hash": "24af35cdc70a656d2ccd91fa547c62f2",
     "semantic_hash": ""
   },
   "controle-ir/LICENCAS/Flipper-IRDB-CC0.txt": {
@@ -162,15 +162,15 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795040895.3472223,
-    "seen": 1795041721.7101963,
-    "ast_hash": "09165dcf0ee44de671233cc16032275b",
-    "semantic_hash": "09165dcf0ee44de671233cc16032275b"
+    "mtime": 1795044740.139605,
+    "seen": 1795044742.236823,
+    "ast_hash": "4774107d70632bb08d2d28094e052308",
+    "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795043217.5272546,
-    "seen": 1795043219.0565374,
-    "ast_hash": "cb08171e10d3481fbe2e8a2f1cf5e97e",
+    "mtime": 1795044740.1390376,
+    "seen": 1795044742.2368364,
+    "ast_hash": "bd9091a180f2275ac69dab80dbec93f8",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -219,6 +219,48 @@
     "mtime": 1795040895.3469431,
     "seen": 1795041721.7101521,
     "ast_hash": "771b770dfdce835d5c2928c7e57c1a95",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/diagnostico_rede/capacidade.json": {
+    "mtime": 1795043849.9681165,
+    "seen": 1795044742.236786,
+    "ast_hash": "5802c4087486bee7b3b099aa11529833",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/diagnostico_rede/principal.py": {
+    "mtime": 1795043849.973758,
+    "seen": 1795044742.2367883,
+    "ast_hash": "f75c7909a34bb3c64b0962a6906253f3",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/estado_celular/capacidade.json": {
+    "mtime": 1795043849.9751518,
+    "seen": 1795044742.2367895,
+    "ast_hash": "5af76f67f2f9822daa358344ae829a1d",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/estado_celular/principal.py": {
+    "mtime": 1795043849.9764376,
+    "seen": 1795044742.2367904,
+    "ast_hash": "dfa1ccf155bafbebad5d98a61e66f3c7",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/capacidades.py": {
+    "mtime": 1795044586.3306692,
+    "seen": 1795044742.236797,
+    "ast_hash": "148978949abdfe2a358575fb655907dd",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/execucao.py": {
+    "mtime": 1795044149.8441343,
+    "seen": 1795044742.2368042,
+    "ast_hash": "ec1012c84385be7ab2289ab7e9445e81",
+    "semantic_hash": ""
+  },
+  "docs/modo-deus.md": {
+    "mtime": 1795044721.4961684,
+    "seen": 1795044742.2368374,
+    "ast_hash": "a3f652f32574d897c6f8f4cfda3b1a2d",
     "semantic_hash": ""
   }
 }

@@ -159,6 +159,18 @@ O servidor relê as pastas a cada chamada: não precisa reiniciar.
 * Terminal: `controle-ir capacidade listar | ver NOME [--abrir] | aprovar NOME | recusar NOME | remover NOME |
   executar NOME --args '{"rapido": true}'`.
 
+## Execução governada, atualização e recuperação
+
+* `executar_comando` (MCP) roda uma linha de shell no Termux como **tarefa numerada** (saída em arquivo;
+  `tarefa(id)` acompanha ou para). A **política só muda no celular**: leitura roda direto; rede, pacotes e o resto
+  pedem aprovação na notificação (**Executar / Negar / Liberar 30 min**); `sistema` (atualizar) sempre pergunta.
+  `controle-ir exec politica | classe <classe> permitir|perguntar|negar | liberar <min> | travar | destravar | historico`.
+* `atualizar_sistema(ref=<commit>)` / `controle-ir atualizar --ref <commit>`: baixa o pacote do commit, guarda a
+  versão atual em `~/controle-ir.anterior`, instala e religa. Se o acesso não voltar: atalho **Reverter Controle IR**
+  (só shell) ou `controle-ir reverter`.
+* Auditoria de cada ferramenta e tarefa: `~/.controle-ir/auditoria.jsonl`.
+* Visão completa, mapa de oportunidades e limites: [docs/modo-deus.md](docs/modo-deus.md).
+
 ## Reabrir, atualizar a URL, URL fixa
 
 * Reabrir o serviço: abra o Termux e digite `controle-ir`.
@@ -176,6 +188,10 @@ O servidor relê as pastas a cada chamada: não precisa reiniciar.
 * O servidor escuta só em `127.0.0.1`; o acesso externo exige a URL com segredo de 256 bits (ou
   `Authorization: Bearer`). Comparação em tempo constante, recusa de `Origin` estranha (403), GET → 405.
 * Os logs não registram URLs. `~/.controle-ir/config.json` fica com permissão 600.
+* Painel e `/api` (aprovar, pausar, travar) usam um **token só local** e recusam chamadas vindas do túnel:
+  quem tiver a URL do conector não aprova nada. Aprovação de capacidade presa ao SHA-256 revisado.
+* `controle-ir origens` mostra de onde vêm as chamadas ao conector; `controle-ir origens exigir` aceita só
+  a rede da Anthropic (`160.79.104.0/21`). Confirme primeiro no modo observar (padrão).
 
 ## O que foi verificado e o que depende do seu POCO
 
@@ -186,7 +202,7 @@ O servidor relê as pastas a cada chamada: não precisa reiniciar.
 | 161.666 sinais do catálogo base convertem para transmissão válida (≤ 2 s) | Tempo de resposta do Termux:API em cada envio |
 | Planejador: ar-condicionado SmartIR (pedido composto, só temperatura, oscilação ausente, desligar), ventilador Flipper (alternância, saturação, falha no meio), projetor (HDMI 2 direto), fita LED (cor) | Notificação e botões no HyperOS |
 | Descoberta: pausa < 3 s, suspeitos, reteste, confirmação, distinção até 1 perfil, lote, retomada após reinício | Túnel `cloudflared` na rede do celular |
-| MCP: 44 testes automatizados (incluindo resumo dos aparelhos e serviço em segundo plano) + cliente oficial do SDK MCP (protocolo 2026-07-28 negociado para 2025-11-25) | Cadastro do conector na sua conta do Claude |
+| MCP: 58 testes automatizados (incluindo resumo dos aparelhos e serviço em segundo plano) + cliente oficial do SDK MCP (protocolo 2026-07-28 negociado para 2025-11-25) | Cadastro do conector na sua conta do Claude |
 | Instalação completa num Termux simulado (pacotes, emissor, catálogo, túnel, `copiar`, `pausar` pela notificação) | Termux:Boot abrindo o serviço quando o HyperOS liga |
 | Segundo plano: registro sem segredo (600), instância única, console por pty, `parar` sem matar pid reaproveitado | |
 

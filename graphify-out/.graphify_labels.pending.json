@@ -5,10 +5,16 @@
   "4": "cli.py",
   "7": "Sinal",
   "8": "ServidorMCP",
+  "14": "Modo deus — arquitetura evolutiva e mapa de oportunidades",
   "16": "PathLike",
+  "18": "Execucao",
+  "19": "Registro",
+  "23": "Origens",
   "24": "TestSegundoPlano",
   "25": "godmode-tracker.js",
-  "26": "ValueError",
+  "26": "Tunel",
   "27": "PathLike",
-  "28": "RuntimeError"
+  "28": "RuntimeError",
+  "29": "Path",
+  "30": "ValueError"
 }

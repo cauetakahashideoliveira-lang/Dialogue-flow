@@ -503,6 +503,24 @@ class TestServidorMCP(unittest.TestCase):
         st, _ = self.post("/api/pausar", {})
         self.assertEqual(st, 401)
 
+    def test_api_de_aprovacao_nao_passa_pelo_tunel(self):
+        st, _ = self.post(f"/api/pausar?t={self.segredo}", {}, {"X-Forwarded-For": "160.79.104.10"})
+        self.assertEqual(st, 401)  # mesmo com o segredo certo, vindo do túnel
+        st, _ = self.post(f"/api/pausar?t={self.segredo}", {})
+        self.assertIn(st, (200, 400))  # local: aceito (400 = nenhuma busca para pausar)
+
+    def test_origens_observar_e_exigir(self):
+        from controle_ir.servidor import Origens
+        url = f"/mcp/{self.segredo}"
+        msg = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
+        st, _ = self.post(url, msg, {"X-Forwarded-For": "203.0.113.9"})
+        self.assertEqual(st, 200)  # padrão: só observa
+        self.assertIn("203.0.113.9", (Path(self.srv_obj.pasta) / "origens.json").read_text())
+        o = Origens(Path(tempfile.mkdtemp()), lambda: {"modo": "exigir"})
+        self.assertTrue(o.verificar("160.79.105.20, 10.0.0.1"))
+        self.assertFalse(o.verificar("203.0.113.9"))
+        self.assertTrue(o.verificar(None))  # chamada local, sem túnel
+
 
 class TestGreeVariante(unittest.TestCase):
     """ferramentas/gree_variante.py: sinais que funcionaram no “ar do quarto” (Gree GWH09KF) em 17/11/2026."""
@@ -649,6 +667,21 @@ class TestCapacidades(unittest.TestCase):
         with self.assertRaises(Exception) as e:
             self.s.executar_capacidade("eco", {"texto": "oi"})
         self.assertIn("alterada_reaprovar", str(e.exception))
+
+    def test_aprovacao_presa_ao_codigo_revisado(self):
+        r1 = self.s.propor_capacidade("eco", **self.ECO)
+        outro = dict(self.ECO, arquivos={"principal.py": "print(1)"})
+        self.s.propor_capacidade("eco", **outro)  # trocou o código depois da notificação
+        with self.assertRaises(Exception) as e:
+            self.s.reg.aprovar("eco", r1["sha256"][:16])
+        self.assertIn("mudou", str(e.exception))
+        r2 = self.s.reg.ver("eco", proposta=True)
+        self.assertEqual(self.s.reg.aprovar("eco", r2["sha256"][:16])["status"], "ativa")
+        sub = Path(self.pasta) / "capacidades" / "eco" / "lib"
+        sub.mkdir()
+        (sub / "x.py").write_text("x = 1")  # código em subpasta também entra no hash
+        with self.assertRaises(Exception):
+            self.s.executar_capacidade("eco", {"texto": "a"})
 
     def test_validacao_tempo_limite_e_nomes(self):
         self.s.propor_capacidade("eco", **self.ECO)

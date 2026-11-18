@@ -36,10 +36,12 @@ class ErroCapacidade(ValueError):
 
 
 def _hash(pasta: Path) -> str:
+    """SHA-256 de todos os arquivos (subpastas incluídas), exceto os de controle (.aprovacao, .notas) e cache."""
     h = hashlib.sha256()
-    for f in sorted(pasta.iterdir()):
-        if f.is_file() and not f.name.startswith("."):
-            h.update(f.name.encode() + b"\0" + f.read_bytes() + b"\0")
+    for f in sorted(pasta.rglob("*")):
+        rel = f.relative_to(pasta)
+        if f.is_file() and not any(p.startswith(".") or p == "__pycache__" for p in rel.parts):
+            h.update(str(rel).encode() + b"\0" + f.read_bytes() + b"\0")
     return h.hexdigest()
 
 
@@ -102,8 +104,9 @@ class Registro:
         pasta = (self.propostas / nome) if proposta else self._pastas().get(nome, (None,))[0]
         if not pasta or not pasta.is_dir():
             raise ErroCapacidade(f"capacidade “{nome}” não encontrada")
-        arquivos = {f.name: f.read_text(errors="replace")[:20000] for f in sorted(pasta.iterdir())
-                    if f.is_file() and not f.name.startswith(".")}
+        arquivos = {str(f.relative_to(pasta)): f.read_text(errors="replace")[:20000] for f in sorted(pasta.rglob("*"))
+                    if f.is_file() and not any(x.startswith(".") or x == "__pycache__"
+                                               for x in f.relative_to(pasta).parts)}
         return {"nome": nome, "pasta": str(pasta), "arquivos": arquivos, "sha256": _hash(pasta)}
 
     @staticmethod
@@ -202,16 +205,24 @@ class Registro:
         except (ErroCapacidade, ValueError) as e:
             shutil.rmtree(destino)
             raise ErroCapacidade(str(e)) from e
+        sha = _hash(destino)
         if self.notificar:
-            self.notificar({"tipo": "capacidade_proposta", "nome": nome, "descricao": m.get("descricao", "")})
-        return {"capacidade": nome, "status": "aguardando_aprovacao", "sha256": _hash(destino),
+            self.notificar({"tipo": "capacidade_proposta", "nome": nome, "descricao": m.get("descricao", ""),
+                            "sha256": sha})
+        return {"capacidade": nome, "status": "aguardando_aprovacao", "sha256": sha,
                 "orientacao": "Nada foi executado. Peça ao usuário para tocar em “Aprovar” na notificação do "
                               "celular (ou rodar  controle-ir capacidade aprovar " + nome + "). Depois chame "
                               "executar_capacidade."}
 
-    def aprovar(self, nome: str) -> dict:
+    def aprovar(self, nome: str, sha: str | None = None) -> dict:
+        """sha: início do SHA-256 que o usuário revisou (o botão da notificação sempre envia). Se o código
+        mudou depois da notificação (nova proposta com o mesmo nome), a aprovação é recusada."""
         prop = self.propostas / nome
         alvo = self.usuario / nome
+        atual = _hash(prop) if prop.is_dir() else (_hash(alvo) if alvo.is_dir() else None)
+        if sha is not None and (not atual or not sha or not atual.startswith(sha)):
+            raise ErroCapacidade(f"o código de “{nome}” mudou depois da notificação (esperado {sha[:16] or '?'}, "
+                                 f"atual {(atual or '?')[:16]}): veja o código de novo antes de aprovar")
         if prop.is_dir():
             if alvo.exists():
                 shutil.rmtree(alvo)

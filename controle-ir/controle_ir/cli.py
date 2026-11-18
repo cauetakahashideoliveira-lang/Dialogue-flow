@@ -10,6 +10,7 @@
     controle-ir exec politica|historico|aprovar ID|negar ID|liberar MIN|travar|destravar|classe C MODO
     controle-ir atualizar [--ref HASH]   instala do GitHub em segundo plano (a versão atual vira a "anterior")
     controle-ir reverter         volta para a versão anterior (também pelo atalho "Reverter Controle IR")
+    controle-ir origens [observar|exigir]   de onde vêm as chamadas do Claude; exigir = só a rede da Anthropic
     controle-ir atalhos [--silencioso]   cria os atalhos "Ligar/Desligar Controle IR" para o Termux:Widget
     controle-ir copiar           copia a URL privada do conector
     controle-ir pausar|retomar   controla a busca em andamento
@@ -67,6 +68,9 @@ def carregar_config() -> dict:
     if not c.get("segredo"):
         c["segredo"] = secrets.token_urlsafe(32)
         mudou = True
+    if not c.get("token_local"):  # /api e painel: nunca passa pelo túnel (aprovações só no celular)
+        c["token_local"] = secrets.token_urlsafe(32)
+        mudou = True
     c.setdefault("porta", 8765)
     c.setdefault("tunel", {"modo": "rapido"})
     if mudou or not _cfg_caminho().exists():
@@ -95,7 +99,7 @@ def _porta_ativa(c: dict | None = None) -> int:
 
 def _api(acao: str, dados: dict | None = None, metodo="POST", sair=True) -> dict:
     c = carregar_config()
-    url = f"http://127.0.0.1:{_porta_ativa(c)}/api/{acao}?t={c['segredo']}"
+    url = f"http://127.0.0.1:{_porta_ativa(c)}/api/{acao}?t={c['token_local']}"
     req = urllib.request.Request(url, data=json.dumps(dados or {}).encode() if metodo == "POST" else None,
                                  headers={"Content-Type": "application/json"}, method=metodo)
     try:
@@ -369,9 +373,11 @@ def capacidade_cli(a) -> int:
             d = reg.ver(a.nome, proposta=props.is_dir())
             if a.abrir:
                 txt = PASTA / "capacidade-para-revisar.txt"
-                txt.write_text("\n\n".join(f"===== {k} =====\n{v}" for k, v in d["arquivos"].items()))
+                txt.write_text(f"SHA-256: {d['sha256']}\n\n" +
+                               "\n\n".join(f"===== {k} =====\n{v}" for k, v in d["arquivos"].items()))
                 _termux("termux-open", "--content-type", "text/plain", str(txt))
             else:
+                print(f"SHA-256: {d['sha256']}")
                 for k, v in d["arquivos"].items():
                     print(f"===== {k} =====\n{v}")
             return 0
@@ -379,7 +385,7 @@ def capacidade_cli(a) -> int:
             print(json.dumps(reg.executar(a.nome, json.loads(a.args), {"CONTROLE_IR_DIR": str(PASTA)}),
                              ensure_ascii=False, indent=1))
             return 0
-        r = getattr(reg, a.acao)(a.nome)
+        r = reg.aprovar(a.nome, a.sha) if a.acao == "aprovar" else getattr(reg, a.acao)(a.nome)
         _termux("termux-notification-remove", f"controle-ir-cap-{a.nome}")
         _aviso({"ativa": f"Capacidade {a.nome} aprovada", "recusada": f"Capacidade {a.nome} recusada",
                 "removida": f"Capacidade {a.nome} removida"}[r["status"]])
@@ -522,7 +528,7 @@ def console(estado: dict | None = None, desde_log: int | None = None) -> int:
                 url = estado_servidor().get("url")
                 print(f"{url}/mcp/{c['segredo']}" if url else "túnel ainda não está ativo")
             elif linha in ("painel", "p"):
-                _termux("termux-open-url", f"http://127.0.0.1:{_porta_ativa(c)}/painel?t={c['segredo']}")
+                _termux("termux-open-url", f"http://127.0.0.1:{_porta_ativa(c)}/painel?t={c['token_local']}")
             elif linha == "log":
                 mostrar_log(30)
             elif linha == "parar":
@@ -733,7 +739,8 @@ def _iniciar(args, trava):
     notificar = Notificador(voz=c.get("voz", True))
     servico = Servico(str(PASTA), emissor, cat_mod.Catalogo(PASTA / "catalogo.sqlite"), notificar)
     try:
-        srv = criar_servidor(servico, c["segredo"], porta)
+        srv = criar_servidor(servico, c["segredo"], porta, token_local=c["token_local"],
+                             politica_origens=lambda: carregar_config().get("origens_mcp") or {})
     except OSError:
         print(f"A porta {porta} já está em uso: o serviço provavelmente já está aberto em outra sessão do Termux.")
         print("Use  controle-ir parar  e tente de novo.")
@@ -823,7 +830,7 @@ def _iniciar(args, trava):
             except Exception as e:  # noqa: BLE001
                 print(e)
         elif linha in ("painel", "p"):
-            _termux("termux-open-url", f"http://127.0.0.1:{porta}/painel?t={c['segredo']}")
+            _termux("termux-open-url", f"http://127.0.0.1:{porta}/painel?t={c['token_local']}")
         elif linha in ("url",):
             if servico.url_publica:
                 mostrar_url(servico.url_publica + f"/mcp/{c['segredo']}")
@@ -873,6 +880,7 @@ def main(argv=None):
     pk.add_argument("nome", nargs="?")
     pk.add_argument("--args", default="{}")
     pk.add_argument("--abrir", action="store_true", help="ver: abre o código num visualizador do Android")
+    pk.add_argument("--sha", help="aprovar: início do SHA-256 revisado (a notificação envia)")
     pe = sub.add_parser("exec", help="política de execução, aprovações, trava e histórico")
     pe.add_argument("acao", choices=["politica", "historico", "aprovar", "negar", "liberar", "travar", "destravar",
                                      "classe"])
@@ -883,6 +891,8 @@ def main(argv=None):
     pu = sub.add_parser("atualizar", help="instala do GitHub a versão de um commit e religa o serviço")
     pu.add_argument("--ref", default="main")
     sub.add_parser("reverter", help="volta para a versão anterior (~/controle-ir.anterior)")
+    po = sub.add_parser("origens", help="origens das chamadas ao conector; exigir = recusar fora da Anthropic")
+    po.add_argument("modo", nargs="?", choices=["observar", "exigir"])
     pa = sub.add_parser("atalhos", help="cria os atalhos Ligar/Desligar para o Termux:Widget")
     pa.add_argument("--silencioso", action="store_true")
     pl = sub.add_parser("log", help="últimas linhas do registro do serviço em segundo plano")
@@ -928,6 +938,25 @@ def main(argv=None):
         return atualizar(a.ref)
     if cmd == "reverter":
         return subprocess.call(["sh", "-c", REVERTER_SH])
+    if cmd == "origens":
+        from .servidor import REDES_ANTHROPIC, Origens
+        if a.modo:
+            c["origens_mcp"] = dict(c.get("origens_mcp") or {}, modo=a.modo)
+            salvar_config(c)
+        o = Origens(PASTA, lambda: c.get("origens_mcp") or {})
+        pol = o.politica()
+        try:
+            vistos = json.loads((PASTA / "origens.json").read_text())
+        except (OSError, ValueError):
+            vistos = {}
+        print(f"Modo: {pol['modo']} · redes permitidas: {', '.join(pol['redes'])}")
+        for ip, e in sorted(vistos.items(), key=lambda kv: -kv[1]["n"]):
+            print(f"  {ip:<40} {e['n']:>5}×  {'dentro' if o.dentro(ip, pol['redes']) else 'FORA'}  {e.get('ultima')}")
+        if not vistos:
+            print("  (nenhuma chamada pelo túnel registrada ainda)")
+        if a.modo == "exigir" and any(not o.dentro(ip, pol["redes"]) for ip in vistos):
+            print("ATENÇÃO: já houve chamadas de fora da rede permitida; se forem suas, volte com: controle-ir origens observar")
+        return 0
     if cmd == "ligar":
         if servico_ativo():
             _aviso("Controle IR já está ligado")
@@ -964,7 +993,7 @@ def main(argv=None):
         print("▶  Retomado." if "erro" not in r else r["erro"])
         return 0
     if cmd == "painel":
-        _termux("termux-open-url", f"http://127.0.0.1:{_porta_ativa(c)}/painel?t={c['segredo']}")
+        _termux("termux-open-url", f"http://127.0.0.1:{_porta_ativa(c)}/painel?t={c['token_local']}")
         return 0
     if cmd == "status":
         ativo = servico_ativo()

@@ -12,6 +12,7 @@ Escuta apenas em 127.0.0.1; o acesso externo passa pelo túnel HTTPS.
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
 import shutil
 import subprocess
@@ -27,6 +28,50 @@ from .servico import ErroUso, Servico
 PAINEL = Path(__file__).with_name("painel.html")
 ORIGENS_OK = ("claude.ai", "claude.com", "anthropic.com")
 LIMITE_CORPO = 2_000_000
+REDES_ANTHROPIC = ("160.79.104.0/21",)  # saída dos conectores do claude.ai (docs de autenticação de conectores)
+
+
+class Origens:
+    """De onde vêm as chamadas ao /mcp pelo túnel (X-Forwarded-For). Modo 'observar' só registra;
+    'exigir' recusa (403) o que estiver fora das redes permitidas. Chamadas locais (sem o cabeçalho) passam."""
+
+    def __init__(self, pasta: Path, ler_config=None):
+        self.arq = Path(pasta) / "origens.json"
+        self.ler_config = ler_config or (lambda: {})
+        self.trava = threading.Lock()
+
+    def politica(self) -> dict:
+        p = dict(self.ler_config() or {})
+        p.setdefault("modo", "observar")
+        p.setdefault("redes", list(REDES_ANTHROPIC))
+        return p
+
+    @staticmethod
+    def dentro(ip: str, redes) -> bool:
+        try:
+            a = ipaddress.ip_address(ip)
+            return any(a in ipaddress.ip_network(r, strict=False) for r in redes)
+        except ValueError:
+            return False
+
+    def verificar(self, xff: str | None) -> bool:
+        if not xff:
+            return True
+        ip = xff.split(",")[0].strip()
+        pol = self.politica()
+        ok = self.dentro(ip, pol["redes"])
+        with self.trava:
+            try:
+                d = json.loads(self.arq.read_text())
+            except (OSError, ValueError):
+                d = {}
+            e = d.setdefault(ip, {"n": 0, "permitida": ok})
+            e["n"] += 1
+            e["ultima"] = time.strftime("%d/%m %H:%M:%S")
+            if len(d) > 200:
+                d = dict(sorted(d.items(), key=lambda kv: -kv[1]["n"])[:200])
+            self.arq.write_text(json.dumps(d, indent=1))
+        return ok or pol["modo"] != "exigir"
 
 
 class Notificador:
@@ -108,7 +153,8 @@ class Notificador:
             self._rodar(["termux-notification", "--id", f"controle-ir-cap-{nome}", "--title",
                          f"Nova capacidade: {nome}", "--content", (ev.get("descricao") or "")[:200],
                          "--priority", "high",
-                         "--button1", "Aprovar", "--button1-action", f"{self.cli} capacidade aprovar {nome}",
+                         "--button1", "Aprovar", "--button1-action",
+                         f"{self.cli} capacidade aprovar {nome} --sha {ev.get('sha256', '')[:16]}",
                          "--button2", "Ver código", "--button2-action", f"{self.cli} capacidade ver {nome} --abrir",
                          "--button3", "Recusar", "--button3-action", f"{self.cli} capacidade recusar {nome}"])
         elif tipo in ("pausado", "lote", "concluido"):
@@ -141,12 +187,25 @@ class Notificador:
                      "--button3", "Desligar", "--button3-action", f"{self.cli} desligar"])
 
 
-def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str = "127.0.0.1", log=None):
+CABECALHOS_TUNEL = ("X-Forwarded-For", "X-Forwarded-Host", "Forwarded", "Cf-Connecting-Ip", "X-Real-Ip")
+
+
+def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str = "127.0.0.1", log=None,
+                   politica_origens=None, token_local: str | None = None):
     log = log or (lambda *a: None)
     mcp = ServidorMCP(servico, log)
+    origens = Origens(servico.pasta, politica_origens)
 
     def token_ok(t: str | None) -> bool:
         return bool(t) and hmac.compare_digest(str(t).encode(), segredo.encode())
+
+    local = token_local or segredo
+
+    def local_ok(handler, t: str | None) -> bool:
+        """Painel e /api (aprovar, pausar, travar…): só no próprio celular — token local e nada vindo do túnel."""
+        if any(handler.headers.get(h) for h in CABECALHOS_TUNEL):
+            return False
+        return bool(t) and hmac.compare_digest(str(t).encode(), local.encode())
 
     acoes = {
         "pausar": lambda d: servico.pausar(origem=d.get("origem", "painel")),
@@ -217,7 +276,7 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
             if partes and partes[0] == "mcp":
                 return self._json(405, {"erro": "use POST"}, {"Allow": "POST"})
             if partes == ["painel"]:
-                if not token_ok(self._token_req(q)):
+                if not local_ok(self, self._token_req(q)):
                     return self._json(401, {"erro": "segredo inválido"})
                 html = PAINEL.read_bytes()
                 self.send_response(200)
@@ -229,7 +288,7 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
                 self.wfile.write(html)
                 return
             if partes == ["api", "estado"]:
-                if not token_ok(self._token_req(q)):
+                if not local_ok(self, self._token_req(q)):
                     return self._json(401, {"erro": "segredo inválido"})
                 return self._json(200, servico.estado_painel())
             return self._json(404, {"erro": "não encontrado"})
@@ -255,11 +314,13 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
                     time.sleep(0.5)
                     return self._json(401, {"erro": "segredo inválido"},
                                       {"WWW-Authenticate": 'Bearer realm="controle-ir"'})
+                if not origens.verificar(self.headers.get("X-Forwarded-For")):
+                    return self._json(403, {"erro": "origem não permitida"})
                 servico.ultima_requisicao_claude = time.time()
                 status, resp = mcp.tratar(corpo)
                 return self._json(status, resp)
             if len(partes) == 2 and partes[0] == "api" and partes[1] in acoes:
-                if not token_ok(self._token_req(q)):
+                if not local_ok(self, self._token_req(q)):
                     return self._json(401, {"erro": "segredo inválido"})
                 try:
                     return self._json(200, acoes[partes[1]](corpo or {}))

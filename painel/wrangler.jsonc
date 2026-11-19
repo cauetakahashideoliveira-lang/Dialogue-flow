@@ -1,0 +1,11 @@
+{
+  // Painel da Casa: Worker + D1. Segredo obrigatório: CODIGO_INICIAL (Settings → Variables and Secrets),
+  // usado só para cadastrar a PRIMEIRA passkey. O banco D1 "painel" é criado sozinho no primeiro deploy.
+  "name": "painel-casa",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "public", "run_worker_first": ["/api/*"] },
+  "d1_databases": [{ "binding": "DB", "database_name": "painel" }],
+  "observability": { "enabled": true }
+}

@@ -1,8 +1,8 @@
 # Estado atual da instalação (19/11/2026)
 
 ## Resumo (fim do dia 19/11)
-- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.23** (19/11
-  de manhã), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
+- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.23** no aparelho; **1.0.24** (Painel da Casa) publicada,
+  a instalar, ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
   Controle IR").
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz. Catálogo: base + ampliado (Flipper-IRDB completa) = 9.380
   perfis, 94.407 sinais únicos, 1.776 marcas. (Termux precisou de `apt update && apt full-upgrade` no início.)
@@ -41,6 +41,10 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Segurança, Etapa 1a (1.0.24): Painel da Casa** (`painel/`, Cloudflare Worker + D1): entrar com
+  passkey (digital), iPad por convite de uso único, celular pareado por código, armação/emergência/revogação por
+  estado assinado (Ed25519) que o celular busca a cada 30 s, “aplicado × pendente”, histórico encadeado por hash.
+  Teste E2E 27/27 (`painel/testes/e2e.cjs`). Falta publicar na conta Cloudflare do usuário e parear o POCO.
 - **19/11 — Segurança, Etapa 0 (1.0.23):** auditoria (2 agentes) mostrou que só a URL protegia tudo. Agora:
   sistema desarmado por padrão (só IR/consulta/travar pelo conector), armar só no celular (widgets “Armar” e
   “Desarmar Controle IR”), sem aprovação pelo chat, travar definitivo pelo remoto, classe `protegido`, ref de

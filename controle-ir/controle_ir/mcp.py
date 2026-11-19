@@ -369,7 +369,7 @@ class ServidorMCP:
         args = {k: v for k, v in args.items() if k in _ARGS[nome]}
         from .seguranca import permitido  # guardião: TODA ferramenta passa aqui (inclusive cap_*)
         try:
-            ok, motivo = permitido(nome, self.servico.exec.politica.ler())
+            ok, motivo = permitido(nome, self.servico.exec.politica.efetiva())
         except Exception as e:  # noqa: BLE001 — fiscal indisponível: falha fechada, exceto o freio
             ok, motivo = nome == "travar", f"política ilegível ({e}): só travar responde"
         if not ok:

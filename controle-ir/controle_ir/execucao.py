@@ -36,7 +36,10 @@ PADRAO = {"leitura": "permitir", "rede": "perguntar", "pacotes": "perguntar", "s
 # o caminho óbvio (cat/cp/sed), não um isolamento: com a classe "livre" permitida, um interpretador lê qualquer
 # arquivo do mesmo usuário (docs/seguranca.md, limites da Etapa 0).
 PROTEGIDO = re.compile(r"\.controle-ir/(?:\S*\*|config\.json|autorizacao\.json|politica\.json|auditoria\.jsonl|"
-                       r"PARAR)|ngrok\.ya?ml|\.config/ngrok|\.ssh/|/proc/\S*/environ|\.termux/boot")
+                       r"PARAR|painel\.json)|ngrok\.ya?ml|\.config/ngrok|\.ssh/|/proc/\S*/environ|\.termux/boot|"
+                       # comandos administrativos que dão poder (o freio e o desarmar continuam permitidos)
+                       r"(?:controle-ir|controle_ir)\s+(?:armar|atualizar|reverter|painel|atalhos|inicio-automatico|"
+                       r"origens|exec\s+(?:liberar|destravar|classe|modo|remoto|codigo|aprovar))")
 LEITURA = {"ls", "cat", "head", "tail", "wc", "pwd", "whoami", "id", "uname", "uptime", "date", "df", "du",
            "free", "ps", "which", "file", "stat", "grep", "getprop", "ip", "termux-info", "termux-battery-status",
            "termux-wifi-connectioninfo", "termux-wifi-scaninfo", "termux-sensor", "termux-infrared-frequencies",
@@ -77,6 +80,7 @@ class Politica:
         self.arq = Path(pasta) / "politica.json"
 
     def ler(self) -> dict:
+        existe = self.arq.exists()
         try:
             p = json.loads(self.arq.read_text())
         except (OSError, ValueError):
@@ -89,9 +93,11 @@ class Politica:
         # O antigo "chat" (bastava o agente chamar autorizar) virou "desligada": o agente não aprova a si mesmo.
         if p.get("aprovacao_remota") not in ("codigo", "desligada"):
             p["aprovacao_remota"] = "desligada"
-        if "armado_ate" not in p:  # migração: quem atualiza continua armado até a meia-noite; depois, todo dia
+        if "armado_ate" not in p:
+            # migração (arquivo antigo sem o campo): continua armado até a meia-noite. Sem arquivo (instalação nova
+            # ou apagado): nasce DESARMADO — apagar a política não pode armar nada.
             from .seguranca import fim_do_dia
-            p["armado_ate"] = fim_do_dia()
+            p["armado_ate"] = fim_do_dia() if existe else 0
             self.gravar(p)
         p.setdefault("desarmado_permite", "ir")
         p["auto_capacidades"] = bool(p.get("auto_capacidades"))  # modo autônomo ativa código novo sem tocar no celular
@@ -120,9 +126,23 @@ class Politica:
         os.chmod(tmp, 0o600)
         os.replace(tmp, self.arq)
 
+    def efetiva(self) -> dict:
+        """Política com o estado do painel aplicado. Pareado, a armação só vale se vier assinada pelo painel."""
+        from . import painel
+        p = self.ler()
+        if p.get("modo_painel") or painel.ler(self.arq.parent):
+            p["modo_painel"] = True
+            e = painel.estado_valido(self.arq.parent)
+            veto = int(p.get("veto_seq", -1))
+            p["armado_ate"] = int(e["armado_ate"]) if e and int(e["seq"]) > veto else 0
+            p["travado"] = bool(p["travado"] or (e and e.get("travado")))
+            p["desarmado_permite"] = e.get("desarmado_permite", "ir") if e else "ir"
+            p["painel_seq"] = e["seq"] if e else None
+        return p
+
     def decidir(self, classe: str) -> str:
         from .seguranca import armado
-        p = self.ler()
+        p = self.efetiva()
         if classe == "protegido" or p["travado"] or not armado(p):
             return "negar"
         modo = p["classes"].get(classe, "perguntar")
@@ -132,7 +152,7 @@ class Politica:
 
     def resumo(self) -> dict:
         from .seguranca import armado
-        p = self.ler()
+        p = self.efetiva()
         lib = float(p["liberado_ate"] or 0)
         return {"travado": p["travado"], "perfil": p.get("perfil"), "classes": p["classes"],
                 "auto_capacidades": p["auto_capacidades"], "aprovacao_remota": p["aprovacao_remota"],
@@ -141,6 +161,7 @@ class Politica:
                 "armado_ate": time.strftime("%d/%m %H:%M", time.localtime(float(p["armado_ate"])))
                 if armado(p) else None,
                 "desarmado_permite": p["desarmado_permite"],
+                "painel": {"pareado": True, "seq": p.get("painel_seq")} if p.get("modo_painel") else None,
                 "como_mudar": "só no celular: controle-ir armar [horas] · controle-ir desarmar · "
                               "controle-ir exec classe <classe> permitir|perguntar|negar · controle-ir exec "
                               "travar|destravar · controle-ir exec remoto codigo|desligada. Pelo conector: travar "
@@ -150,6 +171,8 @@ class Politica:
         """Só pelo celular (CLI/widget): libera as ferramentas de alto risco até a meia-noite ou por `horas`."""
         from .seguranca import fim_do_dia
         p = self.ler()
+        if self.efetiva().get("modo_painel"):
+            raise ValueError("este celular está pareado com o painel: arme pelo painel, com a digital")
         agora = time.time()
         p["armado_ate"] = agora + max(0.1, min(float(horas), 24)) * 3600 if horas else fim_do_dia(agora)
         p["travado"] = False
@@ -158,6 +181,9 @@ class Politica:
 
     def desarmar(self) -> dict:
         p = self.ler()
+        ef = self.efetiva()
+        if ef.get("painel_seq") is not None:  # pareado: veta o estado atual do painel até ele mandar outro
+            p["veto_seq"] = ef["painel_seq"]
         p["armado_ate"], p["liberado_ate"] = 0, 0
         self.gravar(p)
         return p

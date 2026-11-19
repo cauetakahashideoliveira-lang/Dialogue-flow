@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795078705.23351,
-    "seen": 1795078963.4465516,
-    "ast_hash": "7f22bf6f4a1894020147458bd8e0e2f0",
+    "mtime": 1795080792.0867805,
+    "seen": 1795080854.2955954,
+    "ast_hash": "64c771997ddb0f7b6f8cc2e487e95798",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -24,9 +24,9 @@
     "semantic_hash": "f663f17f7f72ef3d2bf1b48b8afa022b"
   },
   "controle-ir/controle_ir/cli.py": {
-    "mtime": 1795078556.5005202,
-    "seen": 1795078963.4465592,
-    "ast_hash": "92f9f5629ea21feaf4aaf02ca3c1629e",
+    "mtime": 1795080373.9897354,
+    "seen": 1795080854.2956872,
+    "ast_hash": "ce09237451c911bf10dccc82594a4b38",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/controle.py": {
@@ -54,9 +54,9 @@
     "semantic_hash": "91ccb5e9b53ecfb24d8263f1b519395a"
   },
   "controle-ir/controle_ir/mcp.py": {
-    "mtime": 1795078705.2277057,
-    "seen": 1795078963.4465675,
-    "ast_hash": "1bdff9a6d07986fdefa668f64ef4697f",
+    "mtime": 1795080348.5789585,
+    "seen": 1795080854.2957666,
+    "ast_hash": "025536df55fa560eed42dbc66712a22f",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/protocolos.py": {
@@ -66,9 +66,9 @@
     "semantic_hash": "ceadbcf302a63e7b7c41276752c154c5"
   },
   "controle-ir/controle_ir/servico.py": {
-    "mtime": 1795078511.66036,
-    "seen": 1795078963.4465718,
-    "ast_hash": "1834d602834602ffdde2b62c7a6680ad",
+    "mtime": 1795080348.5793812,
+    "seen": 1795080854.295834,
+    "ast_hash": "c75ea3176edbc50ed6f9bd894db99829",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/servidor.py": {
@@ -102,9 +102,9 @@
     "semantic_hash": "60460a62d7f954e6223f31b43b81e74e"
   },
   "controle-ir/instalar.sh": {
-    "mtime": 1795047157.7581568,
-    "seen": 1795056158.8514192,
-    "ast_hash": "d6ff4707c6445a9045d97172efc27540",
+    "mtime": 1795080415.009244,
+    "seen": 1795080854.2963083,
+    "ast_hash": "aebc841e558b86137e4c5608b5467731",
     "semantic_hash": ""
   },
   "ferramentas/construir_catalogo.py": {
@@ -126,9 +126,9 @@
     "semantic_hash": "7412aa1ac0ae2377aea28c4b62ac429f"
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1795078653.3236783,
-    "seen": 1795078963.4465857,
-    "ast_hash": "c52a519121bc01d6b7270667a95dc0cb",
+    "mtime": 1795080415.0103147,
+    "seen": 1795080854.2964988,
+    "ast_hash": "0ac092ce8061ccc586803ea182286432",
     "semantic_hash": ""
   },
   "README.md": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795078961.061714,
-    "seen": 1795078963.446605,
-    "ast_hash": "208120992305529db404ab3b4d13b033",
+    "mtime": 1795080798.4603117,
+    "seen": 1795080854.2968035,
+    "ast_hash": "586bbfc449858be01da405ef192701eb",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/execucao.py": {
-    "mtime": 1795078497.4406278,
-    "seen": 1795078963.446565,
-    "ast_hash": "0f53edaf650d7f29085d5c8af0c0eaec",
+    "mtime": 1795080348.5785725,
+    "seen": 1795080854.2957468,
+    "ast_hash": "5f03a9982ef11b61eaa6e4fe4d13625a",
     "semantic_hash": ""
   },
   "docs/modo-deus.md": {
@@ -366,15 +366,63 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/seguranca.py": {
-    "mtime": 1795078472.2081735,
-    "seen": 1795078963.4465702,
-    "ast_hash": "4cd954af35f0227f1db56342258c60c8",
+    "mtime": 1795080365.8813112,
+    "seen": 1795080854.2958322,
+    "ast_hash": "d5f25aaafaff2cc2da54b48a8495c16c",
     "semantic_hash": ""
   },
   "docs/seguranca.md": {
-    "mtime": 1795078953.112202,
-    "seen": 1795078963.4466078,
-    "ast_hash": "c2c88dcf7772d7c20c95ce1ce8d8a1fc",
+    "mtime": 1795080783.5052133,
+    "seen": 1795080854.2968438,
+    "ast_hash": "6304f0a7920de6fc499367b0925f77ae",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/painel.py": {
+    "mtime": 1795080319.4002833,
+    "seen": 1795080854.2957683,
+    "ast_hash": "cd9f17cce92f925c9716faa49d863671",
+    "semantic_hash": ""
+  },
+  "painel/package.json": {
+    "mtime": 1795080768.3403099,
+    "seen": 1795080854.296491,
+    "ast_hash": "d0421026ba0b9695a50609c0d8ffde43",
+    "semantic_hash": ""
+  },
+  "painel/public/app.js": {
+    "mtime": 1795080582.0889835,
+    "seen": 1795080854.2964928,
+    "ast_hash": "2fc96048ed7e6867004aea4117c8f933",
+    "semantic_hash": ""
+  },
+  "painel/public/webauthn.js": {
+    "mtime": 1795080465.8756924,
+    "seen": 1795080854.2964942,
+    "ast_hash": "bc9cf7ed7b73b3213a3fe6d9c7166e2e",
+    "semantic_hash": ""
+  },
+  "painel/src/index.js": {
+    "mtime": 1795080792.0497625,
+    "seen": 1795080854.2964957,
+    "ast_hash": "57e2835642bd411e56de4845d19aecea",
+    "semantic_hash": ""
+  },
+  "painel/testes/e2e.cjs": {
+    "mtime": 1795080703.456306,
+    "seen": 1795080854.2964969,
+    "ast_hash": "d045c8f6725884744293e67c8a94c7ea",
+    "semantic_hash": ""
+  },
+  "painel/public/index.html": {
+    "mtime": 1795080582.0887387,
+    "seen": 1795080854.296846,
+    "ast_hash": "9b72cc854ee672667b109c37c026a928",
+    "semantic_hash": ""
+  },
+  "painel/package-lock.json": {
+    "mtime": 1795080102.6642704,
+    "seen": 1795080854.2968476,
+    "ast_hash": "6948ecd2b1fddb418b37cb0fec92b378",
     "semantic_hash": ""
   }
 }

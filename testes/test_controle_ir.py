@@ -14,6 +14,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
@@ -47,7 +48,9 @@ def novo_servico(emissor=None, com_base=True):
     pasta = tempfile.mkdtemp(prefix="cir-")
     if com_base:
         shutil.copy(catalogo_base(), Path(pasta) / "catalogo.sqlite")
-    return Servico(pasta, emissor or EmissorSimulado()), pasta
+    s = Servico(pasta, emissor or EmissorSimulado())
+    s.exec.politica.armar()  # instalação nova nasce desarmada; os testes de função partem do sistema armado
+    return s, pasta
 
 
 class TestProtocolos(unittest.TestCase):
@@ -538,11 +541,15 @@ class TestArmacao(unittest.TestCase):
         r = self.mcp.chamar(nome, args)
         return json.loads(r["content"][0]["text"]), r["isError"]
 
-    def test_quem_atualiza_fica_armado_ate_meia_noite(self):
+    def test_quem_atualiza_fica_armado_ate_meia_noite_e_sem_politica_nasce_desarmado(self):
+        from controle_ir.execucao import Politica
         from controle_ir.seguranca import fim_do_dia
-        p = self.pol.ler()
-        self.assertAlmostEqual(p["armado_ate"], fim_do_dia(), delta=2)
-        self.assertTrue(self.s.politica()["armado"])
+        pasta = Path(tempfile.mkdtemp())
+        (pasta / "politica.json").write_text(json.dumps({"perfil": "autonomo"}))  # política antiga, sem o campo
+        self.assertAlmostEqual(Politica(pasta).ler()["armado_ate"], fim_do_dia(), delta=2)
+        nova = Path(tempfile.mkdtemp())  # sem arquivo (instalação nova ou política apagada): desarmado
+        self.assertEqual(Politica(nova).ler()["armado_ate"], 0)
+        self.assertEqual(Politica(nova).decidir("leitura"), "negar")
 
     def test_desarmado_so_baixo_risco(self):
         self.pol.desarmar()
@@ -605,6 +612,116 @@ class TestArmacao(unittest.TestCase):
         self.assertIn("--inspect=false", Tunel(8765, {"modo": "ngrok", "dominio": "x.ngrok-free.app"}).comando())
         cmd = Tunel(8765, {"modo": "cloudflare", "token": "SEGREDO-TESTE"}).comando()
         self.assertNotIn("SEGREDO-TESTE", " ".join(cmd))
+
+
+class TestPainel(unittest.TestCase):
+    """Pareado, só um estado ASSINADO pelo painel arma o celular; revogar e emergência reduzem na hora."""
+
+    def setUp(self):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        from controle_ir import painel
+        self.p = painel
+        self.chave = Ed25519PrivateKey.generate()
+        pub = self.chave.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+        self.s, self.pasta = novo_servico(com_base=False)
+        self.pol = self.s.exec.politica
+        self.cfg = {"url": "http://127.0.0.1:1", "aparelho": "pocoX", "token": "t", "seq_max": 0, "offset": 0,
+                    "chave_publica": base64.urlsafe_b64encode(pub).decode().rstrip("=")}
+        painel.gravar(self.pasta, self.cfg)
+        p = self.pol.ler()
+        p["modo_painel"] = True
+        self.pol.gravar(p)
+
+    def assinado(self, chave=None, **campos):
+        e = {"v": 1, "aparelho": "pocoX", "seq": 1, "armado_ate": int(time.time()) + 3600, "travado": 0,
+             "desarmado_permite": "ir", "emitido_em": int(time.time()), **campos}
+        txt = json.dumps(e)
+        sig = (chave or self.chave).sign(txt.encode())
+        return txt, base64.urlsafe_b64encode(sig).decode().rstrip("=")
+
+    def gravar_estado(self, txt, sig, seq_max=0):
+        self.p.gravar(self.pasta, {**self.cfg, "estado": txt, "assinatura": sig, "seq_max": seq_max})
+
+    def test_so_estado_assinado_arma(self):
+        from controle_ir.seguranca import permitido
+        self.assertFalse(permitido("executar_comando", self.pol.efetiva())[0])  # pareado sem estado: desarmado
+        self.gravar_estado(*self.assinado())
+        self.assertTrue(permitido("executar_comando", self.pol.efetiva())[0])
+        txt, sig = self.assinado()
+        self.gravar_estado(txt.replace('"travado": 0', '"travado": 0 '), sig)  # texto alterado
+        self.assertFalse(permitido("executar_comando", self.pol.efetiva())[0])
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        self.gravar_estado(*self.assinado(chave=Ed25519PrivateKey.generate()))  # outra chave
+        self.assertFalse(permitido("executar_comando", self.pol.efetiva())[0])
+        self.gravar_estado(*self.assinado(aparelho="outro"))
+        self.assertFalse(permitido("executar_comando", self.pol.efetiva())[0])
+        self.gravar_estado(*self.assinado(seq=3), seq_max=5)  # estado antigo reapresentado
+        self.assertFalse(permitido("executar_comando", self.pol.efetiva())[0])
+
+    def test_armar_local_recusado_e_desarmar_local_veta(self):
+        self.gravar_estado(*self.assinado(seq=4))
+        with self.assertRaises(ValueError):
+            self.pol.armar()
+        self.pol.desarmar()  # o dono no celular sempre consegue tirar poder
+        self.assertEqual(self.pol.efetiva()["armado_ate"], 0)
+        self.gravar_estado(*self.assinado(seq=5))  # nova armação no painel vence o veto
+        self.assertGreater(self.pol.efetiva()["armado_ate"], time.time())
+
+    def test_comandos_administrativos_e_arquivo_do_painel_protegidos(self):
+        from controle_ir.execucao import classificar
+        for cmd in ("cat ~/.controle-ir/painel.json", "controle-ir armar 24", "controle-ir exec liberar 60",
+                    "controle-ir exec modo autonomo", "controle-ir painel parear x y", "controle-ir atualizar --ref main"):
+            self.assertEqual(classificar(cmd), "protegido", cmd)
+        self.assertNotEqual(classificar("controle-ir exec travar"), "protegido")  # tirar poder continua livre
+
+    def test_sincronizar_com_painel_falso(self):
+        estados, recebidos = [], []
+
+        class P(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                if self.headers.get("Authorization") != "Bearer t":
+                    return self._r(401, {"erro": "x"})
+                txt, sig = estados[-1]
+                self._r(200, {"estado": txt, "assinatura": sig})
+
+            def do_POST(self):
+                recebidos.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                self._r(200, {"ok": True})
+
+            def _r(self, st, d):
+                b = json.dumps(d).encode()
+                self.send_response(st)
+                self.send_header("Content-Length", str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), P)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        self.p.gravar(self.pasta, {**self.cfg, "url": f"http://127.0.0.1:{srv.server_address[1]}"})
+        reduzidos = []
+        self.s.exec.auditar({"evento": "teste_auditoria"})
+        estados.append(self.assinado(seq=1))
+        r = self.p.sincronizar(self.pasta, "1.0.24", reduzidos.append)
+        self.assertEqual((r["seq"], r["travado"]), (1, 0))
+        self.assertTrue(self.s.politica()["armado"])
+        self.assertEqual(recebidos[-1]["seq"], 1)  # o painel só mostra "aplicado" com esta confirmação
+        self.assertIn("teste_auditoria", json.dumps(recebidos[-1]["eventos"]))
+        estados.append(self.assinado(seq=2, travado=1, armado_ate=0))  # EMERGÊNCIA no painel
+        self.p.sincronizar(self.pasta, "1.0.24", reduzidos.append)
+        self.assertEqual(reduzidos, ["emergência no painel"])
+        self.assertTrue(self.s.politica()["travado"])
+        estados.append(self.assinado(seq=1))  # painel (ou alguém no meio) devolvendo estado velho
+        with self.assertRaises(ValueError):
+            self.p.sincronizar(self.pasta, "1.0.24", reduzidos.append)
+        self.p.gravar(self.pasta, {**self.p.ler(self.pasta), "token": "revogado"})
+        self.assertTrue(self.p.sincronizar(self.pasta, "1.0.24", reduzidos.append)["revogado"])
+        self.assertIsNone(self.p.estado_valido(self.pasta))  # revogado: falha fechada
+        self.assertFalse(self.s.politica()["armado"])
 
 
 class TestGreeVariante(unittest.TestCase):

@@ -21,6 +21,9 @@ if ! pkg install -y python cloudflared termux-api; then
 fi
 command -v python3 >/dev/null || falha "instalação de pacotes" "python3 não foi instalado."
 ok "pacotes instalados"
+# assinaturas do Painel da Casa (opcional: sem ela o pareamento fica indisponível e o celular segue desarmado)
+python3 -c "import cryptography" 2>/dev/null || pkg install -y python-cryptography >/dev/null 2>&1 \
+  || echo "  (aviso) python-cryptography não instalou: o pareamento com o Painel da Casa fica indisponível"
 
 etapa "2/7 Consultando o emissor infravermelho…"
 SAIDA="$(timeout 25 termux-infrared-frequencies 2>&1)"

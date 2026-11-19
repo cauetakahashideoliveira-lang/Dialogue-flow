@@ -49,7 +49,40 @@ código graváveis pelo mesmo usuário que roda os comandos remotos. Histórico 
 tiver a URL tem o alcance da política (no perfil autônomo, shell livre) e, por ser o mesmo usuário do Linux, pode
 mexer nos arquivos do próprio fiscal até a armação vencer. É a Etapa 1 que tira o valor da URL.
 
-## 3. Etapa 1 — painel externo com passkey (a construir; depende das decisões da seção 5)
+## 3. Etapa 1 — painel externo com passkey
+
+### 3a. Painel da Casa (1.0.24, implementada) — `painel/`
+
+Cloudflare Worker + D1 (`painel/src/index.js`, interface em `painel/public/`). O celular deixa de se armar
+sozinho: quem arma é o painel, com a digital.
+
+- **Entrar:** passkey com verificação do usuário (`userVerification: required`). A 1ª passkey exige o segredo
+  `CODIGO_INICIAL` (definido na Cloudflare); depois dela o código não cadastra mais nada. Outro aparelho (iPad)
+  entra só por **convite de uso único** (10 min) criado com a digital num aparelho já cadastrado.
+- **Sessão:** cookie `HttpOnly; Secure; SameSite=Strict`, 12 h no máximo e 30 min parado; para **aumentar poder**
+  (armar, convidar, cadastrar celular, revogar, mudar o que passa desarmado) a digital tem de ser de ≤ 2 min.
+  Diminuir poder (desarmar, EMERGÊNCIA) não pede digital. Anti-CSRF: só POST com cabeçalho `x-painel` e mesma
+  origem; limite de tentativas por IP.
+- **Celular:** cadastrado com código de uso único (`controle-ir painel parear <URL> <CÓDIGO>`), recebe um token
+  próprio e a **chave pública Ed25519** do painel. A cada 30 s busca o estado **assinado** (aparelho, sequência,
+  armado até, travado, o que passa desarmado) e só o aceita se a assinatura e a sequência conferirem (nada de
+  estado velho reaproveitado). Sem estado válido, ou com o token revogado: **desarmado** (falha fechada).
+  Pareado, `controle-ir armar` no celular é recusado; `desarmar`/`travar` locais continuam valendo (veto local).
+- **Aplicado × pendente:** o celular confirma (`ack`) a sequência que aplicou; o painel mostra “pendente” até lá.
+- **Auditoria:** eventos do painel e do celular (até 100 por busca, textos truncados) num histórico encadeado por
+  hash no D1; o botão “Conferir integridade” aponta o primeiro evento adulterado.
+- **Latência medida:** armar/desarmar/emergência chegam ao celular na próxima busca (≤ 30 s + rede); com o
+  celular sem internet, vale o último estado assinado até o seu prazo (no máximo 24 h).
+- **Custo no celular:** uma requisição HTTPS pequena a cada 30 s (≈ 2 900/dia) e uma verificação Ed25519.
+- **Evidência:** `node painel/testes/e2e.cjs` (Chromium com autenticador virtual + código real do celular, 27
+  verificações) e `testes/test_controle_ir.py::TestPainel`.
+- **Raiz de confiança:** a conta da Cloudflare (quem a controla altera o Worker). Use 2FA nela. Recuperação se
+  perder todas as passkeys: no D1 (Cloudflare → D1 → painel → Console) `UPDATE credenciais SET revogada = 1;` e
+  cadastre de novo com o `CODIGO_INICIAL` (troque-o antes).
+- **Limite que continua:** a URL do conector (ngrok) ainda é o segredo de acesso ao celular; durante a janela
+  armada, quem a tiver usa a política vigente. Isso é o que a 1b resolve.
+
+### 3b. Gateway OAuth na borda (a construir)
 
 ```
 claude.ai / Claude Code ──OAuth 2.1+PKCE──▶ Painel (Cloudflare Worker + D1) ──túnel──▶ celular (controle-ir)

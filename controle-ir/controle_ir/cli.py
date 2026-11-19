@@ -325,7 +325,11 @@ def armar_cli(acao: str, horas: float | None = None) -> int:
     from .execucao import Politica
     pol = Politica(PASTA)
     if acao == "armar":
-        p = pol.armar(horas)
+        try:
+            p = pol.armar(horas)
+        except ValueError as e:
+            _aviso(f"Controle IR: {e}")
+            return 1
         (PASTA / "PARAR").unlink(missing_ok=True)
         ate = time.strftime("%d/%m %H:%M", time.localtime(p["armado_ate"]))
         _aviso(f"Controle IR ARMADO até {ate}: o Claude pode usar terminal, tela e capacidades")
@@ -338,6 +342,38 @@ def armar_cli(acao: str, horas: float | None = None) -> int:
             f.write(json.dumps({"quando": time.strftime("%Y-%m-%d %H:%M:%S"), "evento": acao, "origem": "celular"}) + "\n")
     except OSError:
         pass
+    return 0
+
+
+def painel_cli(a) -> int:
+    """Pareia com o Painel da Casa (Etapa 1) ou mostra o estado. Pareado, só o painel arma."""
+    from . import painel
+    from .execucao import Politica
+    if a.acao == "parear":
+        if not a.url or not a.codigo:
+            print("use: controle-ir painel parear https://SEU-PAINEL.workers.dev CODIGO")
+            return 1
+        try:
+            painel.parear(PASTA, a.url, a.codigo, a.nome or "POCO", __version__)
+        except ValueError as e:
+            print(f"✘ {e}")
+            return 1
+        pol = Politica(PASTA)
+        p = pol.ler()
+        p["modo_painel"] = True
+        pol.gravar(p)
+        r = painel.sincronizar(PASTA, __version__)
+        print("✔ Pareado com o painel. A partir de agora só o painel arma (com a sua digital).")
+        print(f"  estado: {json.dumps(r, ensure_ascii=False)}")
+        print("  Reinicie o serviço para ele acompanhar o painel: controle-ir desligar; controle-ir ligar")
+        return 0
+    cfg = painel.ler(PASTA)
+    e = painel.estado_valido(PASTA)
+    print(json.dumps({"pareado": bool(cfg), "painel": cfg and cfg.get("url"), "aparelho": cfg and cfg.get("aparelho"),
+                      "revogado": cfg and cfg.get("revogado"), "estado_valido": e,
+                      "efetiva": {k: v for k, v in Politica(PASTA).efetiva().items()
+                                  if k in ("armado_ate", "travado", "desarmado_permite", "painel_seq")}},
+                     ensure_ascii=False, indent=1))
     return 0
 
 
@@ -852,6 +888,14 @@ def _iniciar(args, trava):
     except Exception:  # noqa: BLE001
         pass
     _termux("termux-wake-lock")
+    from . import painel as painel_mod
+    if painel_mod.ler(PASTA):  # pareado: acompanha o painel e reage a desarmar/emergência em até 30 s
+        def reduzir(motivo):
+            (PASTA / "PARAR").write_text(str(time.time()))
+            n = servico.exec.parar_todas()
+            servico.exec.auditar({"evento": "reduzido_pelo_painel", "motivo": motivo, "tarefas_encerradas": n})
+            _aviso(f"Controle IR: {motivo}")
+        painel_mod.Sincronizador(PASTA, __version__, reduzir).iniciar()
     inicio = time.time()
 
     def gravar_estado(url=None):
@@ -970,7 +1014,12 @@ def main(argv=None):
     p.add_argument("--simulado", action="store_true", help="sem emissor real (testes)")
     p.add_argument("--sem-tunel", action="store_true")
     p.add_argument("--fundo", action="store_true", help="sem console; saída em ~/.controle-ir/servico.log")
-    for n in ("copiar", "pausar", "retomar", "painel", "status", "url", "parar", "novo-segredo", "testar-emissor"):
+    pp = sub.add_parser("painel", help="abre o painel local · painel parear URL CODIGO (Painel da Casa) · painel estado")
+    pp.add_argument("acao", nargs="?", choices=["parear", "estado"])
+    pp.add_argument("url", nargs="?")
+    pp.add_argument("codigo", nargs="?")
+    pp.add_argument("--nome")
+    for n in ("copiar", "pausar", "retomar", "status", "url", "parar", "novo-segredo", "testar-emissor"):
         sub.add_parser(n)
     pb = sub.add_parser("inicio-automatico", help="abre o serviço quando o celular liga (app Termux:Boot)")
     pb.add_argument("acao", nargs="?", default="status", choices=["sim", "nao", "status"])
@@ -1042,6 +1091,8 @@ def main(argv=None):
         return exec_cli(a)
     if cmd in ("armar", "desarmar"):
         return armar_cli(cmd, getattr(a, "horas", None))
+    if cmd == "painel" and getattr(a, "acao", None) in ("parear", "estado"):
+        return painel_cli(a)
     if cmd == "atualizar":
         return atualizar(a.ref)
     if cmd == "reverter":

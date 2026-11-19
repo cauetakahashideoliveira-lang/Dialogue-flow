@@ -519,7 +519,7 @@ class Servico:
 
     def executar_capacidade(self, nome, argumentos=None) -> dict:
         from .seguranca import armado
-        pol = self.exec.politica.ler()
+        pol = self.exec.politica.efetiva()
         if pol["travado"] or not armado(pol):  # o guardião do MCP já barra; aqui vale para qualquer outro caminho
             raise ErroUso("capacidades exigem o sistema armado e destravado: arme no celular (widget “Armar "
                           "Controle IR” ou controle-ir armar)")

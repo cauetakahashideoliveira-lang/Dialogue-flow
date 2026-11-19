@@ -1,0 +1,19 @@
+-- Painel da Casa (D1). Valores secretos nunca ficam em claro: tokens e códigos são guardados como SHA-256.
+CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS credenciais (
+  id TEXT PRIMARY KEY, chave TEXT NOT NULL, contador INTEGER NOT NULL DEFAULT 0, transportes TEXT,
+  nome TEXT NOT NULL, criada INTEGER NOT NULL, ultimo_uso INTEGER, revogada INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS desafios (id TEXT PRIMARY KEY, desafio TEXT NOT NULL, tipo TEXT NOT NULL,
+  sessao TEXT, expira INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS sessoes (hash TEXT PRIMARY KEY, credencial TEXT NOT NULL, criada INTEGER NOT NULL,
+  ultimo INTEGER NOT NULL, passkey_em INTEGER NOT NULL, expira INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS pareamentos (hash TEXT PRIMARY KEY, expira INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS aparelhos (id TEXT PRIMARY KEY, nome TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+  criado INTEGER NOT NULL, ultimo_contato INTEGER, versao TEXT, aplicado_seq INTEGER NOT NULL DEFAULT 0,
+  aplicado_em INTEGER, revogado INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS estado (aparelho TEXT PRIMARY KEY, seq INTEGER NOT NULL, armado_ate INTEGER NOT NULL,
+  travado INTEGER NOT NULL, desarmado_permite TEXT NOT NULL, motivo TEXT, alterado_por TEXT, alterado_em INTEGER);
+CREATE TABLE IF NOT EXISTS eventos (id INTEGER PRIMARY KEY AUTOINCREMENT, quando INTEGER NOT NULL,
+  origem TEXT NOT NULL, tipo TEXT NOT NULL, dados TEXT, hash TEXT NOT NULL, hash_anterior TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS tentativas (chave TEXT PRIMARY KEY, n INTEGER NOT NULL, janela INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS convites (hash TEXT PRIMARY KEY, expira INTEGER NOT NULL);

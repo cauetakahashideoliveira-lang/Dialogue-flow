@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795102750.4839368,
-    "seen": 1795102753.0493717,
-    "ast_hash": "56183608b381736fd9e6b67fc73659d5",
+    "mtime": 1795103066.3740895,
+    "seen": 1795103068.7329712,
+    "ast_hash": "5fd52e57ec75bb956e71f6a6f8e6ff65",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795102750.500689,
-    "seen": 1795102753.050489,
-    "ast_hash": "9f8485ebd03e3e1df3f256adfa316340",
+    "mtime": 1795103066.389617,
+    "seen": 1795103068.7340608,
+    "ast_hash": "153b230a1c48facea7736717c0be0ad8",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -432,9 +432,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/java/controleir/Tela.java": {
-    "mtime": 1795102702.690977,
-    "seen": 1795102753.0493019,
-    "ast_hash": "4499ee4a6edc2058f2a2cc36bfc2a047",
+    "mtime": 1795103027.1864066,
+    "seen": 1795103068.7328777,
+    "ast_hash": "d96813d789e08f2ac072d3eba3cda501",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

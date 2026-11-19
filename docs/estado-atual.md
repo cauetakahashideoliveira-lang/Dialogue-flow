@@ -41,6 +41,12 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Toques direto no gerenciador de entrada (1.0.40):** com a 1.0.39 o Sudoku (51 casas, 102 toques) caiu
+  para 68 ms/toque, não ~30: a UiAutomation chama `syncInputTransactions(waitForAnimations=true)` antes/depois de
+  cada evento e o app anima a cada número. Agora a leva injeta por `InputManagerGlobal`/`InputManager.injectInputEvent`
+  (como o scrcpy; o shell tem INJECT_EVENTS), assíncrono, e só o último toque espera o app consumir; se o sistema
+  recusar, volta para a UiAutomation. No teste, um anúncio jogável sem botão de fechar travou o app: a linha do
+  tempo mostrou quando surgiu; foi fechado com `am force-stop` pelo Shizuku (sem tocar no anúncio).
 - **19/11 — Toques de leva assíncronos (1.0.39):** teste com a 1.0.38: Sudoku médio novo 39/39 sem erros, 78 toques
   em 7,0 s (89 ms cada, porque cada evento esperava o app confirmar). Agora a leva entrega à fila de entrada sem
   esperar (a ordem é mantida), com 12 ms de pressão; só o último toque espera a confirmação.

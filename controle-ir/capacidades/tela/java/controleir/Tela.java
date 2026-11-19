@@ -391,12 +391,43 @@ public class Tela {
         evento(u, t, MotionEvent.ACTION_UP, x, y);
     }
 
-    /** Toque de leva: sem esperar a confirmação do app (a fila preserva a ordem); só o último espera (sync). */
+    /** Toque de leva: direto no gerenciador de entrada (sem a UiAutomation, que espera as animações do app a cada
+     *  evento), sem esperar a confirmação (a fila preserva a ordem); só o último espera o app consumir. */
     static void tocarLeva(UiAutomation u, int x, int y, boolean ultimo) {
         long t = SystemClock.uptimeMillis();
-        evento(u, t, MotionEvent.ACTION_DOWN, x, y, false);
+        direto(u, t, MotionEvent.ACTION_DOWN, x, y, false);
         SystemClock.sleep(LEVA_MS);
-        evento(u, t, MotionEvent.ACTION_UP, x, y, ultimo);
+        direto(u, t, MotionEvent.ACTION_UP, x, y, ultimo);
+    }
+
+    static Object entrada;  // InputManagerGlobal (Android 14+) ou InputManager
+    static Method injetar;
+    static boolean semDireto = false;
+
+    static void direto(UiAutomation u, long desce, int acao, float x, float y, boolean esperar) {
+        if (!semDireto) {
+            try {
+                if (injetar == null) {
+                    try {
+                        Class<?> g = Class.forName("android.hardware.input.InputManagerGlobal");
+                        entrada = g.getMethod("getInstance").invoke(null);
+                    } catch (Throwable t) {
+                        Class<?> g = Class.forName("android.hardware.input.InputManager");
+                        entrada = g.getMethod("getInstance").invoke(null);
+                    }
+                    injetar = entrada.getClass().getMethod("injectInputEvent", android.view.InputEvent.class, int.class);
+                }
+                MotionEvent e = MotionEvent.obtain(desce, SystemClock.uptimeMillis(), acao, x, y, 0);
+                e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+                Object ok = injetar.invoke(entrada, e, esperar ? 2 : 0);  // 2 = esperar o app consumir; 0 = assíncrono
+                e.recycle();
+                if (Boolean.TRUE.equals(ok)) return;
+                semDireto = true;  // recusado (ex.: sem permissão de injetar): daqui em diante, pela UiAutomation
+            } catch (Throwable t) {
+                semDireto = true;  // sem o caminho direto neste Android: fica a UiAutomation
+            }
+        }
+        evento(u, desce, acao, x, y, esperar);
     }
 
     static final int LEVA_MS = 12;  // pressão de cada toque da leva (qualquer app reconhece um toque a partir de ~5 ms)

@@ -41,6 +41,11 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Agente de tela mais rápido (1.0.30):** `acao=sequencia` com `passos` (vários toques, digitar,
+  teclas, esperas e `esperar_texto` numa chamada; os passos sem leitura de tela vão num só script ao Shizuku);
+  `ver` faz dump + captura + foco + tela acesa numa viagem; ações respondem só o app (ver_depois=elementos|imagem
+  quando precisar); `recorte=[x,y,l,a]`; elementos sem campos vazios. Pela conversa atual use
+  executar_capacidade(nome="tela", argumentos={...}) — o esquema novo do cap_tela só aparece em conversa nova.
 - **19/11 — Shizuku congelando em 2º plano (HyperOS):** rish dava timeout com o app do Shizuku em segundo
   plano. Feito pelo rish, para moe.shizuku.privileged.api, com.termux e com.termux.api: `dumpsys deviceidle whitelist +pkg`,
   `cmd appops set pkg RUN_IN_BACKGROUND|RUN_ANY_IN_BACKGROUND allow`, `am set-standby-bucket pkg active` (ficou 5 =

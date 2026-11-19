@@ -1,19 +1,84 @@
 {
  "nome": "tela",
  "titulo": "Agente de tela (ver e tocar no celular)",
- "descricao": "Vê e opera a tela do celular pelo Shizuku (rish), sem root. acao=ver: devolve a captura de tela como imagem e a lista dos elementos visíveis (texto, id, se é clicável, centro x,y). acao=tocar: toca em x,y ou no elemento cujo texto/descrição contém 'texto'. acao=digitar: digita 'texto' no campo em foco. acao=tecla: voltar, inicio, recentes, enter, apagar. acao=deslizar: de x,y até x2,y2. acao=abrir: abre o app 'pacote'. Recusa tocar/digitar em apps de banco, pagamento e senhas (lista em ~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução e do rish exportado para o Termux.",
+ "descricao": "Vê e opera a tela do celular pelo Shizuku (rish), sem root. EFICIENTE: use acao=sequencia com 'passos' para vários toques/digitações/esperas numa chamada só (ex.: [{\"tocar\":[540,1200]},{\"esperar_texto\":\"OK\",\"ate\":8},{\"tocar\":\"OK\"},{\"tocar\":[[100,200],[300,400]],\"intervalo\":0.05},{\"digitar\":\"oi\"},{\"tecla\":\"voltar\"}]); tocar/digitar/tecla/deslizar/abrir devolvem só o app em foco, a menos que ver_depois='elementos' ou 'imagem'. acao=ver: elementos visíveis (texto, id, clicável, centro x,y) e captura; elementos=false só imagem; recorte=[x,y,l,a] em pixels reais para ver um pedaço com nitidez. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução.",
  "executar": "principal.py",
  "efeito": "acao",
- "acessos": ["Shizuku/rish (shell do adb: screencap, uiautomator, input, monkey)", "ffmpeg (reduzir a captura)", "~/.controle-ir/tela (temporário)"],
- "tempo_limite": 45,
- "entrada": {"type": "object", "properties": {
-   "acao": {"type": "string", "description": "ver | tocar | digitar | tecla | deslizar | abrir | estado"},
-   "x": {"type": "integer"}, "y": {"type": "integer"}, "x2": {"type": "integer"}, "y2": {"type": "integer"},
-   "texto": {"type": "string", "description": "tocar: texto do elemento; digitar: o que digitar"},
-   "tecla": {"type": "string", "description": "voltar | inicio | recentes | enter | apagar"},
-   "pacote": {"type": "string", "description": "abrir: nome do pacote, ex.: com.android.settings"},
-   "imagem": {"type": "boolean", "description": "ver: incluir a captura (padrão true)"},
-   "largura": {"type": "integer", "description": "ver: largura da captura, 320–1080 (padrão 720)"},
-   "esperar": {"type": "number", "description": "segundos para esperar depois de agir, antes de ver de novo (padrão 0)"}
- }, "required": ["acao"], "additionalProperties": false}
+ "acessos": [
+  "Shizuku/rish (shell do adb: screencap, uiautomator, input, monkey)",
+  "ffmpeg (reduzir a captura)",
+  "~/.controle-ir/tela (temporário)"
+ ],
+ "tempo_limite": 150,
+ "entrada": {
+  "type": "object",
+  "properties": {
+   "acao": {
+    "type": "string",
+    "description": "ver | tocar | digitar | tecla | deslizar | abrir | sequencia | estado"
+   },
+   "x": {
+    "type": "integer"
+   },
+   "y": {
+    "type": "integer"
+   },
+   "x2": {
+    "type": "integer"
+   },
+   "y2": {
+    "type": "integer"
+   },
+   "texto": {
+    "type": "string",
+    "description": "tocar: texto do elemento; digitar: o que digitar"
+   },
+   "tecla": {
+    "type": "string",
+    "description": "voltar | inicio | recentes | enter | apagar"
+   },
+   "pacote": {
+    "type": "string",
+    "description": "abrir: nome do pacote, ex.: com.android.settings"
+   },
+   "imagem": {
+    "type": "boolean",
+    "description": "ver: incluir a captura (padrão true)"
+   },
+   "largura": {
+    "type": "integer",
+    "description": "ver: largura da captura, 320–1080 (padrão 720)"
+   },
+   "esperar": {
+    "type": "number",
+    "description": "segundos para esperar depois de agir (com ver_depois)"
+   },
+   "passos": {
+    "type": "array",
+    "items": {
+     "type": "object"
+    },
+    "description": "sequencia: lista de passos (até 300)"
+   },
+   "ver_depois": {
+    "type": "string",
+    "description": "nada | elementos | imagem (depois de agir; padrão nada)"
+   },
+   "elementos": {
+    "type": "boolean",
+    "description": "ver: incluir a lista de elementos (padrão true)"
+   },
+   "recorte": {
+    "type": "array",
+    "items": {
+     "type": "integer"
+    },
+    "description": "ver: [x, y, largura, altura] em pixels reais"
+   }
+  },
+  "required": [
+   "acao"
+  ],
+  "additionalProperties": false
+ }
 }

@@ -221,53 +221,239 @@ def dump_ui():
     return ""
 
 
-def captura(largura):
-    """screencap grava o PNG na pasta de troca; o ffmpeg reduz para JPEG (≤110 KB). Sem imagem: (None, None)."""
-    png = os.path.join(_pasta_troca(), f"tela-{os.getpid()}.png")
+def _jpeg(png, largura, recorte=None):
+    """PNG da captura → JPEG em base64 (≤110 KB), com recorte opcional [x, y, l, a] em pixels reais."""
     os.makedirs(TMP, exist_ok=True)
-    jpg = os.path.join(TMP, "tela.jpg")
-    try:
-        rish(f"screencap -p {shlex.quote(png)}", timeout=20)
+    jpg = os.path.join(TMP, f"tela-{os.getpid()}-{time.monotonic_ns()}.jpg")  # nome único: a transmissão ao
+    try:                                                                          # vivo captura ao mesmo tempo
         try:
             with open(png, "rb") as f:
                 if not f.read(8).startswith(b"\x89PNG"):
-                    return None, None
+                    return None
         except OSError:
-            return None, None
+            return None
+        filtro = f"scale='min({largura},iw)':-2"
+        if recorte:
+            x, y, l, a = (max(0, int(v)) for v in recorte)
+            filtro = f"crop={l}:{a}:{x}:{y}," + filtro
         for q in (6, 10, 16):
-            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", png, "-vf", f"scale='min({largura},iw)':-2",
-                            "-q:v", str(q), jpg], capture_output=True, timeout=30, check=False)
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", png, "-vf", filtro, "-q:v", str(q), jpg],
+                           capture_output=True, timeout=30, check=False)
             if os.path.exists(jpg) and os.path.getsize(jpg) <= 110_000:
                 break
         if not os.path.exists(jpg):
-            return None, None
+            return None
         with open(jpg, "rb") as f:
-            return base64.b64encode(f.read()).decode(), largura
+            return base64.b64encode(f.read()).decode()
     finally:
-        _apagar(png, jpg)
+        _apagar(jpg)
 
 
-def ver(imagem=True, largura=720):
-    out = {"app": foco(), "tela_acesa": tela_acesa()}
-    tam, _, _ = rish("wm size")
-    m = re.search(r"(\d+)x(\d+)", tam.splitlines()[-1] if tam else "")
-    out["resolucao"] = f"{m.group(1)}x{m.group(2)}" if m else None
-    els = elementos(dump_ui())
-    out["elementos"] = els
-    out["nota"] = "coordenadas x,y em pixels da tela real (use-as em tocar); a imagem é reduzida"
-    if imagem:
-        b64, w = captura(largura)
-        if b64:
-            out["_imagem"] = {"mime": "image/jpeg", "base64": b64}
-            out["largura_imagem"] = w
-        else:
-            out["imagem_erro"] = ("screencap não devolveu imagem (app com proteção de tela mostra preto, ou o "
-                                  "Termux sem acesso ao armazenamento: rode termux-setup-storage)")
+def captura(largura):
+    """Só a imagem (usada pela transmissão ao vivo da Central). Sem imagem: (None, None)."""
+    png = os.path.join(_pasta_troca(), f"tela-{os.getpid()}-{time.monotonic_ns()}.png")
+    try:
+        rish(f"screencap -p {shlex.quote(png)}", timeout=20)
+        b64 = _jpeg(png, largura)
+        return (b64, largura) if b64 else (None, None)
+    finally:
+        _apagar(png)
+
+
+def resolucao_png(png):
+    try:
+        with open(png, "rb") as f:
+            cab = f.read(24)
+        return f"{int.from_bytes(cab[16:20], 'big')}x{int.from_bytes(cab[20:24], 'big')}" if cab[:4] == b"\x89PNG" else None
+    except OSError:
+        return None
+
+
+def compactos(els):
+    """Elementos sem campos vazios (menos texto na resposta)."""
+    out = []
+    for e in els:
+        d = {k: e[k] for k in ("texto", "desc", "id") if e.get(k)}
+        if e.get("clicavel"):
+            d["clicavel"] = True
+        if e.get("editavel"):
+            d["editavel"] = True
+        d["x"], d["y"] = e["x"], e["y"]
+        out.append(d)
     return out
+
+
+def observar(com_elementos=True, com_imagem=True):
+    """UMA chamada ao Shizuku: dump da interface e captura em paralelo, app em foco e tela acesa.
+    Devolve (xml, caminho_png, saída_dumpsys) — o PNG fica na pasta de troca; quem chama apaga."""
+    pasta = _pasta_troca()
+    nome = f"obs-{os.getpid()}-{time.monotonic_ns()}"
+    xml, png = os.path.join(pasta, nome + ".xml"), os.path.join(pasta, nome + ".png")
+    partes = []
+    if com_elementos:
+        partes.append(f"(uiautomator dump {shlex.quote(xml)} > /dev/null 2>&1) &")
+    if com_imagem:
+        partes.append(f"screencap -p {shlex.quote(png)}")
+    partes += ["dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'", "dumpsys power | grep -m1 mWakefulness=", "wait"]
+    try:
+        info, _, _ = rish("\n".join(partes), timeout=30)
+        texto = _ler(xml) or "" if com_elementos else ""
+    finally:
+        _apagar(xml)
+    if com_elementos and not texto.strip().startswith("<?xml"):
+        texto = dump_ui()  # o dump às vezes falha na primeira (tela em animação)
+    return texto, (png if com_imagem else None), info
+
+
+def ver(imagem=True, largura=720, com_elementos=True, recorte=None):
+    xml, png, info = observar(com_elementos, imagem)
+    out = {"app": app_em_foco(info), "tela_acesa": "Awake" in (info or "")}
+    try:
+        if png:
+            out["resolucao"] = resolucao_png(png)
+        if com_elementos:
+            out["elementos"] = compactos(elementos(xml))
+            out["nota"] = "coordenadas x,y em pixels da tela real (use-as em tocar); a imagem é reduzida"
+        if imagem:
+            b64 = _jpeg(png, largura, recorte)
+            if b64:
+                out["_imagem"] = {"mime": "image/jpeg", "base64": b64}
+                out["largura_imagem"] = largura
+                if recorte:
+                    out["recorte"] = list(recorte)
+            else:
+                out["imagem_erro"] = ("screencap não devolveu imagem (app com proteção de tela mostra preto, ou o "
+                                      "Termux sem acesso ao armazenamento: rode termux-setup-storage)")
+    finally:
+        if png:
+            _apagar(png)
+    return out
+
+
+def _ver_depois(a, padrao="nada"):
+    """Depois de agir: 'nada' (só o app), 'elementos' (lista compacta) ou 'imagem' (lista + captura)."""
+    modo = a.get("ver_depois") or ("imagem" if a.get("imagem") else padrao)
+    if modo == "nada":
+        return {"app": foco()}
+    return {"tela": ver(modo == "imagem", max(320, min(int(a.get("largura", 720)), 1080)), True, a.get("recorte"))}
+
+
+# --------------------------------------------------------------------------- sequência (vários passos, 1 viagem)
+MAX_PASSOS = 300
+
+
+def _regex_bloqueados(lista):
+    alt = "|".join(re.escape(b) for b in lista if re.match(r"^[\w.]+$", b))
+    return f"[ {{/]({alt})[A-Za-z0-9_.]*/" if alt else None
+
+
+def _linhas_do_passo(p):
+    """Linhas de shell de um passo que não depende de ler a tela. None = passo que precisa da tela (texto)."""
+    if "tocar" in p:
+        alvo = p["tocar"]
+        if isinstance(alvo, str):
+            return None
+        pontos = alvo if alvo and isinstance(alvo[0], (list, tuple)) else [alvo]
+        pausa = float(p.get("intervalo", 0.05))
+        linhas = []
+        for x, y in pontos:
+            linhas.append(f"input tap {int(x)} {int(y)} || exit 3")
+            if pausa > 0:
+                linhas.append(f"sleep {min(pausa, 5):.2f}")
+        return linhas
+    if "deslizar" in p:
+        v = [int(n) for n in p["deslizar"]]
+        return [f"input swipe {v[0]} {v[1]} {v[2]} {v[3]} {v[4] if len(v) > 4 else 300} || exit 3"]
+    if "digitar" in p:
+        texto, _ = escapar_input_text(str(p["digitar"]))
+        return [f"input text {shlex.quote(texto)} || exit 3"] if texto else []
+    if "tecla" in p:
+        cod = TECLAS.get(normalizar(p["tecla"]))
+        if cod is None:
+            raise ValueError(f"tecla deve ser uma de: {', '.join(TECLAS)}")
+        return [f"input keyevent {cod} || exit 3"]
+    if "esperar" in p:
+        return [f"sleep {min(float(p['esperar']), 10):.2f}"]
+    if "abrir" in p:
+        pac = str(p["abrir"])
+        if not re.match(r"^[A-Za-z][\w.]{2,120}$", pac):
+            raise ValueError("pacote inválido")
+        return [f"monkey -p {pac} -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1 || exit 4", "sleep 1"]
+    if "esperar_texto" in p or "esperar_sumir" in p:
+        return None
+    raise ValueError(f"passo desconhecido: {json.dumps(p, ensure_ascii=False)[:80]}")
+
+
+def _rodar_bloco(linhas, rx):
+    """Roda um bloco de passos numa só chamada ao Shizuku, conferindo antes se o app em foco é bloqueado."""
+    if not linhas:
+        return None
+    cab = []
+    if rx:
+        cab = ["f=$(dumpsys window | grep -m1 mCurrentFocus)",
+               f"if echo \"$f\" | grep -qiE {shlex.quote(rx)}; then echo \"BLOQUEADO $f\"; exit 9; fi"]
+    out, err, cod = rish("\n".join(cab + linhas), timeout=120)
+    if cod == 9:
+        return {"erro": "recusado: o app em foco está na lista de bloqueados (banco/pagamento/senha)",
+                "foco": app_em_foco(out)}
+    if _bloqueio_de_toque(out + err, cod):
+        return {"erro": _bloqueio_de_toque(out + err, cod)}
+    return None
+
+
+def sequencia(a):
+    passos = a.get("passos") or []
+    if not isinstance(passos, list) or not passos:
+        return {"erro": "informe passos: lista de {tocar:[x,y] | tocar:'texto' | tocar:[[x,y],...] | digitar | tecla | "
+                        "deslizar:[x,y,x2,y2] | esperar:s | esperar_texto:'...' | esperar_sumir:'...' | abrir:'pacote'}"}
+    if len(passos) > MAX_PASSOS:
+        return {"erro": f"no máximo {MAX_PASSOS} passos por sequência"}
+    rx = _regex_bloqueados(bloqueados())
+    bloco, feitos, t0 = [], 0, time.time()
+    for i, p in enumerate(passos):
+        if not isinstance(p, dict):
+            return {"erro": f"passo {i + 1} inválido", "feitos": feitos}
+        try:
+            linhas = _linhas_do_passo(p)
+        except (ValueError, TypeError, IndexError) as e:
+            return {"erro": f"passo {i + 1}: {e}", "feitos": feitos}
+        if linhas is not None:
+            bloco += linhas
+            feitos += 1
+            continue
+        erro = _rodar_bloco(bloco, rx)  # passo que depende da tela: roda o que acumulou e olha
+        bloco = []
+        if erro:
+            return {**erro, "feitos": feitos}
+        if "tocar" in p:
+            alvo = achar(elementos(dump_ui()), p["tocar"])
+            if not alvo:
+                return {"erro": f"passo {i + 1}: nenhum elemento com “{p['tocar']}” na tela", "feitos": feitos,
+                        "app": foco()}
+            bloco = [f"input tap {alvo['x']} {alvo['y']} || exit 3"]
+        else:
+            texto = p.get("esperar_texto") or p.get("esperar_sumir")
+            quer = "esperar_texto" in p
+            limite = time.time() + min(float(p.get("ate", 10)), 30)
+            while True:
+                presente = achar(elementos(dump_ui()), texto) is not None
+                if presente == quer:
+                    break
+                if time.time() > limite:
+                    return {"erro": f"passo {i + 1}: “{texto}” {'não apareceu' if quer else 'não sumiu'} a tempo",
+                            "feitos": feitos, "app": foco()}
+                time.sleep(0.4)
+        feitos += 1
+    erro = _rodar_bloco(bloco, rx)
+    if erro:
+        return {**erro, "feitos": feitos}
+    return {"feito": f"{feitos} passos em {time.time() - t0:.1f} s", **_ver_depois(a)}
 
 
 def agir(a):
     acao = a["acao"]
+    if acao == "sequencia":
+        return sequencia(a)
     app = foco()
     if acao in ("tocar", "digitar", "deslizar") and bloqueado(app, bloqueados()):
         return {"erro": f"recusado: o app em foco ({app}) está na lista de bloqueados (banco/pagamento/senha). "
@@ -284,7 +470,7 @@ def agir(a):
         out, err, cod = rish(f"input tap {int(x)} {int(y)}")
         if _bloqueio_de_toque(out + err, cod):
             return {"erro": _bloqueio_de_toque(out + err, cod)}
-        res = {"feito": f"toque em {int(x)},{int(y)}", "elemento": alvo}
+        res = {"feito": f"toque em {int(x)},{int(y)}", "elemento": compactos([alvo])[0] if alvo else None}
     elif acao == "digitar":
         texto, aviso = escapar_input_text(a.get("texto", ""))
         if not texto:
@@ -317,13 +503,12 @@ def agir(a):
             return {"erro": f"não consegui abrir {pac}: {erro.strip()[:200]}"}
         res = {"feito": f"abriu {pac}"}
     else:
-        return {"erro": "acao deve ser ver, tocar, digitar, tecla, deslizar, abrir ou estado"}
+        return {"erro": "acao deve ser ver, tocar, digitar, tecla, deslizar, abrir, sequencia ou estado"}
     espera = float(a.get("esperar") or 0)
     if espera > 0:
         time.sleep(min(espera, 10))
-        res["tela"] = ver(bool(a.get("imagem", True)), int(a.get("largura", 720)))
-    else:
-        res["app"] = foco()
+    # depois de agir: por padrão só o app em foco (rápido); "elementos" ou "imagem" quando pedido
+    res.update(_ver_depois(a, "elementos" if espera > 0 else "nada"))
     return res
 
 
@@ -332,12 +517,13 @@ def main():
     acao = a.get("acao")
     try:
         if acao == "estado":
-            out, _, _ = rish("id")
+            out, _, _ = rish("id; dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'; "
+                             "dumpsys power | grep -m1 mWakefulness=")
             r = {"rish": "ok" if "uid=2000" in out or "uid=0" in out else out.strip()[:120],
-                 "app": foco(), "tela_acesa": tela_acesa(), "ffmpeg": bool(shutil.which("ffmpeg"))}
+                 "app": app_em_foco(out), "tela_acesa": "Awake" in out, "ffmpeg": bool(shutil.which("ffmpeg"))}
         elif acao == "ver":
             largura = max(320, min(int(a.get("largura", 720)), 1080))
-            r = ver(bool(a.get("imagem", True)), largura)
+            r = ver(bool(a.get("imagem", True)), largura, bool(a.get("elementos", True)), a.get("recorte"))
         else:
             r = agir(a)
     except SemShizuku as e:

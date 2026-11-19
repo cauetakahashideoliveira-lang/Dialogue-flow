@@ -1672,6 +1672,65 @@ class TestTelaPorArquivo(unittest.TestCase):
             self.assertIn("Configurações de segurança", r["erro"], modo)
         self.assertEqual(self._sobras(), [])
 
+    def _dumpsys_falso(self, foco="com.android.settings"):
+        d = self.tmp / "bin" / "dumpsys"
+        d.write_text('case "$1" in window) echo "  mCurrentFocus=Window{1a2b u0 ${FOCO:-%s}/.Principal}";; '
+                     'power) echo "  mWakefulness=Awake";; esac\n' % foco)
+        d.chmod(0o755)
+
+    def test_sequencia_numa_viagem(self):
+        self._dumpsys_falso()
+        chamadas = []
+        original = self.m.rish
+        self.m.rish = lambda cmd, timeout=20: (chamadas.append(cmd), original(cmd, timeout))[1]
+        r = self.m.agir({"acao": "sequencia", "passos": [
+            {"tocar": [10, 20]}, {"tocar": [[1, 2], [3, 4]], "intervalo": 0}, {"tecla": "voltar"},
+            {"digitar": "oi mundo"}, {"esperar": 0.01}, {"esperar_texto": "Bluetooth", "ate": 2},
+            {"tocar": "bluetooth"}, {"deslizar": [1, 2, 3, 4]}]})
+        self.assertIn("8 passos", r["feito"])
+        log = self.registro.read_text().splitlines()
+        self.assertEqual(log, ["input tap 10 20", "input tap 1 2", "input tap 3 4", "input keyevent 4",
+                               "input text oi%smundo", "input tap 220 450", "input swipe 1 2 3 4 300"])
+        toques = [c for c in chamadas if "input " in c]
+        self.assertEqual(len(toques), 2)  # 5 passos de uma vez; o toque por texto precisou ler a tela antes
+        self.assertEqual(r["app"], "com.android.settings")
+        self.assertEqual(self._sobras(), [])
+
+    def test_sequencia_recusa_app_bloqueado_e_texto_ausente(self):
+        self._dumpsys_falso("com.nu.production")
+        r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [10, 20]}]})
+        self.assertIn("bloqueados", r["erro"])
+        self.assertFalse(self.registro.exists())  # nenhum toque saiu
+        self._dumpsys_falso()
+        r = self.m.agir({"acao": "sequencia", "passos": [{"esperar_texto": "Inexistente", "ate": 0.5}]})
+        self.assertIn("não apareceu", r["erro"])
+        self.assertIn("passo", self.m.agir({"acao": "sequencia", "passos": [{"pular": 1}]})["erro"])
+
+    def test_ver_em_uma_chamada_e_compacto(self):
+        self._dumpsys_falso()
+        if shutil.which("ffmpeg"):
+            png = self.tmp / "origem.png"
+            subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=blue:s=400x800", "-frames:v", "1",
+                            str(png)], check=True, capture_output=True)
+            sc = self.tmp / "bin" / "screencap"
+            sc.write_text(f'cp "{png}" "$2"\n')
+            sc.chmod(0o755)
+        chamadas = []
+        original = self.m.rish
+        self.m.rish = lambda cmd, timeout=20: (chamadas.append(cmd), original(cmd, timeout))[1]
+        r = self.m.ver(imagem=bool(shutil.which("ffmpeg")), largura=320, recorte=[0, 0, 200, 200])
+        self.assertEqual(len(chamadas), 1)  # dump, captura, foco e tela acesa numa viagem só
+        self.assertEqual((r["app"], r["tela_acesa"]), ("com.android.settings", True))
+        bt = [e for e in r["elementos"] if e.get("texto") == "Bluetooth"][0]
+        self.assertNotIn("classe", bt)
+        self.assertNotIn("desc", bt)  # vazio não vai na resposta
+        if shutil.which("ffmpeg"):
+            self.assertEqual(r["resolucao"], "400x800")
+            self.assertTrue(base64.b64decode(r["_imagem"]["base64"]).startswith(b"\xff\xd8"))
+        self.assertEqual(self._sobras(), [])
+        r2 = self.m.agir({"acao": "tecla", "tecla": "voltar"})  # sem ver_depois: resposta curta
+        self.assertEqual(set(r2), {"feito", "app"})
+
     def test_captura_por_arquivo(self):
         if not shutil.which("ffmpeg"):
             self.skipTest("ffmpeg ausente")

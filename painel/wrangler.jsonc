@@ -1,5 +1,5 @@
 {
-  // Painel da Casa: Worker + D1. Segredo obrigatório: CODIGO_INICIAL (Settings → Variables and Secrets),
+  // Central de Controle: Worker + D1. Segredo obrigatório: CODIGO_INICIAL (Settings → Variables and Secrets),
   // usado só para cadastrar a PRIMEIRA passkey. O banco D1 "painel" é criado sozinho no primeiro deploy.
   "name": "painel-casa",
   "main": "src/index.js",

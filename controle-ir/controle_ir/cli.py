@@ -346,7 +346,7 @@ def armar_cli(acao: str, horas: float | None = None) -> int:
 
 
 def painel_cli(a) -> int:
-    """Pareia com o Painel da Casa (Etapa 1) ou mostra o estado. Pareado, só o painel arma."""
+    """Pareia com a Central de Controle (Etapa 1) ou mostra o estado. Pareado, só o painel arma."""
     from . import painel
     from .execucao import Politica
     if a.acao == "parear":
@@ -1019,7 +1019,7 @@ def main(argv=None):
     p.add_argument("--simulado", action="store_true", help="sem emissor real (testes)")
     p.add_argument("--sem-tunel", action="store_true")
     p.add_argument("--fundo", action="store_true", help="sem console; saída em ~/.controle-ir/servico.log")
-    pp = sub.add_parser("painel", help="abre o painel local · painel parear URL CODIGO (Painel da Casa) · painel estado")
+    pp = sub.add_parser("painel", help="abre o painel local · painel parear URL CODIGO (Central de Controle) · painel estado")
     pp.add_argument("acao", nargs="?", choices=["parear", "estado"])
     pp.add_argument("url", nargs="?")
     pp.add_argument("codigo", nargs="?")

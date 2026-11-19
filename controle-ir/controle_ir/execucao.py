@@ -165,7 +165,7 @@ class Politica:
                 "desarmado_permite": p["desarmado_permite"],
                 "painel": {"pareado": True, "seq": p.get("painel_seq"), "so_pelo_painel": p.get("so_pelo_painel")}
                 if p.get("modo_painel") else None,
-                "como_mudar": ("pelo Painel da Casa (armar com a digital, desarmar, EMERGÊNCIA); no celular: "
+                "como_mudar": ("pela Central de Controle (armar com a digital, desarmar, EMERGÊNCIA); no celular: "
                                "controle-ir desarmar · controle-ir exec travar. Pelo conector: travar.")
                 if p.get("modo_painel") else
                               "só no celular: controle-ir armar [horas] · controle-ir desarmar · "

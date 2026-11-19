@@ -38,7 +38,7 @@ def armado(pol: dict, agora: float | None = None) -> bool:
 
 def permitido(ferramenta: str, pol: dict, agora: float | None = None) -> tuple[bool, str]:
     """Decide se a ferramenta MCP pode rodar agora. Devolve (ok, motivo). `pol` = Politica.efetiva()."""
-    como = "arme pelo Painel da Casa, com a digital" if pol.get("modo_painel") else COMO_ARMAR
+    como = "arme pela Central de Controle, com a digital" if pol.get("modo_painel") else COMO_ARMAR
     if ferramenta in SEMPRE:
         return True, "sempre"
     if pol.get("travado"):

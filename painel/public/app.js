@@ -1,4 +1,4 @@
-// Painel da Casa — interface. A digital (passkey) é pedida para entrar e de novo antes de aumentar poder.
+// Central de Controle — interface. A digital (passkey) é pedida para entrar e de novo antes de aumentar poder.
 const $ = id => document.getElementById(id);
 const { startRegistration, startAuthentication } = window.SimpleWebAuthnBrowser;
 let dados = null;

@@ -1,4 +1,4 @@
-"""Ligação do celular com o Painel da Casa (Etapa 1 de docs/seguranca.md).
+"""Ligação do celular com a Central de Controle (Etapa 1 de docs/seguranca.md).
 
 Pareado, o celular só fica ARMADO se o painel disser, num estado assinado (Ed25519) que o celular confere a cada
 leitura com a chave pública fixada no pareamento. A cada ~30 s ele busca o estado, confirma o que aplicou (o painel
@@ -81,7 +81,7 @@ _vistas_trava = threading.Lock()
 
 
 def verificar_requisicao(pasta, cabecalho: str | None, corpo: bytes, agora: float | None = None) -> bool:
-    """A chamada veio do Painel da Casa? Confere assinatura, horário (±90 s) e repetição (cada uma vale uma vez)."""
+    """A chamada veio da Central de Controle? Confere assinatura, horário (±90 s) e repetição (cada uma vale uma vez)."""
     cfg = ler(pasta)
     if not cfg or cfg.get("revogado") or not cabecalho or cabecalho.count(".") != 2:
         return False

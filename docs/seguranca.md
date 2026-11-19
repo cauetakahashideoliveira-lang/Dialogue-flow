@@ -51,7 +51,7 @@ mexer nos arquivos do próprio fiscal até a armação vencer. É a Etapa 1 que 
 
 ## 3. Etapa 1 — painel externo com passkey
 
-### 3a. Painel da Casa (1.0.24, implementada) — `painel/`
+### 3a. Central de Controle (1.0.24, implementada) — `painel/`
 
 Cloudflare Worker + D1 (`painel/src/index.js`, interface em `painel/public/`). O celular deixa de se armar
 sozinho: quem arma é o painel, com a digital.

@@ -1,8 +1,8 @@
 # Estado atual da instalação (19/11/2026)
 
 ## Resumo (fim do dia 19/11)
-- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.25**, pareado com o
-  Painel da Casa (só o painel arma, com a digital do POCO ou do iPad), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
+- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.27**, pareado com a
+  Central de Controle (só o painel arma, com a digital do POCO ou do iPad), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
   Controle IR").
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz. Catálogo: base + ampliado (Flipper-IRDB completa) = 9.380
   perfis, 94.407 sinais únicos, 1.776 marcas. (Termux precisou de `apt update && apt full-upgrade` no início.)
@@ -41,15 +41,17 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Nome geral (1.0.27):** “Painel da Casa” virou **Central de Controle** (o projeto é uma ferramenta
+  geral, não só da casa). O endereço `painel-casa.…workers.dev` ficou (trocar invalidaria as passkeys).
 - **19/11 — Etapa 1b (1.0.26 + PR #8): OAuth na borda.** Conector novo `https://<painel>/mcp` com login pela
   digital; o painel barra na borda o que o estado não permite e repassa o resto assinado; “só pelo painel” fecha a
   URL do ngrok. Falta: merge, instalar 1.0.26, adicionar o conector novo no claude.ai, testar, ligar “só pelo painel”.
 - **19/11 — Etapa 1a em uso:** passkeys do POCO e do iPad cadastradas; POCO pareado e na 1.0.25; armar é pelo
-  Painel da Casa (atalho na tela inicial), com a digital. Próximo: Etapa 1b (OAuth na borda, fim da URL secreta).
+  Central de Controle (atalho na tela inicial), com a digital. Próximo: Etapa 1b (OAuth na borda, fim da URL secreta).
 - **19/11 — Painel no ar (PR #6) e POCO pareado.** Na 1ª sincronização o celular tentou mandar o histórico
   antigo inteiro e o envio estourou o tempo (o pareamento valeu). 1.0.25 + PR #7: só o histórico novo, em lotes de
   30 numa transação, sem repetidos; Safari do iPad com as opções da passkey buscadas antes do toque.
-- **19/11 — Segurança, Etapa 1a (1.0.24): Painel da Casa** (`painel/`, Cloudflare Worker + D1): entrar com
+- **19/11 — Segurança, Etapa 1a (1.0.24): Central de Controle** (`painel/`, Cloudflare Worker + D1): entrar com
   passkey (digital), iPad por convite de uso único, celular pareado por código, armação/emergência/revogação por
   estado assinado (Ed25519) que o celular busca a cada 30 s, “aplicado × pendente”, histórico encadeado por hash.
   Teste E2E 27/27 (`painel/testes/e2e.cjs`). Falta publicar na conta Cloudflare do usuário e parear o POCO.

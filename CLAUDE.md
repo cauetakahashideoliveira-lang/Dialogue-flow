@@ -27,7 +27,7 @@
   os dados (`widgets`, `memoria`, `eventos`) ficam no banco do artefato (ferramenta ArtifactData).
 - **Segurança** (`docs/seguranca.md`): desde a 1.0.23 o sistema fica DESARMADO por padrão (pelo conector só
   infravermelho, consulta e travar); o dono arma no celular (widget “Armar Controle IR”). Não há como armar,
-  destravar ou aprovar pelo conector (autorizar só com o código do autenticador). **Painel da Casa** (`painel/`,
+  destravar ou aprovar pelo conector (autorizar só com o código do autenticador). **Central de Controle** (`painel/`,
   Cloudflare Worker): pareado (1.0.24+), só ele arma, com a digital; desde a 1.0.26 o conector pode entrar por ele
   (`https://<painel>/mcp`, OAuth com a digital, bloqueio na borda). Mudança no painel = PR que o dono aprova (merge);
   teste local: `painel/testes/e2e.cjs` com `wrangler dev` sem as variáveis de proxy.

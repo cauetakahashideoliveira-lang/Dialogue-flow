@@ -110,7 +110,9 @@ async function limitar(env, req, rota, max = 10) {  // limite simples por IP e m
 }
 
 // ---------------------------------------------------------------- chave de assinatura (Ed25519)
+let chavesCache = null;  // a chave não muda: guardada na memória do Worker (poupa 2 consultas por chamada)
 async function chaves(env) {
+  if (chavesCache) return chavesCache;
   let priv = await config(env, 'chave_privada'), pub = await config(env, 'chave_publica');
   if (!priv) {
     const par = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
@@ -120,7 +122,8 @@ async function chaves(env) {
     await definir(env, 'chave_publica', pub);
   }
   const chave = await crypto.subtle.importKey('pkcs8', isoBase64URL.toBuffer(priv), { name: 'Ed25519' }, false, ['sign']);
-  return { chave, pub };
+  chavesCache = { chave, pub };
+  return chavesCache;
 }
 async function sha256hex(bytes) {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -681,10 +684,12 @@ const mcpApi = {
     try { msg = JSON.parse(new TextDecoder().decode(bruto)); } catch {
       return rpc(null, { error: { code: -32700, message: 'JSON inválido' } }, 400);
     }
-    const ap = await env.DB.prepare(`SELECT a.id, x.mcp_url FROM aparelhos a JOIN extras x ON x.aparelho = a.id
+    // uma consulta só: aparelho, endereço e estado (antes eram três, em sequência)
+    const ap = await env.DB.prepare(`SELECT a.id, x.mcp_url, e.armado_ate, e.travado, e.desarmado_permite
+      FROM aparelhos a JOIN extras x ON x.aparelho = a.id LEFT JOIN estado e ON e.aparelho = a.id
       WHERE a.revogado = 0 AND x.mcp_url IS NOT NULL ORDER BY a.criado LIMIT 1`).first();
     if (!ap) return rpc(msg?.id, { error: { code: -32000, message: 'nenhum celular disponível: o celular ainda não informou o endereço ao painel' } }, 503);
-    const e = await estadoDe(env, ap.id);
+    const e = { armado_ate: ap.armado_ate || 0, travado: ap.travado || 0, desarmado_permite: ap.desarmado_permite || 'ir' };
     for (const m of Array.isArray(msg) ? msg : [msg]) {
       if (m?.method !== 'tools/call') continue;
       const nome = String(m.params?.name || '');

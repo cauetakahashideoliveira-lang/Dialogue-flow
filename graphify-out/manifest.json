@@ -162,15 +162,15 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795056057.1416206,
-    "seen": 1795056158.8514268,
-    "ast_hash": "5d443f510e510d2ef81b293ccf650ecd",
+    "mtime": 1795058298.1097538,
+    "seen": 1795058430.394173,
+    "ast_hash": "83ef89f88f2f1f08141f38632679cd54",
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795055648.6695964,
-    "seen": 1795056158.8514414,
-    "ast_hash": "3305c307c51e27f1d330dc25ff397812",
+    "mtime": 1795058305.1297543,
+    "seen": 1795058430.3941867,
+    "ast_hash": "2495a393849d77a2e78616fdaa092055",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -198,9 +198,9 @@
     "semantic_hash": "7c2a8bc963ad7b2f6e4fcc35c9a7e58e"
   },
   "docs/aparelhos/quarto/ar-do-quarto.md": {
-    "mtime": 1795052094.7573853,
-    "seen": 1795056158.8514388,
-    "ast_hash": "594233ffbdedee9ff2345c8d7b26be57",
+    "mtime": 1795056890.3096702,
+    "seen": 1795058430.3941844,
+    "ast_hash": "9315665b6acd2d38801fc19680248036",
     "semantic_hash": ""
   },
   "docs/aparelhos/quarto/tv-do-quarto.md": {
@@ -357,6 +357,12 @@
     "mtime": 1795055116.1215649,
     "seen": 1795056158.8514285,
     "ast_hash": "50b57d17609ef4b6b577297c9cedcbb5",
+    "semantic_hash": ""
+  },
+  "testes/test_god_mode.py": {
+    "mtime": 1795058195.2857478,
+    "seen": 1795058430.3941708,
+    "ast_hash": "dee5fa4581046da5652db2ef271d9737",
     "semantic_hash": ""
   }
 }

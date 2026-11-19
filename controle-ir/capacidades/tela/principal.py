@@ -56,6 +56,9 @@ def ler_bounds(b):
     return tuple(int(v) for v in m.groups()) if m else None
 
 
+_CORTE = [80]  # tamanho máximo de cada texto devolvido (texto_max na chamada: até 4000, p/ ler respostas longas)
+
+
 def elementos(xml_texto, limite=120):
     """Elementos úteis do dump do uiautomator: com texto, descrição ou clicáveis, com o centro para tocar."""
     try:
@@ -72,7 +75,7 @@ def elementos(xml_texto, limite=120):
         b = ler_bounds(a.get("bounds"))
         if not b or b[2] <= b[0] or b[3] <= b[1] or not (texto or desc or clicavel or editavel or rolavel or marcavel):
             continue
-        out.append({"texto": texto[:80], "desc": desc[:80], "id": a.get("resource-id", "").split("/")[-1],
+        out.append({"texto": texto[:_CORTE[0]], "desc": desc[:_CORTE[0]], "id": a.get("resource-id", "").split("/")[-1],
                     "classe": a.get("class", "").split(".")[-1], "clicavel": clicavel, "editavel": editavel,
                     "x": (b[0] + b[2]) // 2, "y": (b[1] + b[3]) // 2, "pacote": a.get("package", ""),
                     "l": b[2] - b[0], "a": b[3] - b[1],
@@ -2061,6 +2064,14 @@ def agir(a):
 
 def executar(a):
     """Ponto de entrada: o serviço chama direto (EM_PROCESSO) e o modo antigo passa por main()."""
+    _CORTE[0] = max(80, min(int(a.get("texto_max") or 80), 4000))
+    try:
+        return _executar(a)
+    finally:
+        _CORTE[0] = 80
+
+
+def _executar(a):
     acao = a.get("acao")
     try:
         if acao == "estado":

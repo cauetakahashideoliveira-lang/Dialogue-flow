@@ -186,6 +186,10 @@
    "mostrar": {
     "type": "boolean",
     "description": "grade: devolver a grade lida mesmo com sucesso"
+   },
+   "texto_max": {
+    "type": "integer",
+    "description": "tamanho máximo de cada texto lido (padrão 80, até 4000: ler respostas e artigos longos)"
    }
   },
   "required": [

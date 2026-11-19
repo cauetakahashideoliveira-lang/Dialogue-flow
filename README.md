@@ -66,7 +66,8 @@ Para economizar bateria, deixe o serviço desligado e ligue só quando for usar:
 
 **Ligar** abre o serviço em segundo plano e avisa "Controle IR ligado" na tela; **Desligar** encerra tudo e solta o
 *wake lock* (o que mais gasta bateria). A notificação "Controle IR ativo" também tem o botão **Desligar**.
-No terminal: `controle-ir ligar` / `controle-ir desligar`. Com o serviço desligado o Claude não alcança o celular:
+No terminal: `controle-ir ligar` / `controle-ir desligar`.
+Outros atalhos criados junto: **Modo autonomo**, **Modo cauteloso** e **Travar** (freio), além de **Reverter**. Com o serviço desligado o Claude não alcança o celular:
 ligar precisa ser no celular.
 
 ### Início automático quando o celular liga (Termux:Boot)

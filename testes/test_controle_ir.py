@@ -1003,6 +1003,9 @@ class TestSegundoPlano(unittest.TestCase):
         self.assertTrue(desligar.read_text().rstrip().endswith(" desligar"))
         for f in (ligar, desligar, tarefas, tarefas.parent):
             self.assertEqual(f.stat().st_mode & 0o777, 0o700)
+        self.assertTrue((tarefas / "Modo autonomo Controle IR").read_text().rstrip().endswith("exec modo autonomo"))
+        self.assertTrue((tarefas / "Travar Controle IR").read_text().rstrip().endswith("exec travar"))
+        self.assertTrue((tarefas / "Modo cauteloso Controle IR").exists())
         self.assertIn("já estava desligado", self.cli("desligar")[1])
         self.assertIn("desligar: pedido", (self.pasta / "servico.log").read_text())  # rastro mesmo sem serviço
         p = subprocess.Popen([sys.executable, "-m", "controle_ir", "ligar"], env=self.env, stdin=subprocess.DEVNULL,

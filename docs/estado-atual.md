@@ -5,6 +5,9 @@
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
+- **19/11:** autoatualização confirmada no POCO (`controle-ir atualizar --ref` → 1.0.13 sozinho); widget
+  Ligar/Desligar confirmado na 1.0.13 (reinício 21:06 → 21:08). Usuário ligou o **modo autônomo**.
+  1.0.14: atalhos do widget Modo autonomo, Modo cauteloso e Travar.
 - **19/11:** celular atualizado para a **1.0.12** (aparelhos e catálogo mantidos; confirmado por `consultar`). O
   atalho Ligar do widget não subiu o serviço e não deixou registro; o serviço sobe com `controle-ir` no Termux.
   A 1.0.13 faz o `ligar` registrar desde o início e mostrar a falha na tela. Sessões antigas do Claude não

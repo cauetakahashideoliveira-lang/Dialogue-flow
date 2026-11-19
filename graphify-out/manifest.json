@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795046625.5632296,
-    "seen": 1795046670.84599,
-    "ast_hash": "3af28132d35f61b268d734559e7d96d7",
+    "mtime": 1795047075.8444312,
+    "seen": 1795047113.978496,
+    "ast_hash": "df94030ef2b64084e5d0cd8d36d29d18",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -24,9 +24,9 @@
     "semantic_hash": "f663f17f7f72ef3d2bf1b48b8afa022b"
   },
   "controle-ir/controle_ir/cli.py": {
-    "mtime": 1795046625.5574715,
-    "seen": 1795046670.845997,
-    "ast_hash": "19fe00221f0a6909f482d945e47c665e",
+    "mtime": 1795047075.8371124,
+    "seen": 1795047113.9785047,
+    "ast_hash": "e8411f74dac6da2820a4248d6eba26be",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/controle.py": {
@@ -102,9 +102,9 @@
     "semantic_hash": "60460a62d7f954e6223f31b43b81e74e"
   },
   "controle-ir/instalar.sh": {
-    "mtime": 1795044195.9206135,
-    "seen": 1795044742.2368164,
-    "ast_hash": "f72075d10b38c12a60870023e62d652c",
+    "mtime": 1795047075.8378508,
+    "seen": 1795047113.978525,
+    "ast_hash": "d6ff4707c6445a9045d97172efc27540",
     "semantic_hash": ""
   },
   "ferramentas/construir_catalogo.py": {
@@ -126,15 +126,15 @@
     "semantic_hash": "7412aa1ac0ae2377aea28c4b62ac429f"
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1795046625.5580716,
-    "seen": 1795046670.8460178,
-    "ast_hash": "2ea43b0177562b76b71db43a064f0430",
+    "mtime": 1795047075.8382978,
+    "seen": 1795047113.9785316,
+    "ast_hash": "d8615fca9913fd1f8e14ce4278d50be2",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795045903.6321886,
-    "seen": 1795045933.369627,
-    "ast_hash": "04e0bd2f2ce6780248337bfbba0288f9",
+    "mtime": 1795047111.5128555,
+    "seen": 1795047113.9785347,
+    "ast_hash": "dcee1866bea5b5cee09ef94bfa9a77d9",
     "semantic_hash": ""
   },
   "controle-ir/LICENCAS/Flipper-IRDB-CC0.txt": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795046664.2131653,
-    "seen": 1795046670.8460302,
-    "ast_hash": "f8351dfb8771761bb7b7f9d9f0488c18",
+    "mtime": 1795047111.513574,
+    "seen": 1795047113.9785476,
+    "ast_hash": "1762cbd3f2d8f878bc95727b167956c1",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {

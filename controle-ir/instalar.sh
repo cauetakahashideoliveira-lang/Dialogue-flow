@@ -86,7 +86,7 @@ elif [ -t 0 ]; then
   esac
 fi
 
-controle-ir atalhos --silencioso && ok "atalhos “Ligar/Desligar Controle IR” prontos para o Termux:Widget"
+controle-ir atalhos --silencioso && ok "atalhos do Termux:Widget prontos (Ligar, Desligar, Reverter, Modo autonomo, Modo cauteloso, Travar)"
 
 if [ -n "${CONTROLE_IR_SEM_INICIAR:-}" ]; then
   ok "instalado; o serviço será aberto em seguida pela atualização"

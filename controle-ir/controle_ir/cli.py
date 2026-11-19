@@ -234,6 +234,9 @@ def inicio_automatico(acao: str, silencioso: bool = False) -> int:
 
 
 ATALHOS = {"Ligar Controle IR": "ligar", "Desligar Controle IR": "desligar"}
+MODOS_WIDGET = {"Modo autonomo Controle IR": "exec modo autonomo",
+                "Modo cauteloso Controle IR": "exec modo cauteloso",
+                "Travar Controle IR": "exec travar"}
 
 # Só shell: funciona mesmo se uma atualização quebrar o Python do controle-ir.
 REVERTER_SH = """# Volta para a versão anterior do controle-ir (use se uma atualização cortar o acesso)
@@ -263,6 +266,10 @@ def criar_atalhos(silencioso: bool = False) -> int:
                      + ("termux-wake-lock\n" if acao == "ligar" else "") + f"exec \"{cli}\" {acao}\n")
               for nome, acao in ATALHOS.items()}
     corpos["Reverter Controle IR"] = f"#!{PREFIXO_TERMUX}/bin/sh\n" + REVERTER_SH
+    # modos de autonomia e o freio, a um toque (o consentimento continua físico: é o celular na sua mão)
+    for nome, args in MODOS_WIDGET.items():
+        corpos[nome] = (f"#!{PREFIXO_TERMUX}/bin/sh\n# Atalho do Termux:Widget criado por: controle-ir atalhos\n"
+                        f"exec \"{cli}\" {args}\n")
     for nome, corpo in corpos.items():
         arq = pasta / nome
         tmp = arq.with_name(arq.name + ".novo")
@@ -271,7 +278,7 @@ def criar_atalhos(silencioso: bool = False) -> int:
         os.replace(tmp, arq)
     if silencioso:
         return 0
-    print("✔ Atalhos criados: “Ligar Controle IR” e “Desligar Controle IR”.")
+    print("✔ Atalhos criados: Ligar, Desligar, Reverter, Modo autonomo, Modo cauteloso e Travar (Controle IR).")
     print("  Para pôr na tela inicial (uma vez só):")
     print("  1. Instale o app Termux:Widget do F-Droid (mesma fonte do Termux).")
     print("  2. Toque e segure num espaço vazio da tela inicial → Widgets → Termux:Widget.")

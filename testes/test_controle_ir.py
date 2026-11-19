@@ -1236,5 +1236,62 @@ class TestImagemNoMcp(unittest.TestCase):
         s, _ = novo_servico(com_base=False)
         self.assertEqual({c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}.get("foto"), "ativa")
 
+
+class TestTela(unittest.TestCase):
+    """Agente de tela: leitura do dump do uiautomator, busca por texto, bloqueio de apps e escape do input text."""
+
+    XML = ('<?xml version="1.0" encoding="UTF-8"?><hierarchy rotation="0">'
+           '<node text="" class="android.widget.FrameLayout" package="com.android.settings" clickable="false" '
+           'bounds="[0,0][1080,2400]">'
+           '<node text="Wi-Fi" resource-id="android:id/title" class="android.widget.TextView" '
+           'package="com.android.settings" content-desc="" clickable="false" bounds="[40,300][400,360]"/>'
+           '<node text="" content-desc="Configurações de Wi-Fi" class="android.widget.LinearLayout" '
+           'package="com.android.settings" clickable="true" bounds="[0,280][1080,380]"/>'
+           '<node text="Bluetooth" class="android.widget.TextView" package="com.android.settings" clickable="true" '
+           'bounds="[40,420][400,480]"/>'
+           '<node text="" class="android.widget.EditText" package="com.android.settings" clickable="true" '
+           'resource-id="com.android.settings:id/busca" bounds="[40,100][1040,180]"/>'
+           '</node></hierarchy>')
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        caminho = Path(__file__).resolve().parent.parent / "controle-ir" / "capacidades" / "tela" / "principal.py"
+        spec = importlib.util.spec_from_file_location("tela_principal", caminho)
+        cls.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.m)
+
+    def test_elementos_e_busca(self):
+        els = self.m.elementos(self.XML)
+        self.assertEqual(len(els), 4)  # o FrameLayout vazio e não clicável fica de fora
+        bt = self.m.achar(els, "bluetooth")
+        self.assertEqual((bt["x"], bt["y"], bt["clicavel"]), (220, 450, True))
+        wifi = self.m.achar(els, "wi-fi")  # o texto não é clicável; prefere o igual e clicável (a descrição contém)
+        self.assertTrue(wifi["clicavel"] or wifi["texto"] == "Wi-Fi")
+        self.assertEqual(self.m.achar(els, "configuracoes de wi-fi")["y"], 330)  # sem acento também acha
+        self.assertEqual(self.m.achar(els, "busca")["editavel"], True)  # pelo id
+        self.assertIsNone(self.m.achar(els, "nada disso"))
+        self.assertEqual(self.m.elementos("isso não é xml"), [])
+
+    def test_bloqueio_de_apps_sensiveis(self):
+        lista = self.m.BLOQUEADOS_PADRAO
+        for p in ("com.nu.production", "br.com.bb.android", "com.itau.empresas", "com.x8bit.bitwarden"):
+            self.assertTrue(self.m.bloqueado(p, lista), p)
+        for p in ("com.android.settings", "com.google.android.youtube", None):
+            self.assertFalse(self.m.bloqueado(p, lista), p)
+
+    def test_input_text_e_foco(self):
+        self.assertEqual(self.m.escapar_input_text("oi mundo"), ("oi%smundo", None))
+        t, aviso = self.m.escapar_input_text("ação 50%")
+        self.assertEqual(t, "acao%s50\\%")
+        self.assertIsNotNone(aviso)
+        d = "  mCurrentFocus=Window{a1b2 u0 com.android.settings/com.android.settings.Settings}"
+        self.assertEqual(self.m.app_em_foco(d), "com.android.settings")
+        self.assertEqual(self.m.ler_bounds("[0,280][1080,380]"), (0, 280, 1080, 380))
+
+    def test_tela_embutida_e_ativa(self):
+        s, _ = novo_servico(com_base=False)
+        self.assertEqual({c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}.get("tela"), "ativa")
+
 if __name__ == "__main__":
     unittest.main()

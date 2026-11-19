@@ -1,0 +1,19 @@
+{
+ "nome": "tela",
+ "titulo": "Agente de tela (ver e tocar no celular)",
+ "descricao": "Vê e opera a tela do celular pelo Shizuku (rish), sem root. acao=ver: devolve a captura de tela como imagem e a lista dos elementos visíveis (texto, id, se é clicável, centro x,y). acao=tocar: toca em x,y ou no elemento cujo texto/descrição contém 'texto'. acao=digitar: digita 'texto' no campo em foco. acao=tecla: voltar, inicio, recentes, enter, apagar. acao=deslizar: de x,y até x2,y2. acao=abrir: abre o app 'pacote'. Recusa tocar/digitar em apps de banco, pagamento e senhas (lista em ~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução e do rish exportado para o Termux.",
+ "executar": "principal.py",
+ "efeito": "acao",
+ "acessos": ["Shizuku/rish (shell do adb: screencap, uiautomator, input, monkey)", "ffmpeg (reduzir a captura)", "~/.controle-ir/tela (temporário)"],
+ "tempo_limite": 45,
+ "entrada": {"type": "object", "properties": {
+   "acao": {"type": "string", "description": "ver | tocar | digitar | tecla | deslizar | abrir | estado"},
+   "x": {"type": "integer"}, "y": {"type": "integer"}, "x2": {"type": "integer"}, "y2": {"type": "integer"},
+   "texto": {"type": "string", "description": "tocar: texto do elemento; digitar: o que digitar"},
+   "tecla": {"type": "string", "description": "voltar | inicio | recentes | enter | apagar"},
+   "pacote": {"type": "string", "description": "abrir: nome do pacote, ex.: com.android.settings"},
+   "imagem": {"type": "boolean", "description": "ver: incluir a captura (padrão true)"},
+   "largura": {"type": "integer", "description": "ver: largura da captura, 320–1080 (padrão 720)"},
+   "esperar": {"type": "number", "description": "segundos para esperar depois de agir, antes de ver de novo (padrão 0)"}
+ }, "required": ["acao"], "additionalProperties": false}
+}

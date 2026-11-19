@@ -161,6 +161,28 @@ https://www.github.com/mjg59/python-broadlink.
    medido**, que é a base para testar, medir e ajustar sozinho.
 5. **ESP32 por USB/Wi-Fi** 🛒: dá ao celular os sentidos que lhe faltam (receber IR, BLE, sensores, RF 433 MHz).
 
+### Novas frentes (pesquisa de 19/11) — o que mais multiplica
+
+| Frente | O que destrava | Estado | Imp/Esf | M |
+|---|---|---|---|---|
+| **Gênio na Central da Casa** (sample + conector + db do artefato) | conversa que controla, escreve capacidades, cria painéis, lembra e aprende hábitos | ✅ 2.0 publicada | 5/2 | M |
+| **Base fixa**: celular velho com IR (ou Broadlink) parado na casa | o POCO anda com o usuário e o IR precisa de linha de visão; com uma base fixa, "estou chegando, liga o ar" funciona (geocerca no POCO) | 🛒 R$ 60–400 | 5/2 | M |
+| **Home Assistant no celular** (Termux + proot, sem root) + **MCP oficial do HA** | +2.000 integrações (Tuya, Xiaomi, Chromecast, câmeras RTSP…), automações e painéis; o Claude fala com tudo pelo MCP do HA | ❓ não oficial, pesado, tomada | 5/4 | M |
+| **Assistente offline** (wake word openWakeWord/Vosk + whisper.cpp + modelo pequeno no llama.cpp) | "ei casa, 23 graus" sem internet, sem aprovação, em ~1–2 s | ❓ TFLite no Termux é o risco; bateria | 4/4 | M |
+| **Ler o visor do ar sozinho** (recorte + OCR de 7 segmentos com numpy/OpenCV) | confirmação 100% local: envia → fotografa → lê "23" → confirmado | 🔧 | 4/2 | |
+| **Olho infravermelho** (câmera com rolling shutter lendo o LED do controle) | aprender o controle original sem hardware; não achei ninguém fazendo isso com controle IR | 🧪 experimento | 5/3 | M |
+| **Aparelhos de rede locais** (tinytuya, python-miio, pychromecast) | controle com estado real de Tuya/Xiaomi/Chromecast, se existirem na casa | ❓ depende do que o usuário tem | 4/2 | |
+| **Botões físicos NFC** (adesivo + MacroDroid/Tasker → Termux) | encostar o celular na etiqueta da cama = modo dormir | 🛒 R$ 2/etiqueta | 3/2 | |
+| **Controle de qualquer lugar** (bot do Telegram por long-polling, só o chat do usuário; ou ntfy) | comandos, fotos e alertas fora de casa sem abrir o Claude e sem porta aberta | 🔧 serviço de terceiros | 4/2 | |
+| **Agente de tela** (`tela` + Shizuku; referência: DroidRun/Mobilerun) | o Gênio opera qualquer app (roteador Intelbras, apps dos aparelhos) | 🔧 falta o Shizuku | 5/2 | M |
+| **Rotinas na nuvem** (tarefas agendadas do Claude + Gmail + db da Central) | boletim da manhã (sono, temperatura, e-mails) aparecendo no app | ❓ aprovações da organização | 3/2 | |
+| **Zelador noturno** (sessão agendada do Claude Code lê os registros, corrige e abre PR) | o sistema se conserta enquanto o usuário dorme; ele só aprova de manhã | 🔧 | 4/3 | M |
+
+Fontes: home-assistant.io/integrations/mcp_server · community.home-assistant.io (HA Core no Android, Wyoming
+openWakeWord no Termux) · github.com/clutchthrower/Home-Assistant-For-Android · huggingface.co/blog/Javedalam/wwhisper-cli
+· pyimagesearch.com (dígitos de 7 segmentos) · arxiv.org/pdf/1807.04888 · pypi.org/project/tinytuya ·
+python-miio.readthedocs.io · github.com/droidrun/mobilerun · archive.cps-vo.org/node/38847 (rolling shutter VLC).
+
 ## 6. Limites reais (onde está a barreira)
 
 - **Hardware:** o emissor IR do POCO só transmite. Aprender um controle exige receptor (ESP32/Broadlink/Flipper).

@@ -2062,6 +2062,78 @@ def agir(a):
     return res
 
 
+# --------------------------------------------------------------------------- piloto (laço rápido no celular)
+_PILOTO = []
+
+
+def _modulo_piloto():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("tela_piloto", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                                             "piloto.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def _ferramentas_piloto():
+    def aguardar(contador, ms):
+        aj = _ajudante()
+        if not aj:
+            time.sleep(ms / 1000)
+            return contador
+        r = aj.pedir(f"aguardar {int(contador)} {int(ms)}", ms / 1000 + 5)
+        try:
+            return int((r or "").strip())
+        except ValueError:
+            return contador
+
+    def tocar(x, y):
+        if not _injetar(f"toques 0:30 {int(x)} {int(y)}"):
+            rish(f"input tap {int(x)} {int(y)}", timeout=5)
+
+    return {"aguardar": aguardar, "elementos": lambda: elementos(dump_ui(), limite=300), "tocar": tocar,
+            "bloqueado": lambda app: bool(app) and bloqueado(app, bloqueados())}
+
+
+def piloto(a):
+    """O laço rápido: liga (iniciar={...}), mostra (estado), desliga (parar), ensina a memória (ensinar=[{pergunta,
+    resposta}]) ou testa os cérebros sem a tela (testar={pergunta, opcoes:[...]})."""
+    if not _PILOTO:
+        m = _modulo_piloto()
+        _PILOTO.extend([m, m.Piloto(_ferramentas_piloto())])
+    m, p = _PILOTO
+    if a.get("parar"):
+        p.encerrar()
+        return p.estado()
+    if a.get("ensinar"):
+        mem = m.carregar_memoria()
+        for item in a["ensinar"][:200]:
+            if isinstance(item, dict) and item.get("pergunta") and item.get("resposta"):
+                mem[m.norm(item["pergunta"])] = str(item["resposta"])
+        m.gravar_memoria(mem)
+        if p.cerebros:
+            p.cerebros.memoria.update(mem)
+        return {"memoria": len(mem)}
+    if a.get("testar"):
+        t = a["testar"]
+        cfg = dict(a.get("iniciar") or {}, **{k: a[k] for k in ("modelo", "pensar", "cerebros", "local_url", "politica")
+                                               if k in a})
+        c = m.Cerebros(cfg)
+        ops = [{"texto": str(o)} for o in (t.get("opcoes") or [])]
+        res = []
+        for _ in range(max(1, min(int(t.get("vezes", 1)), 5))):
+            idx, fonte, seg, erros = c.decidir(str(t.get("pergunta", "")), ops, float(t.get("prazo", 8)))
+            res.append({"escolha": ops[idx]["texto"] if idx is not None else None, "fonte": fonte,
+                        "ms": int(seg * 1000), **({"erros": erros} if erros else {})})
+        return {"testes": res, "chave_api": bool(m.ler_chave())}
+    if a.get("iniciar") is not None:
+        cfg = a["iniciar"] if isinstance(a["iniciar"], dict) else {}
+        if cfg.get("app") and bloqueado(cfg["app"], bloqueados()):
+            return {"erro": "app bloqueado para o agente de tela"}
+        return p.iniciar(cfg)
+    return p.estado(int(a.get("ultimas", 8)))
+
+
 def executar(a):
     """Ponto de entrada: o serviço chama direto (EM_PROCESSO) e o modo antigo passa por main()."""
     _CORTE[0] = max(80, min(int(a.get("texto_max") or 80), 4000))
@@ -2091,6 +2163,8 @@ def _executar(a):
             r = fechar_anuncio(foco(), min(float(a.get("limite", 45)), 120)) if em_anuncio(True) else {"anuncio": "nenhum"}
         elif acao == "reflexos":
             r = reflexos(a.get("regras"))
+        elif acao == "piloto":
+            r = piloto(a)
         else:
             r = agir(a)
     except SemShizuku as e:

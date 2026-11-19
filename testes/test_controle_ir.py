@@ -2426,5 +2426,110 @@ class TestSonar(unittest.TestCase):
         nomes = {c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}
         self.assertEqual((nomes.get("sono"), nomes.get("sonar")), ("ativa", "ativa"))
 
+
+class TestPiloto(unittest.TestCase):
+    """Piloto: o laço rápido no celular (percepção do quiz, memória, corrida de cérebros com streaming)."""
+
+    def setUp(self):
+        import importlib.util
+        caminho = Path(__file__).resolve().parent.parent / "controle-ir" / "capacidades" / "tela" / "piloto.py"
+        spec = importlib.util.spec_from_file_location("piloto_teste", caminho)
+        self.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.m)
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.m.PASTA = str(self.tmp)
+        self.m.MEMORIA_ARQ = str(self.tmp / "memoria.json")
+        self.m.GRAVADOR_ARQ = str(self.tmp / "rodadas.jsonl")
+
+    @staticmethod
+    def tela(pergunta="Qual é a capital da Austrália?", ops=("Sydney", "Canberra", "Melbourne", "Perth")):
+        els = [{"texto": "Pergunta 3 de 15", "x": 640, "y": 300, "l": 400, "a": 60},
+               {"texto": pergunta, "x": 640, "y": 700, "l": 1100, "a": 200},
+               {"texto": "Pular", "x": 640, "y": 2500, "l": 300, "a": 120, "clicavel": True}]
+        for i, o in enumerate(ops):  # botão clicável sem texto + o texto por dentro (como nos apps de verdade)
+            y = 1200 + 220 * i
+            els.append({"x": 640, "y": y, "l": 1100, "a": 180, "clicavel": True})
+            els.append({"texto": o, "x": 600, "y": y, "l": 500, "a": 80})
+        return els
+
+    def test_le_pergunta_e_opcoes(self):
+        perg, ops = self.m.quiz_da_tela(self.tela())
+        self.assertEqual(perg, "Qual é a capital da Austrália?")
+        self.assertEqual([o["texto"] for o in ops], ["Sydney", "Canberra", "Melbourne", "Perth"])
+        self.assertEqual((ops[1]["x"], ops[1]["y"]), (640, 1420))  # toca no botão, não no texto
+        self.assertIsNone(self.m.quiz_da_tela(self.tela()[:3]))  # sem opções não é quiz
+
+    def _servidor_sse(self, texto, atraso=0.0):
+        class H(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+
+                def pedaco(b):
+                    self.wfile.write(f"{len(b):x}\r\n".encode() + b + b"\r\n")
+                    self.wfile.flush()
+                time.sleep(atraso)
+                for t in texto:
+                    ev = {"choices": [{"delta": {"content": t}}]}
+                    pedaco(f"data: {json.dumps(ev)}\n\n".encode())
+                pedaco(b"data: [DONE]\n\n")
+                self.wfile.write(b"0\r\n\r\n")
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        return f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def test_corrida_streaming_memoria_e_prazo(self):
+        url = self._servidor_sse(["Resposta", ": 2"])
+        c = self.m.Cerebros({"cerebros": ["local"], "local_url": url})
+        ops = [{"texto": t} for t in ("Sydney", "Canberra", "Melbourne")]
+        idx, fonte, seg, erros = c.decidir("Capital da Austrália?", ops, 3)
+        self.assertEqual((idx, fonte), (1, "local"), erros)
+        idx, *_ = c.decidir("Capital da Austrália?", ops, 3)  # conexão persistente reaproveitada
+        self.assertEqual(idx, 1)
+        c.memoria[self.m.norm("Qual a cor do céu?")] = "Azul"  # memória responde sem rede
+        idx, fonte, seg, _ = c.decidir("Qual a cor do céu?", [{"texto": "Verde"}, {"texto": "Azul"}], 3)
+        self.assertEqual((idx, fonte), (1, "memoria"))
+        self.assertLess(seg, 0.05)
+        lento = self.m.Cerebros({"cerebros": ["local"], "local_url": self._servidor_sse(["1"], atraso=1.5)})
+        idx, fonte, seg, _ = lento.decidir("x?", ops, 0.4)  # prazo estoura: ninguém respondeu
+        self.assertIsNone(idx)
+        self.assertLess(seg, 1.0)
+
+    def test_laco_toca_no_alvo_semantico_e_grava(self):
+        url = self._servidor_sse(["2"])
+        telas = [self.tela(), self.tela()]
+        # entre a leitura e o toque as opções trocam de lugar: o toque segue o TEXTO escolhido
+        trocada = self.tela(ops=("Canberra", "Sydney", "Melbourne", "Perth"))
+        sequencia = [telas[0], trocada] + [trocada] * 50
+        tocados = []
+
+        def elementos():
+            return sequencia.pop(0) if len(sequencia) > 1 else sequencia[0]
+        f = {"aguardar": lambda c, ms: (time.sleep(0.01), c + 1)[1], "elementos": elementos,
+             "tocar": lambda x, y: tocados.append((x, y)), "bloqueado": lambda app: False}
+        p = self.m.Piloto(f)
+        p.iniciar({"cerebros": ["local"], "local_url": url, "duracao": 10})
+        fim = time.time() + 3
+        while not tocados and time.time() < fim:
+            time.sleep(0.02)
+        p.encerrar()
+        self.assertEqual(tocados[0], (640, 1200))  # "Canberra" estava agora na 1ª posição
+        e = p.estado()
+        self.assertEqual(e["ultimas"][0]["escolha"], "Canberra")
+        self.assertEqual(e["ultimas"][0]["fonte"], "local")
+        self.assertEqual(len(tocados), 1)  # mesma pergunta não é respondida duas vezes
+        self.assertTrue((self.tmp / "rodadas.jsonl").exists())
+
 if __name__ == "__main__":
     unittest.main()

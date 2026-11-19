@@ -1,13 +1,14 @@
 {
  "nome": "tela",
  "titulo": "Agente de tela (ver e tocar no celular)",
- "descricao": "Vê e opera a tela do celular pelo Shizuku, sem root. CICLO RÁPIDO: toda ação (tocar/digitar/tecla/deslizar/sequencia) espera a tela assentar e devolve só o que MUDOU desde a última olhada (ver_depois='mudancas', padrão com o leitor rápido: entrou/saiu/mudou com o valor anterior; tela nova → lista inteira); ver_depois='imagem' inclui a captura, 'nada' só o app. acao=sequencia com 'passos' faz tudo numa chamada, injetado direto (ms por toque): {tocar:[x,y]|[[x,y],...]|'texto', intervalo:s, segurar:ms}, {deslizar:[x,y,x2,y2,ms]}, {digitar:'...'}, {tecla:'voltar'}, {esperar:s}, {calma:s} (até a tela parar), {esperar_texto|esperar_sumir:'...', ate:s}, {esperar_mudanca:s, ignorar:[ids/textos]} (fica olhando até a tela mudar de verdade), {abrir:'pacote'}, condições no próprio celular {se|se_nao:'texto', entao:[...], senao:[...]} e laços {repetir:[...], vezes:N, ate_texto|ate_sumir:'...'}. acao=ver: elementos (texto, id, clicável, marcado, selecionado, rolável, centro x,y) e captura; so_mudancas=true só a diferença; recorte=[x,y,l,a] para ver um pedaço nítido. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução. REFLEXO: numa leva de toques, se surgir uma janela nova (aviso, anúncio, fim de jogo, outro app) o celular para na hora, sem os toques restantes, e a resposta traz 'interrompido' com o que apareceu (parar_em_janela=true vigia também entre os passos; false desliga); parar_se=['texto',...] para quando algum desses textos aparecer. RESPOSTAS CURTAS: elementos numa linha (\"Texto\" (desc) #id x,y sinais) e mudanças como +/-/~; 'surgiu' lista as janelas que apareceram desde a última olhada (formato='json' volta ao antigo). acao=reflexos com regras=[{se:'texto'|janela:'trecho', tocar:[x,y]|'texto'|tecla:'voltar'}] guarda reflexos no celular: numa sequência, no lugar de parar, ele resolve sozinho e segue (resposta traz 'reflexos'); sem regras, lista. QUANDO TOCAR ÀS CEGAS × OLHAR DE NOVO (automático): coordenada só vale na tela em que foi lida. Se a janela mudou desde a última olhada (ou depois de voltar/abrir/rolar), o toque por coordenada não sai: volta 'interrompido' com a tela atual; toque por texto lê a tela na hora e reancora. Na mesma tela, levas de toques vão direto. confiar=true no passo pula a checagem. Depois de agir (ver_depois='auto', padrão): só o que mudou e, se há área visual sem texto (tabuleiro, jogo), a imagem só desse recorte quando a tela é nova ou a ação tocou nela. ANÚNCIOS: telas de anúncio (AppLovin, TikTok/Pangle, AdMob, Unity…) são fechadas no próprio celular: espera o fechar/pular e toca nele pelo nome (nunca no anúncio), volta se um toque abrir outro app e, se travar, encerra/reabre o app e toca Continuar; o resultado traz 'anuncios'. acao=fechar_anuncio força isso; anuncios=false desliga. Se a tela cair em outro app no meio da sequência, para na hora. Erros já voltam com a tela atual. acao=grade: lê NO CELULAR uma grade NxN de símbolos desenhados (9x9, 16x16 com letras, 6x6…), com os botões do próprio jogo como modelo — todas as páginas do teclado, deslizando a fileira (acha grade e teclado sozinho; recorte/teclado/n opcionais) e devolve as linhas em texto; resolver=true (sudoku 9x9) resolve, preenche numa leva rápida, relê e repete toques perdidos; antes=[passos] roda o preparo (ex.: retomar o jogo) na mesma chamada; espera a grade ficar estável em vez de pausa fixa. ROTINAS: acao=rotina salvar={nome,args} guarda uma chamada inteira no celular; depois {acao:'rotina',nome} a roda e nome+vezes=N repete N vezes numa chamada só (resumo por volta). Avisos de app que se repetem viram reflexos com app:'pacote'. Xadrez (apps que descrevem as casas): passo {lance:\"e2e4\"} toca origem e destino; {esperar_vez:s} espera o adversário mexer; ver_depois=\"tabuleiro\" devolve 8 linhas + relógios. Só contra robô: nunca em partida ao vivo contra pessoas.",
+ "descricao": "Vê e opera a tela do celular pelo Shizuku, sem root. CICLO RÁPIDO: toda ação (tocar/digitar/tecla/deslizar/sequencia) espera a tela assentar e devolve só o que MUDOU desde a última olhada (ver_depois='mudancas', padrão com o leitor rápido: entrou/saiu/mudou com o valor anterior; tela nova → lista inteira); ver_depois='imagem' inclui a captura, 'nada' só o app. acao=sequencia com 'passos' faz tudo numa chamada, injetado direto (ms por toque): {tocar:[x,y]|[[x,y],...]|'texto', intervalo:s, segurar:ms}, {deslizar:[x,y,x2,y2,ms]}, {digitar:'...'}, {tecla:'voltar'}, {esperar:s}, {calma:s} (até a tela parar), {esperar_texto|esperar_sumir:'...', ate:s}, {esperar_mudanca:s, ignorar:[ids/textos]} (fica olhando até a tela mudar de verdade), {abrir:'pacote'}, condições no próprio celular {se|se_nao:'texto', entao:[...], senao:[...]} e laços {repetir:[...], vezes:N, ate_texto|ate_sumir:'...'}. acao=ver: elementos (texto, id, clicável, marcado, selecionado, rolável, centro x,y) e captura; so_mudancas=true só a diferença; recorte=[x,y,l,a] para ver um pedaço nítido. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução. REFLEXO: numa leva de toques, se surgir uma janela nova (aviso, anúncio, fim de jogo, outro app) o celular para na hora, sem os toques restantes, e a resposta traz 'interrompido' com o que apareceu (parar_em_janela=true vigia também entre os passos; false desliga); parar_se=['texto',...] para quando algum desses textos aparecer. RESPOSTAS CURTAS: elementos numa linha (\"Texto\" (desc) #id x,y sinais) e mudanças como +/-/~; 'surgiu' lista as janelas que apareceram desde a última olhada (formato='json' volta ao antigo). acao=reflexos com regras=[{se:'texto'|janela:'trecho', tocar:[x,y]|'texto'|tecla:'voltar'}] guarda reflexos no celular: numa sequência, no lugar de parar, ele resolve sozinho e segue (resposta traz 'reflexos'); sem regras, lista. QUANDO TOCAR ÀS CEGAS × OLHAR DE NOVO (automático): coordenada só vale na tela em que foi lida. Se a janela mudou desde a última olhada (ou depois de voltar/abrir/rolar), o toque por coordenada não sai: volta 'interrompido' com a tela atual; toque por texto lê a tela na hora e reancora. Na mesma tela, levas de toques vão direto. confiar=true no passo pula a checagem. Depois de agir (ver_depois='auto', padrão): só o que mudou e, se há área visual sem texto (tabuleiro, jogo), a imagem só desse recorte quando a tela é nova ou a ação tocou nela. ANÚNCIOS: telas de anúncio (AppLovin, TikTok/Pangle, AdMob, Unity…) são fechadas no próprio celular: espera o fechar/pular e toca nele pelo nome (nunca no anúncio), volta se um toque abrir outro app e, se travar, encerra/reabre o app e toca Continuar; o resultado traz 'anuncios'. acao=fechar_anuncio força isso; anuncios=false desliga. Se a tela cair em outro app no meio da sequência, para na hora. Erros já voltam com a tela atual. acao=grade: lê NO CELULAR uma grade NxN de símbolos desenhados (9x9, 16x16 com letras, 6x6…), com os botões do próprio jogo como modelo — todas as páginas do teclado, deslizando a fileira (acha grade e teclado sozinho; recorte/teclado/n opcionais) e devolve as linhas em texto; resolver=true (sudoku 9x9) resolve, preenche numa leva rápida, relê e repete toques perdidos; antes=[passos] roda o preparo (ex.: retomar o jogo) na mesma chamada; espera a grade ficar estável em vez de pausa fixa. ROTINAS: acao=rotina salvar={nome,args} guarda uma chamada inteira no celular; depois {acao:'rotina',nome} a roda e nome+vezes=N repete N vezes numa chamada só (resumo por volta). Avisos de app que se repetem viram reflexos com app:'pacote'. Xadrez (apps que descrevem as casas): passo {lance:\"e2e4\"} toca origem e destino; {esperar_vez:s} espera o adversário mexer; ver_depois=\"tabuleiro\" devolve 8 linhas + relógios. Só contra robô: nunca em partida ao vivo contra pessoas. PILOTO (acao=piloto): laço rápido que roda no próprio celular sem passar pelo Claude a cada gesto — espera a tela mudar, lê a pergunta e as opções, faz uma corrida entre memória, modelo rápido (Claude Haiku pela API, streaming: toca no 1º dígito) e modelo local, e toca no texto escolhido relocalizado na hora; iniciar/estado/parar/ensinar/testar; o gravador guarda tempos de ler/decidir/tocar. Só em apps/jogos contra a máquina, nunca contra pessoas.",
  "executar": "principal.py",
  "efeito": "acao",
  "acessos": [
   "Shizuku/rish (shell do adb: screencap, uiautomator, input, monkey)",
   "ffmpeg (reduzir a captura)",
-  "~/.controle-ir/tela (temporário)"
+  "~/.controle-ir/tela (temporário)",
+  "rede: api.anthropic.com (piloto; chave só no celular, em ~/.controle-ir/anthropic.key)"
  ],
  "tempo_limite": 150,
  "entrada": {
@@ -15,7 +16,7 @@
   "properties": {
    "acao": {
     "type": "string",
-    "description": "ver | tocar | digitar | tecla | deslizar | abrir | sequencia | grade | rotina | reflexos | fechar_anuncio | estado"
+    "description": "ver | tocar | digitar | tecla | deslizar | abrir | sequencia | grade | rotina | reflexos | fechar_anuncio | piloto | estado"
    },
    "x": {
     "type": "integer"
@@ -190,6 +191,29 @@
    "texto_max": {
     "type": "integer",
     "description": "tamanho máximo de cada texto lido (padrão 80, até 4000: ler respostas e artigos longos)"
+   },
+   "iniciar": {
+    "type": "object",
+    "description": "piloto: liga o laço rápido no celular {modo:\"quiz\", app:\"pacote\", prazo:s, chutar, conferir, cerebros:[\"memoria\",\"api\",\"local\"], modelo, pensar, local_url, politica, ignorar:[...], duracao:s}"
+   },
+   "parar": {
+    "type": "boolean",
+    "description": "piloto: desliga o laço"
+   },
+   "ensinar": {
+    "type": "array",
+    "items": {
+     "type": "object"
+    },
+    "description": "piloto: [{pergunta, resposta}] para a memória (resposta em milissegundos na próxima vez)"
+   },
+   "testar": {
+    "type": "object",
+    "description": "piloto: {pergunta, opcoes:[...], vezes} mede a corrida de cérebros sem a tela"
+   },
+   "ultimas": {
+    "type": "integer",
+    "description": "piloto: quantas rodadas do gravador mostrar"
    }
   },
   "required": [

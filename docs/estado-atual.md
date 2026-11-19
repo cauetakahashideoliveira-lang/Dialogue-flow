@@ -9,10 +9,14 @@
   bateria → ~29 °C estimado, confiança média com o celular em uso; monitorando 60 min), ouvido do ar no
   `controlar(ouvir=true)` (3 s antes + ~8 s depois do envio, compara o ruído), `tela` e o recorte da `foto`
   instalados com o aval do usuário ("pode começar a fazer essa integração").
-- **19/11 — Central da Casa** (artefato privado https://claude.ai/artifact/XSh6ivS8Cc6BsKakes2pCh, fonte
+- **19/11 — Central da Casa 2.0** (artefato privado https://claude.ai/artifact/XSh6ivS8Cc6BsKakes2pCh, fonte
   `artefatos/central-da-casa.html`): página do claude.ai que usa o conector Controle master (consultar, opcoes,
-  controlar, executar_capacidade) — ares, TV, foto do ar, termômetro, sono — e um assistente (sample com
-  ferramentas + ditado + voz). A parte do sono depende da 1.0.19.
+  controlar, executar_capacidade, executar_comando, capacidades, propor_capacidade). Tem o **Gênio** (sample com
+  ferramentas + ditado + voz) que controla, roda comandos no Termux, **escreve e instala capacidades novas** e
+  **cria painéis** (botões/medidores/gráficos/notas) guardados no db do artefato (coleção `widgets`), mais
+  memória (`memoria`) e diário (`eventos`) com "o que você aprendeu sobre mim". Painéis iniciais gravados:
+  `celular` (medidor do estado_celular) e `noite` (Quarto 23 °C, Desligar a TV). Testado com simulação do
+  runtime (sem erros); as chamadas reais só rodam abertas no claude.ai. A parte do sono depende da 1.0.19.
 - **19/11 — 1.0.19 no GitHub (commit 5f07335), NÃO instalada:** `sono` (laboratório do sono) e `sonar`
   (presença por ultrassom, experimental). Instalar com `atualizar_sistema` quando o usuário estiver presente
   (cada chamada pede aprovação da organização).

@@ -2,6 +2,7 @@ package controleir;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.UiAutomation;
+import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.HandlerThread;
@@ -29,7 +30,8 @@ import java.lang.reflect.Method;
  * (sem abrir o processo `input` a cada toque) e o texto vai pelo campo em foco (acentos funcionam).
  *
  * Comandos: ping | dump | foco | tocar X Y [ms] | deslizar X1 Y1 X2 Y2 [ms] | tecla CODIGO | texto HEX |
- * shell HEX (roda um comando como shell, sem abrir outra conexão com o Shizuku) | sair.
+ * shell HEX (roda um comando como shell, sem abrir outra conexão com o Shizuku) |
+ * foto LARGURA LIMITE_BYTES CAMINHO [X Y L A] (JPEG reduzido direto da acessibilidade, sem PNG nem ffmpeg) | sair.
  * Sem uso por 60 s, desconecta da acessibilidade (bateria; apps que estranham automação ligada); sem uso por 5 min,
  * encerra (o controle-ir abre de novo quando precisar).
  */
@@ -120,6 +122,10 @@ public class Tela {
             return "ok";
         }
         if (c.equals("texto")) return texto(u, deHex(p.length > 2 ? p[2] : ""));
+        if (c.equals("foto")) {
+            int[] rec = p.length > 8 ? new int[]{i(p[5]), i(p[6]), i(p[7]), i(p[8])} : null;
+            return foto(u, i(p[2]), i(p[3]), p[4], rec);
+        }
         return "ERRO comando desconhecido: " + c;
     }
 
@@ -319,6 +325,42 @@ public class Tela {
         Bundle b = new Bundle();
         b.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, atual + s);
         return campo.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, b) ? "ok" : "ERRO o campo recusou o texto";
+    }
+
+    // ------------------------------------------------------------------ captura (JPEG direto)
+    /** Resposta: "LARGURA_REAL ALTURA_REAL BYTES" (ou ERRO). O JPEG vai para CAMINHO (pasta de troca). */
+    static String foto(UiAutomation u, int largura, int limite, String caminho, int[] rec) throws Exception {
+        Bitmap b = u.takeScreenshot();
+        if (b == null) return "ERRO sem captura (tela apagada ou protegida)";
+        int lw = b.getWidth(), lh = b.getHeight();
+        Bitmap soft = b.copy(Bitmap.Config.ARGB_8888, false);  // capturas novas vêm em memória de vídeo
+        b.recycle();
+        Bitmap base = soft;
+        if (rec != null) {
+            int x = Math.max(0, Math.min(rec[0], lw - 1)), y = Math.max(0, Math.min(rec[1], lh - 1));
+            int w = Math.max(1, Math.min(rec[2], lw - x)), h = Math.max(1, Math.min(rec[3], lh - y));
+            base = Bitmap.createBitmap(soft, x, y, w, h);
+        }
+        int w = Math.min(largura, base.getWidth());
+        int h = Math.max(1, Math.round(base.getHeight() * (w / (float) base.getWidth())));
+        Bitmap red = (w == base.getWidth()) ? base : Bitmap.createScaledBitmap(base, w, h, true);
+        byte[] dados = null;
+        int[] qualidades = {80, 65, 50, 35};
+        for (int q : qualidades) {
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            red.compress(Bitmap.CompressFormat.JPEG, q, bo);
+            dados = bo.toByteArray();
+            if (dados.length <= limite) break;
+        }
+        File tmp = new File(caminho + ".tmp");
+        OutputStream o = new FileOutputStream(tmp);
+        o.write(dados);
+        o.close();
+        tmp.renameTo(new File(caminho));
+        if (red != base) red.recycle();
+        if (base != soft) base.recycle();
+        soft.recycle();
+        return lw + " " + lh + " " + dados.length;
     }
 
     static String deHex(String h) throws Exception {

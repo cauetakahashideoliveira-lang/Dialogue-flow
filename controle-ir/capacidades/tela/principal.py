@@ -416,8 +416,32 @@ def _jpeg(png, largura, recorte=None):
         _apagar(jpg)
 
 
+def foto_rapida(largura, recorte=None):
+    """JPEG direto do leitor rápido (sem PNG nem ffmpeg). Devolve (base64, "LxA") ou (None, None)."""
+    a = _ajudante()
+    if not a:
+        return None, None
+    arq = os.path.join(_pasta_troca(), f"foto-{os.getpid()}-{time.monotonic_ns()}.jpg")
+    rec = " " + " ".join(str(max(0, int(v))) for v in recorte) if recorte else ""
+    try:
+        r = a.pedir(f"foto {int(largura)} 110000 {arq}{rec}", 15)
+        if not r or r.startswith("ERRO") or not os.path.exists(arq):
+            return None, None
+        with open(arq, "rb") as f:
+            dados = f.read()
+        lw, lh = r.split()[:2]
+        return base64.b64encode(dados).decode(), f"{lw}x{lh}"
+    except (OSError, ValueError):
+        return None, None
+    finally:
+        _apagar(arq)
+
+
 def captura(largura):
     """Só a imagem (usada pela transmissão ao vivo da Central). Sem imagem: (None, None)."""
+    b64, _ = foto_rapida(largura)
+    if b64:
+        return b64, largura
     png = os.path.join(_pasta_troca(), f"tela-{os.getpid()}-{time.monotonic_ns()}.png")
     try:
         rish(f"screencap -p {shlex.quote(png)}", timeout=20)
@@ -479,15 +503,22 @@ def observar(com_elementos=True, com_imagem=True):
 
 
 def ver(imagem=True, largura=720, com_elementos=True, recorte=None):
-    xml, png, info = observar(com_elementos, imagem)
+    rapida = foto_rapida(largura, recorte) if imagem and _ajudante() else (None, None)
+    xml, png, info = observar(com_elementos, imagem and not rapida[0])
     out = {"app": app_em_foco(info), "tela_acesa": "Awake" in (info or "")}
     try:
+        if rapida[0]:
+            out["resolucao"] = rapida[1]
+            out["_imagem"] = {"mime": "image/jpeg", "base64": rapida[0]}
+            out["largura_imagem"] = largura
+            if recorte:
+                out["recorte"] = list(recorte)
         if png:
             out["resolucao"] = resolucao_png(png)
         if com_elementos:
             out["elementos"] = compactos(elementos(xml))
             out["nota"] = "coordenadas x,y em pixels da tela real (use-as em tocar); a imagem é reduzida"
-        if imagem:
+        if imagem and not rapida[0]:
             b64 = _jpeg(png, largura, recorte)
             if b64:
                 out["_imagem"] = {"mime": "image/jpeg", "base64": b64}

@@ -41,6 +41,9 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — 1.0.33/1.0.34 medidos no POCO:** leitura da tela 0,04 s (antes 2,6–10 s), `ver` só elementos 0,21 s,
+  shell 0,09 s (antes 0,32), foto 480 px 0,11 s e 720 px 0,15 s direto da acessibilidade (antes 1,37 s com
+  screencap+ffmpeg), `ver` completo 0,48 s (antes ~3 s). Central: /mcp com 1 consulta ao D1 (PR #11).
 - **19/11 — Leitor de tela rápido (1.0.32):** `capacidades/tela/java/controleir/Tela.java`, compilado no celular
   (ecj + dx do Termux, na 1ª vez) e rodando pelo Shizuku (app_process): lê a acessibilidade direto (30–180 ms contra
   2,5–8 s do `uiautomator dump`, que espera a tela parar), injeta toques/teclas e digita com acento; também roda os

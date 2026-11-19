@@ -29,7 +29,9 @@ import java.lang.reflect.Method;
  * cada vez; aqui a conexão com a acessibilidade fica aberta e a leitura é imediata. Os toques são injetados direto
  * (sem abrir o processo `input` a cada toque) e o texto vai pelo campo em foco (acentos funcionam).
  *
- * Comandos: ping | dump | foco | tocar X Y [ms] | deslizar X1 Y1 X2 Y2 [ms] | tecla CODIGO | texto HEX |
+ * Comandos: ping | dump | foco | estado (pacote em foco e tela acesa, sem shell) | tocar X Y [ms] |
+ * toques PAUSA_MS X1 Y1 X2 Y2… (vários toques num pedido só) | deslizar X1 Y1 X2 Y2 [ms] | tecla CODIGO | texto HEX |
+ * calma QUIETO_MS LIMITE_MS (espera a tela parar de mudar; responde "ok MS" ou "tempo MS") |
  * shell HEX (roda um comando como shell, sem abrir outra conexão com o Shizuku) |
  * foto LARGURA LIMITE_BYTES CAMINHO [X Y L A] (JPEG reduzido direto da acessibilidade, sem PNG nem ffmpeg) | sair.
  * Sem uso por 60 s, desconecta da acessibilidade (bateria; apps que estranham automação ligada); sem uso por 5 min,
@@ -101,17 +103,28 @@ public class Tela {
         if (c.equals("shell")) return shell(deHex(p.length > 2 ? p[2] : ""), p.length > 3 ? i(p[3]) : 30000);
         UiAutomation u = conectar();
         if (c.equals("dump")) return dump(u);
-        if (c.equals("foco")) {
-            AccessibilityNodeInfo r = null;
-            for (int t = 0; t < 4 && r == null; t++) {
-                r = u.getRootInActiveWindow();
-                if (r == null) SystemClock.sleep(60);
-            }
-            return r == null || r.getPackageName() == null ? "" : r.getPackageName().toString();
-        }
+        if (c.equals("foco")) return foco(u);
+        if (c.equals("estado")) return foco(u) + "\n" + acesa();
         if (c.equals("tocar")) {
             tocar(u, i(p[2]), i(p[3]), p.length > 4 ? i(p[4]) : 40);
             return "ok";
+        }
+        if (c.equals("toques")) {
+            int pausa = Math.max(0, Math.min(i(p[2]), 5000));
+            for (int k = 3; k + 1 < p.length; k += 2) {
+                if (k > 3 && pausa > 0) SystemClock.sleep(pausa);
+                tocar(u, i(p[k]), i(p[k + 1]), 30);
+            }
+            return "ok";
+        }
+        if (c.equals("calma")) {
+            long t0 = SystemClock.uptimeMillis();
+            try {
+                u.waitForIdle(Math.max(20, i(p[2])), Math.max(50, Math.min(i(p[3]), 10000)));
+                return "ok " + (SystemClock.uptimeMillis() - t0);
+            } catch (java.util.concurrent.TimeoutException e) {
+                return "tempo " + (SystemClock.uptimeMillis() - t0);
+            }
         }
         if (c.equals("deslizar")) {
             deslizar(u, i(p[2]), i(p[3]), i(p[4]), i(p[5]), p.length > 6 ? i(p[6]) : 300);
@@ -130,6 +143,28 @@ public class Tela {
     }
 
     static int i(String s) { return Integer.parseInt(s); }
+
+    static String foco(UiAutomation u) {
+        AccessibilityNodeInfo r = null;
+        for (int t = 0; t < 4 && r == null; t++) {
+            r = u.getRootInActiveWindow();
+            if (r == null) SystemClock.sleep(60);
+        }
+        return r == null || r.getPackageName() == null ? "" : r.getPackageName().toString();
+    }
+
+    /** Tela acesa pelo PowerManager do sistema (o mesmo do `dumpsys power`), sem abrir um shell: "1", "0" ou "?". */
+    static String acesa() {
+        try {
+            Object b = Class.forName("android.os.ServiceManager").getMethod("getService", String.class)
+                    .invoke(null, "power");
+            Object pm = Class.forName("android.os.IPowerManager$Stub").getMethod("asInterface", android.os.IBinder.class)
+                    .invoke(null, b);
+            return ((Boolean) pm.getClass().getMethod("isInteractive").invoke(pm)) ? "1" : "0";
+        } catch (Throwable t) {
+            return "?";
+        }
+    }
 
     // ------------------------------------------------------------------ comandos de shell (screencap, dumpsys…)
     /** Resposta: "rc tamanho_saida\n" + saída + erros (a saída e os erros vêm separados pelo tamanho). */
@@ -244,6 +279,12 @@ public class Tela {
           .append("\" content-desc=\"").append(esc(n.getContentDescription()))
           .append("\" clickable=\"").append(n.isClickable())
           .append("\" long-clickable=\"").append(n.isLongClickable())
+          .append("\" checkable=\"").append(n.isCheckable())
+          .append("\" checked=\"").append(n.isChecked())
+          .append("\" selected=\"").append(n.isSelected())
+          .append("\" scrollable=\"").append(n.isScrollable())
+          .append("\" focused=\"").append(n.isFocused())
+          .append("\" enabled=\"").append(n.isEnabled())
           .append("\" bounds=\"[").append(r.left).append(',').append(r.top).append("][")
           .append(r.right).append(',').append(r.bottom).append("]\">");
         int c = n.getChildCount();

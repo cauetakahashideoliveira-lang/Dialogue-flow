@@ -1,7 +1,7 @@
 {
  "nome": "tela",
  "titulo": "Agente de tela (ver e tocar no celular)",
- "descricao": "Vê e opera a tela do celular pelo Shizuku (rish), sem root. EFICIENTE: use acao=sequencia com 'passos' para vários toques/digitações/esperas numa chamada só (ex.: [{\"tocar\":[540,1200]},{\"esperar_texto\":\"OK\",\"ate\":8},{\"tocar\":\"OK\"},{\"tocar\":[[100,200],[300,400]],\"intervalo\":0.05},{\"digitar\":\"oi\"},{\"tecla\":\"voltar\"}]); tocar/digitar/tecla/deslizar/abrir devolvem só o app em foco, a menos que ver_depois='elementos' ou 'imagem'. acao=ver: elementos visíveis (texto, id, clicável, centro x,y) e captura; elementos=false só imagem; recorte=[x,y,l,a] em pixels reais para ver um pedaço com nitidez. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução.",
+ "descricao": "Vê e opera a tela do celular pelo Shizuku, sem root. CICLO RÁPIDO: toda ação (tocar/digitar/tecla/deslizar/sequencia) espera a tela assentar e devolve só o que MUDOU desde a última olhada (ver_depois='mudancas', padrão com o leitor rápido: entrou/saiu/mudou com o valor anterior; tela nova → lista inteira); ver_depois='imagem' inclui a captura, 'nada' só o app. acao=sequencia com 'passos' faz tudo numa chamada, injetado direto (ms por toque): {tocar:[x,y]|[[x,y],...]|'texto', intervalo:s, segurar:ms}, {deslizar:[x,y,x2,y2,ms]}, {digitar:'...'}, {tecla:'voltar'}, {esperar:s}, {calma:s} (até a tela parar), {esperar_texto|esperar_sumir:'...', ate:s}, {abrir:'pacote'}, condições no próprio celular {se|se_nao:'texto', entao:[...], senao:[...]} e laços {repetir:[...], vezes:N, ate_texto|ate_sumir:'...'}. acao=ver: elementos (texto, id, clicável, marcado, selecionado, rolável, centro x,y) e captura; so_mudancas=true só a diferença; recorte=[x,y,l,a] para ver um pedaço nítido. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução.",
  "executar": "principal.py",
  "efeito": "acao",
  "acessos": [
@@ -58,11 +58,11 @@
     "items": {
      "type": "object"
     },
-    "description": "sequencia: lista de passos (até 300)"
+    "description": "sequencia: lista de passos (até 300, contando os de dentro de se/repetir)"
    },
    "ver_depois": {
     "type": "string",
-    "description": "nada | elementos | imagem (depois de agir; padrão nada)"
+    "description": "mudancas (padrão: só o que mudou) | elementos | imagem | nada"
    },
    "elementos": {
     "type": "boolean",
@@ -74,6 +74,18 @@
      "type": "integer"
     },
     "description": "ver: [x, y, largura, altura] em pixels reais"
+   },
+   "calma": {
+    "type": "boolean",
+    "description": "depois de agir, esperar a tela parar de mudar antes de olhar (padrão true)"
+   },
+   "calma_ate": {
+    "type": "integer",
+    "description": "limite dessa espera em ms (padrão 1000)"
+   },
+   "so_mudancas": {
+    "type": "boolean",
+    "description": "ver: só o que mudou desde a última olhada"
    }
   },
   "required": [

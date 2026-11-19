@@ -68,12 +68,16 @@ def elementos(xml_texto, limite=120):
         texto, desc = a.get("text", ""), a.get("content-desc", "")
         clicavel = a.get("clickable") == "true" or a.get("long-clickable") == "true"
         editavel = a.get("class", "").endswith("EditText")
+        rolavel, marcavel = a.get("scrollable") == "true", a.get("checkable") == "true"
         b = ler_bounds(a.get("bounds"))
-        if not b or b[2] <= b[0] or b[3] <= b[1] or not (texto or desc or clicavel or editavel):
+        if not b or b[2] <= b[0] or b[3] <= b[1] or not (texto or desc or clicavel or editavel or rolavel or marcavel):
             continue
         out.append({"texto": texto[:80], "desc": desc[:80], "id": a.get("resource-id", "").split("/")[-1],
                     "classe": a.get("class", "").split(".")[-1], "clicavel": clicavel, "editavel": editavel,
-                    "x": (b[0] + b[2]) // 2, "y": (b[1] + b[3]) // 2, "pacote": a.get("package", "")})
+                    "x": (b[0] + b[2]) // 2, "y": (b[1] + b[3]) // 2, "pacote": a.get("package", ""),
+                    "marcado": a.get("checked") == "true" if marcavel else None,
+                    "selecionado": a.get("selected") == "true", "rolavel": rolavel,
+                    "focado": a.get("focused") == "true", "desativado": a.get("enabled") == "false"})
         if len(out) >= limite:
             break
     return out
@@ -356,6 +360,30 @@ def foco():
     return app_em_foco(out)
 
 
+def estado_rapido():
+    """(app em foco, tela acesa) pelo leitor rápido, sem abrir shell. None se o leitor não respondeu."""
+    a = _ajudante()
+    if a:
+        r = a.pedir("estado", 6)
+        if r and not r.startswith("ERRO") and "\n" in r:
+            app, acesa = r.split("\n", 1)
+            return app.strip() or None, {"1": True, "0": False}.get(acesa.strip())
+    return None
+
+
+def calma(quieto=120, limite=1000):
+    """Espera a tela parar de mudar (nenhum evento de acessibilidade por `quieto` ms, até `limite` ms).
+    Devolve os ms esperados, ou None sem o leitor rápido."""
+    a = _ajudante()
+    if not a:
+        return None
+    r = a.pedir(f"calma {int(quieto)} {int(limite)}", limite / 1000 + 5)
+    try:
+        return int(r.split()[1]) if r and r.split()[0] in ("ok", "tempo") else None
+    except (IndexError, ValueError):
+        return None
+
+
 def tela_acesa():
     out, _, _ = rish("dumpsys power | grep -m1 mWakefulness=")
     return "Awake" in out if out else None
@@ -467,25 +495,32 @@ def compactos(els):
         d = {k: e[k] for k in ("texto", "desc", "id") if e.get(k)}
         if e.get("clicavel"):
             d["clicavel"] = True
-        if e.get("editavel"):
-            d["editavel"] = True
+        for k in ("editavel", "selecionado", "rolavel", "focado", "desativado"):
+            if e.get(k):
+                d[k] = True
+        if e.get("marcado") is not None:
+            d["marcado"] = e["marcado"]
         d["x"], d["y"] = e["x"], e["y"]
         out.append(d)
     return out
 
 
 def observar(com_elementos=True, com_imagem=True):
-    """UMA chamada ao Shizuku: dump da interface e captura em paralelo, app em foco e tela acesa.
-    Devolve (xml, caminho_png, saída_dumpsys) — o PNG fica na pasta de troca; quem chama apaga."""
+    """Dump da interface, captura PNG (se pedida), app em foco e tela acesa.
+    Com o leitor rápido: dump e estado direto da acessibilidade, sem shell (o PNG só se a foto rápida falhou).
+    Sem ele: UMA chamada ao Shizuku com tudo em paralelo. Devolve (xml, caminho_png, app, acesa); quem chama apaga o PNG."""
     pasta = _pasta_troca()
     nome = f"obs-{os.getpid()}-{time.monotonic_ns()}"
     xml, png = os.path.join(pasta, nome + ".xml"), os.path.join(pasta, nome + ".png")
     if _ajudante():
         texto = dump_ui() if com_elementos else ""
+        est = estado_rapido()
         partes = [f"screencap -p {shlex.quote(png)}"] if com_imagem else []
-        partes += ["dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'", "dumpsys power | grep -m1 mWakefulness="]
-        info, _, _ = rish("\n".join(partes), timeout=30)
-        return texto, (png if com_imagem else None), info
+        if est is None:
+            partes += ["dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'", "dumpsys power | grep -m1 mWakefulness="]
+        info = rish("\n".join(partes), timeout=30)[0] if partes else ""
+        app, acesa = est if est else (app_em_foco(info), "Awake" in (info or ""))
+        return texto, (png if com_imagem else None), app, acesa
     partes = []
     if com_elementos:
         partes.append(f"(uiautomator dump {shlex.quote(xml)} > /dev/null 2>&1) &")
@@ -499,13 +534,41 @@ def observar(com_elementos=True, com_imagem=True):
         _apagar(xml)
     if com_elementos and not texto.strip().startswith("<?xml"):
         texto = dump_ui()  # o dump às vezes falha na primeira (tela em animação)
-    return texto, (png if com_imagem else None), info
+    return texto, (png if com_imagem else None), app_em_foco(info), "Awake" in (info or "")
 
 
-def ver(imagem=True, largura=720, com_elementos=True, recorte=None):
+# última tela vista (para responder só o que mudou); vive enquanto o módulo fica aberto no serviço
+_ULTIMA = {"app": None, "els": None}
+
+
+def _chave(e):
+    return e.get("id", ""), e["x"], e["y"]
+
+
+def diferenca(antes, depois, app_antes=None, app=None):
+    """O que mudou entre duas listas compactas: entrou, saiu e mudou (com o valor anterior). None = tela nova
+    (outro app, primeira olhada ou mudança grande demais: aí vale mandar a lista inteira)."""
+    if antes is None or app != app_antes:
+        return None
+    a = {_chave(e): e for e in antes}
+    d = {_chave(e): e for e in depois}
+    entrou = [e for k, e in d.items() if k not in a]
+    saiu = [{c: e[c] for c in ("texto", "desc", "id", "x", "y") if e.get(c) not in (None, "")}
+            for k, e in a.items() if k not in d]
+    mudou = []
+    for k, e in d.items():
+        if k in a and e != a[k]:
+            v = a[k]
+            mudou.append(dict(e, antes={c: v.get(c) for c in set(e) | set(v) if e.get(c) != v.get(c)}))
+    if len(entrou) + len(saiu) + len(mudou) > max(25, int(0.6 * len(depois))):
+        return None
+    return {"entrou": entrou, "saiu": saiu, "mudou": mudou}
+
+
+def ver(imagem=True, largura=720, com_elementos=True, recorte=None, so_mudancas=False):
     rapida = foto_rapida(largura, recorte) if imagem and _ajudante() else (None, None)
-    xml, png, info = observar(com_elementos, imagem and not rapida[0])
-    out = {"app": app_em_foco(info), "tela_acesa": "Awake" in (info or "")}
+    xml, png, app, acesa = observar(com_elementos, imagem and not rapida[0])
+    out = {"app": app, "tela_acesa": acesa}
     try:
         if rapida[0]:
             out["resolucao"] = rapida[1]
@@ -516,8 +579,17 @@ def ver(imagem=True, largura=720, com_elementos=True, recorte=None):
         if png:
             out["resolucao"] = resolucao_png(png)
         if com_elementos:
-            out["elementos"] = compactos(elementos(xml))
-            out["nota"] = "coordenadas x,y em pixels da tela real (use-as em tocar); a imagem é reduzida"
+            els = compactos(elementos(xml))
+            dif = diferenca(_ULTIMA["els"], els, _ULTIMA["app"], app) if so_mudancas else None
+            if dif is None:
+                out["elementos"] = els
+                out["nota"] = "coordenadas x,y em pixels da tela real (use-as em tocar); a imagem é reduzida"
+            elif any(dif.values()):
+                out["mudancas"] = {k: v for k, v in dif.items() if v}
+                out["sem_mudar"] = len(els) - len(dif["entrou"]) - len(dif["mudou"])
+            else:
+                out["mudancas"] = "nenhuma"
+            _ULTIMA.update(app=app, els=els)
         if imagem and not rapida[0]:
             b64 = _jpeg(png, largura, recorte)
             if b64:
@@ -534,16 +606,26 @@ def ver(imagem=True, largura=720, com_elementos=True, recorte=None):
     return out
 
 
-def _ver_depois(a, padrao="nada"):
-    """Depois de agir: 'nada' (só o app), 'elementos' (lista compacta) ou 'imagem' (lista + captura)."""
+def _ver_depois(a, padrao=None):
+    """Depois de agir, espera a tela assentar (leitor rápido) e olha: 'mudancas' (padrão com o leitor: só o que
+    mudou desde a última olhada), 'elementos' (lista inteira), 'imagem' (lista + captura) ou 'nada' (só o app)."""
+    if padrao is None:
+        padrao = "mudancas" if _ajudante() else "nada"
     modo = a.get("ver_depois") or ("imagem" if a.get("imagem") else padrao)
+    esperou = None
+    if modo != "nada" and a.get("calma", True) is not False:
+        esperou = calma(int(a.get("calma_ms", 120)), int(a.get("calma_ate", 1000)))
+    extra = {"calma_ms": esperou} if esperou is not None else {}
     if modo == "nada":
         return {"app": foco()}
-    return {"tela": ver(modo == "imagem", max(320, min(int(a.get("largura", 720)), 1080)), True, a.get("recorte"))}
+    largura = max(320, min(int(a.get("largura", 720)), 1080))
+    return {"tela": ver(modo == "imagem", largura, True, a.get("recorte"), so_mudancas=(modo == "mudancas")), **extra}
 
 
 # --------------------------------------------------------------------------- sequência (vários passos, 1 viagem)
-MAX_PASSOS = 300
+MAX_PASSOS = 300  # passos na lista (contando os aninhados)
+MAX_EXECUTADOS = 3000  # passos executados (laços incluídos)
+PRAZO_SEQUENCIA = 140  # s (o tempo_limite da capacidade é 150)
 
 
 def _regex_bloqueados(lista):
@@ -552,7 +634,8 @@ def _regex_bloqueados(lista):
 
 
 def _linhas_do_passo(p):
-    """Linhas de shell de um passo que não depende de ler a tela. None = passo que precisa da tela (texto)."""
+    """Linhas de shell de um passo que não depende de ler a tela (caminho sem o leitor rápido).
+    None = passo que precisa da tela ou do leitor (texto, condição, laço)."""
     if "tocar" in p:
         alvo = p["tocar"]
         if isinstance(alvo, str):
@@ -561,7 +644,11 @@ def _linhas_do_passo(p):
         pausa = float(p.get("intervalo", 0.05))
         linhas = []
         for x, y in pontos:
-            linhas.append(f"input tap {int(x)} {int(y)} || exit 3")
+            if p.get("segurar"):
+                ms = int(p["segurar"])
+                linhas.append(f"input swipe {int(x)} {int(y)} {int(x)} {int(y)} {ms} || exit 3")
+            else:
+                linhas.append(f"input tap {int(x)} {int(y)} || exit 3")
             if pausa > 0:
                 linhas.append(f"sleep {min(pausa, 5):.2f}")
         return linhas
@@ -585,7 +672,7 @@ def _linhas_do_passo(p):
         if not re.match(r"^[A-Za-z][\w.]{2,120}$", pac):
             raise ValueError("pacote inválido")
         return [f"monkey -p {pac} -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1 || exit 4", "sleep 1"]
-    if "esperar_texto" in p or "esperar_sumir" in p:
+    if any(k in p for k in ("esperar_texto", "esperar_sumir", "se", "se_nao", "repetir", "calma")):
         return None
     raise ValueError(f"passo desconhecido: {json.dumps(p, ensure_ascii=False)[:80]}")
 
@@ -607,63 +694,223 @@ def _rodar_bloco(linhas, rx):
     return None
 
 
+class _Falha(Exception):
+    def __init__(self, info):
+        super().__init__(info.get("erro"))
+        self.info = info
+
+
+RECUSA = "recusado: o app em foco está na lista de bloqueados (banco/pagamento/senha)"
+
+
+def _contar(passos, nivel=0):
+    if nivel > 4:
+        raise ValueError("passos aninhados demais (até 4 níveis)")
+    n = 0
+    for p in passos:
+        n += 1
+        if isinstance(p, dict):
+            for k in ("entao", "senao", "repetir"):
+                if isinstance(p.get(k), list):
+                    n += _contar(p[k], nivel + 1)
+    return n
+
+
+class _Executor:
+    """Roda os passos. Com o leitor rápido, cada toque/tecla/deslize é injetado na hora (ms) e as condições leem a
+    tela direto da acessibilidade; sem ele, os passos que não leem a tela vão juntos num script de shell."""
+
+    def __init__(self):
+        self.lista = bloqueados()
+        self.rx = _regex_bloqueados(self.lista)
+        self.rapido = _ajudante() is not None
+        self.bloco, self.feitos, self.n = [], 0, 0
+        self.t0 = time.time()
+        self.prazo = self.t0 + PRAZO_SEQUENCIA
+        self.app, self.app_em = None, 0.0
+        self.t_esperas = 0.0
+
+    # --- utilidades
+    def descarregar(self):
+        erro = _rodar_bloco(self.bloco, self.rx)
+        self.bloco = []
+        if erro:
+            raise _Falha(erro)
+
+    def conferir_app(self):
+        """O app em foco não pode ser bloqueado (lido no máximo a cada 0,3 s: troca de app leva mais que isso)."""
+        if time.time() - self.app_em > 0.3:
+            self.app, self.app_em = foco(), time.time()
+        if bloqueado(self.app, self.lista):
+            raise _Falha({"erro": RECUSA, "foco": self.app})
+
+    def ver_elementos(self):
+        self.descarregar()  # o que estava na fila sai antes de olhar
+        return elementos(dump_ui())
+
+    def presente(self, texto):
+        return achar(self.ver_elementos(), texto) is not None
+
+    def injetar(self, comando, linhas):
+        """Pelo leitor (conferindo o app antes); se ele não responder, pelo shell (que confere o app no script).
+        Sem o leitor, as linhas entram na fila do shell e saem juntas antes da próxima leitura da tela."""
+        if self.rapido:
+            self.conferir_app()
+            if _injetar(comando):
+                return
+            self.bloco += linhas
+            self.descarregar()
+            return
+        self.bloco += linhas
+
+    # --- passos
+    def rodar(self, passos, rotulo=""):
+        for i, p in enumerate(passos):
+            self.n += 1
+            if self.n > MAX_EXECUTADOS:
+                raise _Falha({"erro": f"mais de {MAX_EXECUTADOS} passos executados (laço sem fim?)"})
+            if time.time() > self.prazo:
+                raise _Falha({"erro": f"a sequência passou de {PRAZO_SEQUENCIA} s"})
+            onde = f"passo {rotulo}{i + 1}"
+            if not isinstance(p, dict):
+                raise _Falha({"erro": f"{onde} inválido"})
+            try:
+                self.passo(p, onde)
+            except (ValueError, TypeError, IndexError, KeyError) as e:
+                raise _Falha({"erro": f"{onde}: {e}"}) from e
+            self.feitos += 1
+
+    def passo(self, p, onde):
+        if not self.rapido:
+            linhas = _linhas_do_passo(p)
+            if linhas is not None:
+                self.bloco += linhas
+                return
+            self.descarregar()  # passo que depende da tela: roda o que acumulou e olha
+        if "tocar" in p:
+            alvo = p["tocar"]
+            if isinstance(alvo, str):
+                e = achar(self.ver_elementos(), alvo)
+                if not e:
+                    raise _Falha({"erro": f"{onde}: nenhum elemento com “{alvo}” na tela", "app": foco()})
+                pontos = [[e["x"], e["y"]]]
+            else:
+                pontos = alvo if alvo and isinstance(alvo[0], (list, tuple)) else [alvo]
+            pontos = [[int(x), int(y)] for x, y in pontos]
+            pausa = max(0.0, min(float(p.get("intervalo", 0.05)), 5.0))
+            if p.get("segurar"):
+                ms = max(50, min(int(p["segurar"]), 5000))
+                for k, (x, y) in enumerate(pontos):
+                    if k and pausa:
+                        time.sleep(pausa)
+                    self.injetar(f"tocar {x} {y} {ms}", [f"input swipe {x} {y} {x} {y} {ms} || exit 3"])
+                return
+            cmd = f"toques {int(pausa * 1000)} " + " ".join(f"{x} {y}" for x, y in pontos)
+            linhas = []
+            for x, y in pontos:
+                linhas += [f"input tap {x} {y} || exit 3"] + ([f"sleep {pausa:.2f}"] if pausa else [])
+            self.injetar(cmd, linhas)
+        elif "deslizar" in p:
+            v = [int(n) for n in p["deslizar"]]
+            ms = v[4] if len(v) > 4 else 300
+            self.injetar(f"deslizar {v[0]} {v[1]} {v[2]} {v[3]} {ms}",
+                         [f"input swipe {v[0]} {v[1]} {v[2]} {v[3]} {ms} || exit 3"])
+        elif "tecla" in p:
+            cod = TECLAS.get(normalizar(p["tecla"]))
+            if cod is None:
+                raise ValueError(f"tecla deve ser uma de: {', '.join(TECLAS)}")
+            self.injetar(f"tecla {cod}", [f"input keyevent {cod} || exit 3"])
+            self.app_em = 0.0  # voltar/início podem trocar de app
+        elif "digitar" in p:
+            self.app_em = 0.0
+            self.conferir_app()
+            if not _injetar("texto " + str(p["digitar"]).encode().hex()):
+                texto, _ = escapar_input_text(str(p["digitar"]))
+                if texto:
+                    self.bloco = [f"input text {shlex.quote(texto)} || exit 3"]
+                    self.descarregar()
+        elif "esperar" in p:
+            t = min(float(p["esperar"]), 10)
+            self.t_esperas += t
+            time.sleep(t)
+        elif "calma" in p:
+            v = p["calma"]
+            limite = 1000 if v is True else int(max(0.1, min(float(v), 10)) * 1000)  # segundos, no máximo 10
+            t = time.time()
+            calma(int(p.get("quieto_ms", 120)), limite)
+            self.t_esperas += time.time() - t
+        elif "abrir" in p:
+            pac = str(p["abrir"])
+            if not re.match(r"^[A-Za-z][\w.]{2,120}$", pac):
+                raise ValueError("pacote inválido")
+            _, erro, cod = rish(f"monkey -p {pac} -c android.intent.category.LAUNCHER 1")
+            if cod != 0 or "No activities found" in erro:
+                raise _Falha({"erro": f"{onde}: não consegui abrir {pac}: {erro.strip()[:200]}"})
+            self.app_em = 0.0
+            if self.rapido:
+                calma(150, 2500)
+            else:
+                time.sleep(1)
+        elif "esperar_texto" in p or "esperar_sumir" in p:
+            texto = p.get("esperar_texto") or p.get("esperar_sumir")
+            quer = "esperar_texto" in p
+            limite = time.time() + min(float(p.get("ate", 10)), 30)
+            t = time.time()
+            while self.presente(texto) != quer:
+                if time.time() > limite:
+                    raise _Falha({"erro": f"{onde}: “{texto}” {'não apareceu' if quer else 'não sumiu'} a tempo",
+                                  "app": foco()})
+                time.sleep(0.08 if self.rapido else 0.4)
+            self.t_esperas += time.time() - t
+        elif "se" in p or "se_nao" in p:
+            texto = p.get("se") if "se" in p else p.get("se_nao")
+            verdade = self.presente(texto) == ("se" in p)
+            ramo = p.get("entao" if verdade else "senao") or []
+            if not isinstance(ramo, list):
+                raise ValueError("entao/senao devem ser listas de passos")
+            self.rodar(ramo, f"{onde.split()[-1]}.{'entao' if verdade else 'senao'}.")
+        elif "repetir" in p:
+            corpo = p["repetir"]
+            if not isinstance(corpo, list) or not corpo:
+                raise ValueError("repetir deve ser uma lista de passos")
+            vezes = max(1, min(int(p.get("vezes", 50)), 500))
+            ate = p.get("ate_texto") or p.get("ate_sumir")
+            for k in range(vezes):
+                self.rodar(corpo, f"{onde.split()[-1]}.{k + 1}.")
+                if ate is not None and self.presente(ate) == ("ate_texto" in p):
+                    return
+            if ate is not None:
+                raise _Falha({"erro": f"{onde}: repetiu {vezes} vezes e “{ate}” "
+                                      f"{'não apareceu' if 'ate_texto' in p else 'não sumiu'}"})
+        else:
+            raise ValueError(f"passo desconhecido: {json.dumps(p, ensure_ascii=False)[:80]}")
+
+
 def sequencia(a):
     passos = a.get("passos") or []
     if not isinstance(passos, list) or not passos:
         return {"erro": "informe passos: lista de {tocar:[x,y] | tocar:'texto' | tocar:[[x,y],...] | digitar | tecla | "
-                        "deslizar:[x,y,x2,y2] | esperar:s | esperar_texto:'...' | esperar_sumir:'...' | abrir:'pacote'}"}
-    if len(passos) > MAX_PASSOS:
-        return {"erro": f"no máximo {MAX_PASSOS} passos por sequência"}
-    rx = _regex_bloqueados(bloqueados())
-    bloco, feitos, t0 = [], 0, time.time()
-    for i, p in enumerate(passos):
-        if not isinstance(p, dict):
-            return {"erro": f"passo {i + 1} inválido", "feitos": feitos}
-        try:
-            linhas = _linhas_do_passo(p)
-        except (ValueError, TypeError, IndexError) as e:
-            return {"erro": f"passo {i + 1}: {e}", "feitos": feitos}
-        if linhas is not None:
-            bloco += linhas
-            feitos += 1
-            continue
-        erro = _rodar_bloco(bloco, rx)  # passo que depende da tela: roda o que acumulou e olha
-        bloco = []
-        if erro:
-            return {**erro, "feitos": feitos}
-        if "digitar" in p:
-            app = foco()
-            if bloqueado(app, bloqueados()):
-                return {"erro": "recusado: o app em foco está na lista de bloqueados (banco/pagamento/senha)",
-                        "foco": app, "feitos": feitos}
-            if not _injetar("texto " + str(p["digitar"]).encode().hex()):
-                texto, _ = escapar_input_text(str(p["digitar"]))
-                bloco = [f"input text {shlex.quote(texto)} || exit 3"] if texto else []
-            feitos += 1
-            continue
-        if "tocar" in p:
-            alvo = achar(elementos(dump_ui()), p["tocar"])
-            if not alvo:
-                return {"erro": f"passo {i + 1}: nenhum elemento com “{p['tocar']}” na tela", "feitos": feitos,
-                        "app": foco()}
-            bloco = [f"input tap {alvo['x']} {alvo['y']} || exit 3"]
-        else:
-            texto = p.get("esperar_texto") or p.get("esperar_sumir")
-            quer = "esperar_texto" in p
-            limite = time.time() + min(float(p.get("ate", 10)), 30)
-            while True:
-                presente = achar(elementos(dump_ui()), texto) is not None
-                if presente == quer:
-                    break
-                if time.time() > limite:
-                    return {"erro": f"passo {i + 1}: “{texto}” {'não apareceu' if quer else 'não sumiu'} a tempo",
-                            "feitos": feitos, "app": foco()}
-                time.sleep(0.4)
-        feitos += 1
-    erro = _rodar_bloco(bloco, rx)
-    if erro:
-        return {**erro, "feitos": feitos}
-    return {"feito": f"{feitos} passos em {time.time() - t0:.1f} s", **_ver_depois(a)}
+                        "deslizar:[x,y,x2,y2] | esperar:s | calma:true | esperar_texto:'...' | esperar_sumir:'...' | "
+                        "abrir:'pacote' | se:'texto',entao:[...],senao:[...] | repetir:[...],vezes,ate_texto}"}
+    try:
+        if _contar(passos) > MAX_PASSOS:
+            return {"erro": f"no máximo {MAX_PASSOS} passos por sequência"}
+    except ValueError as e:
+        return {"erro": str(e)}
+    ex = _Executor()
+    try:
+        ex.rodar(passos)
+        ex.descarregar()
+    except _Falha as f:
+        return {**f.info, "feitos": ex.feitos}
+    gasto = time.time() - ex.t0
+    tempos = {"acoes": round(gasto - ex.t_esperas, 2)}
+    if ex.t_esperas:
+        tempos["esperas"] = round(ex.t_esperas, 2)
+    t = time.time()
+    depois = _ver_depois(a)
+    tempos["olhar"] = round(time.time() - t, 2)
+    return {"feito": f"{ex.feitos} passos em {gasto:.1f} s", "tempos": tempos, **depois}
 
 
 def agir(a):
@@ -729,8 +976,8 @@ def agir(a):
     espera = float(a.get("esperar") or 0)
     if espera > 0:
         time.sleep(min(espera, 10))
-    # depois de agir: por padrão só o app em foco (rápido); "elementos" ou "imagem" quando pedido
-    res.update(_ver_depois(a, "elementos" if espera > 0 else "nada"))
+    # depois de agir: com o leitor rápido, espera a tela assentar e diz só o que mudou; sem ele, só o app em foco
+    res.update(_ver_depois(a, "elementos" if espera > 0 and not _ajudante() else None))
     return res
 
 
@@ -745,7 +992,8 @@ def executar(a):
                  "app": app_em_foco(out), "tela_acesa": "Awake" in out, "ffmpeg": bool(shutil.which("ffmpeg"))}
         elif acao == "ver":
             largura = max(320, min(int(a.get("largura", 720)), 1080))
-            r = ver(bool(a.get("imagem", True)), largura, bool(a.get("elementos", True)), a.get("recorte"))
+            r = ver(bool(a.get("imagem", True)), largura, bool(a.get("elementos", True)), a.get("recorte"),
+                    so_mudancas=bool(a.get("so_mudancas")))
         else:
             r = agir(a)
     except SemShizuku as e:

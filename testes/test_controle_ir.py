@@ -1760,8 +1760,14 @@ for linha in sys.stdin:
     ident, cmd = p[0], p[1]
     if cmd == "dump":
         r = xml
-    elif cmd == "foco":
-        r = "com.android.settings"
+    elif cmd in ("foco", "estado"):
+        arq = os.environ.get("FOCO_ARQ", "")
+        r = open(arq).read().strip() if arq and os.path.exists(arq) else "com.android.settings"
+        if cmd == "estado":
+            r += "\\n1"
+    elif cmd == "calma":
+        open(reg, "a").write("leitor " + " ".join(p[1:]) + "\\n")
+        r = "ok 3"
     elif cmd == "shell":
         pr = subprocess.run(["sh", "-c", bytes.fromhex(p[2]).decode()], capture_output=True, text=True)
         r = f"{{pr.returncode}} {{len(pr.stdout)}}\\n" + pr.stdout + pr.stderr
@@ -1803,8 +1809,66 @@ for linha in sys.stdin:
         self.assertIn("leitor tocar 220 450", log)  # toque injetado, sem o input do shell
         self.assertIn("leitor texto olá, mundo", log)  # com acento
         self.assertIn("leitor texto ação", log)
-        self.assertIn("input tap 5 6", log)  # na sequência, os toques em série vão num script de shell
+        self.assertIn("leitor toques 50 5 6", log)  # na sequência, os toques também vão injetados
+        self.assertIn("leitor tecla 4", log)
+        self.assertNotIn("input ", log)  # nada pelo `input` do shell
+        self.assertIn("calma", log)  # depois de agir, espera a tela assentar antes de olhar
         self.assertEqual([p for p in self._sobras() if not p.startswith("pronto")], [])
+
+    def test_ver_depois_diz_so_o_que_mudou(self):
+        self._leitor_falso()
+        r1 = self.m.agir({"acao": "tecla", "tecla": "voltar"})  # primeira olhada: lista inteira
+        self.assertIn("elementos", r1["tela"])
+        self.assertEqual(r1["tela"]["app"], "com.android.settings")
+        self.assertIs(r1["tela"]["tela_acesa"], True)  # pelo leitor, sem dumpsys
+        r2 = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [5, 6]}]})
+        self.assertEqual(r2["tela"]["mudancas"], "nenhuma")
+        self.assertIn("acoes", r2["tempos"])
+
+    def test_diferenca_entre_telas(self):
+        a = [{"id": "placar", "texto": "0", "x": 1, "y": 1}, {"texto": "Sair", "x": 5, "y": 5},
+             {"id": "ok", "x": 9, "y": 9, "clicavel": True}]
+        d = [{"id": "placar", "texto": "10", "x": 1, "y": 1}, {"id": "ok", "x": 9, "y": 9, "clicavel": True},
+             {"texto": "Venceu!", "x": 3, "y": 3}]
+        dif = self.m.diferenca(a, d, "app", "app")
+        self.assertEqual(dif["entrou"], [{"texto": "Venceu!", "x": 3, "y": 3}])
+        self.assertEqual(dif["saiu"], [{"texto": "Sair", "x": 5, "y": 5}])
+        self.assertEqual(dif["mudou"], [{"id": "placar", "texto": "10", "x": 1, "y": 1, "antes": {"texto": "0"}}])
+        self.assertIsNone(self.m.diferenca(a, d, "app", "outro"))  # outro app: lista inteira
+        self.assertIsNone(self.m.diferenca(None, d))  # primeira olhada
+        muitos = [{"texto": str(k), "x": k, "y": k} for k in range(40)]
+        self.assertIsNone(self.m.diferenca(a, muitos, "app", "app"))  # tela nova de fato
+
+    def test_condicoes_e_lacos_no_celular(self):
+        self._leitor_falso()
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [
+            {"se": "Bluetooth", "entao": [{"tocar": [1, 1]}], "senao": [{"tocar": [2, 2]}]},
+            {"se_nao": "Bluetooth", "entao": [{"tocar": [3, 3]}]},
+            {"repetir": [{"tocar": [4, 4], "intervalo": 0}], "vezes": 5, "ate_texto": "Bluetooth"},
+            {"tocar": [[7, 8]], "segurar": 600}, {"calma": 0.5}]})
+        self.assertIn("7 passos", r["feito"], r)  # 5 da lista + 2 dos ramos e do laço
+        log = self.registro.read_text()
+        self.assertIn("leitor toques 50 1 1", log)
+        self.assertNotIn(" 2 2", log)
+        self.assertNotIn(" 3 3", log)
+        self.assertEqual(log.count("leitor toques 0 4 4"), 1)  # o texto já estava lá: uma volta só
+        self.assertIn("leitor tocar 7 8 600", log)
+        self.assertIn("leitor calma 120 500", log)
+        r = self.m.agir({"acao": "sequencia", "passos": [
+            {"repetir": [{"tocar": [4, 4]}], "vezes": 3, "ate_sumir": "Bluetooth"}]})
+        self.assertIn("repetiu 3 vezes", r["erro"])
+        r = self.m.agir({"acao": "sequencia", "passos": [{"repetir": [{"repetir": [{"repetir": [{"repetir": [
+            {"repetir": [{"tocar": [1, 1]}]}]}]}]}]}]})
+        self.assertIn("aninhados", r["erro"])
+
+    def test_leitor_recusa_app_bloqueado(self):
+        foco = self.tmp / "foco.txt"
+        foco.write_text("com.nu.production")
+        with mock.patch.dict(os.environ, {"FOCO_ARQ": str(foco)}):
+            self._leitor_falso()
+            r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [10, 20]}]})
+        self.assertIn("bloqueados", r["erro"])
+        self.assertFalse(self.registro.exists())  # nenhum toque saiu
 
     def test_leitor_que_nao_sobe_cai_no_caminho_antigo(self):
         self._leitor_falso(quebrado=True)

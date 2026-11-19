@@ -41,6 +41,13 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Ciclo rápido de ver-agir-decidir (1.0.35):** na sequência, toques, deslizes e teclas vão injetados pelo
+  leitor (`toques` num pedido só), não mais pelo `input` do shell (~0,18 s por toque). Depois de agir, espera a tela
+  assentar (`calma`, `waitForIdle` da acessibilidade) em vez de pausa fixa e responde só o que mudou desde a última
+  olhada (`ver_depois="mudancas"`, padrão). Condições e laços rodam no próprio celular (`se`/`se_nao` com
+  `entao`/`senao`, `repetir` com `vezes` e `ate_texto`/`ate_sumir`), sem ida e volta. Estado (app em foco e tela
+  acesa) direto do leitor, sem `dumpsys`. Elementos trazem marcado/selecionado/rolável/desativado. Sudoku médio
+  inteiro: 43 casas em ~8 s com o caminho antigo (antes desta versão).
 - **19/11 — 1.0.33/1.0.34 medidos no POCO:** leitura da tela 0,04 s (antes 2,6–10 s), `ver` só elementos 0,21 s,
   shell 0,09 s (antes 0,32), foto 480 px 0,11 s e 720 px 0,15 s direto da acessibilidade (antes 1,37 s com
   screencap+ffmpeg), `ver` completo 0,48 s (antes ~3 s). Central: /mcp com 1 consulta ao D1 (PR #11).

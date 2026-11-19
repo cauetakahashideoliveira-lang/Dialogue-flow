@@ -187,7 +187,7 @@ def laco(sessao):
                             "status": comandar_ar(ajuste["aparelho"], ajuste["dormir_c"])}]
         gravar_json(ESTADO, s)
     madrugada_feita = False
-    while time.time() < s["fim"] and not os.path.exists(os.path.join(TMP, "parar")):
+    while time.time() < s["fim"] and not os.path.exists(os.path.join(TMP, "parar")) and not os.path.exists(os.path.join(BASE, "PARAR")):
         t0 = time.time()
         x = trecho_do_microfone(s["duracao_s"])
         linha = {"t": round(t0), "duracao_s": s["duracao_s"]}
@@ -207,7 +207,7 @@ def laco(sessao):
             gravar_json(ESTADO, s)
             madrugada_feita = True
         espera = s["intervalo_min"] * 60 - (time.time() - t0)
-        while espera > 0 and not os.path.exists(os.path.join(TMP, "parar")):
+        while espera > 0 and not os.path.exists(os.path.join(TMP, "parar")) and not os.path.exists(os.path.join(BASE, "PARAR")):
             time.sleep(min(espera, 15))
             espera -= 15
     s = ler_json(ESTADO, s)

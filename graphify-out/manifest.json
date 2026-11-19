@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795076977.889307,
-    "seen": 1795077049.4013107,
-    "ast_hash": "b391b8102a0795166d30df754ecaac49",
+    "mtime": 1795078705.23351,
+    "seen": 1795078963.4465516,
+    "ast_hash": "7f22bf6f4a1894020147458bd8e0e2f0",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -24,9 +24,9 @@
     "semantic_hash": "f663f17f7f72ef3d2bf1b48b8afa022b"
   },
   "controle-ir/controle_ir/cli.py": {
-    "mtime": 1795047157.7282243,
-    "seen": 1795056158.8514004,
-    "ast_hash": "e8411f74dac6da2820a4248d6eba26be",
+    "mtime": 1795078556.5005202,
+    "seen": 1795078963.4465592,
+    "ast_hash": "92f9f5629ea21feaf4aaf02ca3c1629e",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/controle.py": {
@@ -54,9 +54,9 @@
     "semantic_hash": "91ccb5e9b53ecfb24d8263f1b519395a"
   },
   "controle-ir/controle_ir/mcp.py": {
-    "mtime": 1795053944.3649158,
-    "seen": 1795056158.8514087,
-    "ast_hash": "8ffe0defc30e861a295f5f65772d53a5",
+    "mtime": 1795078705.2277057,
+    "seen": 1795078963.4465675,
+    "ast_hash": "1bdff9a6d07986fdefa668f64ef4697f",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/protocolos.py": {
@@ -66,15 +66,15 @@
     "semantic_hash": "ceadbcf302a63e7b7c41276752c154c5"
   },
   "controle-ir/controle_ir/servico.py": {
-    "mtime": 1795053118.3898318,
-    "seen": 1795056158.8514118,
-    "ast_hash": "efcd57a4ae9e70c99b453efd33510d37",
+    "mtime": 1795078511.66036,
+    "seen": 1795078963.4465718,
+    "ast_hash": "1834d602834602ffdde2b62c7a6680ad",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/servidor.py": {
-    "mtime": 1795047157.7282243,
-    "seen": 1795056158.851413,
-    "ast_hash": "334611ba6a39066a45a9941379428a1b",
+    "mtime": 1795078523.635015,
+    "seen": 1795078963.4465733,
+    "ast_hash": "d978d81d12230103222c8a5fb6a529f5",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/sinais.py": {
@@ -84,9 +84,9 @@
     "semantic_hash": "5fc5fa2345befcdd1da36166029629bb"
   },
   "controle-ir/controle_ir/tunel.py": {
-    "mtime": 1795049556.5864322,
-    "seen": 1795056158.8514152,
-    "ast_hash": "f37070525211589459cdb2e18288fe4f",
+    "mtime": 1795078523.6347964,
+    "seen": 1795078963.4465756,
+    "ast_hash": "8689d54bc2d8779aa10ec6f8deb8bf95",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/vocabulario.py": {
@@ -126,9 +126,9 @@
     "semantic_hash": "7412aa1ac0ae2377aea28c4b62ac429f"
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1795076977.88251,
-    "seen": 1795077049.4013476,
-    "ast_hash": "2f5560ac64a603eccb0765a0980795b8",
+    "mtime": 1795078653.3236783,
+    "seen": 1795078963.4465857,
+    "ast_hash": "c52a519121bc01d6b7270667a95dc0cb",
     "semantic_hash": ""
   },
   "README.md": {
@@ -162,15 +162,15 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795058298.1097538,
-    "seen": 1795058430.394173,
-    "ast_hash": "83ef89f88f2f1f08141f38632679cd54",
+    "mtime": 1795078961.0607893,
+    "seen": 1795078963.446589,
+    "ast_hash": "5e5a86968853a05eb54d588cf49a9499",
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795076656.1451423,
-    "seen": 1795076659.3234055,
-    "ast_hash": "0e3f9bc3c89545b1fd975f8094abe2e5",
+    "mtime": 1795078961.061714,
+    "seen": 1795078963.446605,
+    "ast_hash": "208120992305529db404ab3b4d13b033",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/execucao.py": {
-    "mtime": 1795047157.7282243,
-    "seen": 1795056158.8514056,
-    "ast_hash": "6589d6af368a99810066160007017e36",
+    "mtime": 1795078497.4406278,
+    "seen": 1795078963.446565,
+    "ast_hash": "0f53edaf650d7f29085d5c8af0c0eaec",
     "semantic_hash": ""
   },
   "docs/modo-deus.md": {
@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/sono/principal.py": {
-    "mtime": 1795053858.9580815,
-    "seen": 1795056158.8513875,
-    "ast_hash": "9b24f44ae7481e2005509c1de6be961f",
+    "mtime": 1795078556.525397,
+    "seen": 1795078963.4465437,
+    "ast_hash": "b46ef8dd4a9831ce5971cfb072c160f6",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/capacidade.json": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/termometro/principal.py": {
-    "mtime": 1795053083.7319598,
-    "seen": 1795056158.851391,
-    "ast_hash": "22cdf1c4aab8bd4d211279798d3c5edc",
+    "mtime": 1795078563.9926126,
+    "seen": 1795078963.4465494,
+    "ast_hash": "d47435509213d69ad13d6984fff1c05f",
     "semantic_hash": ""
   },
   "artefatos/central-da-casa.html": {
@@ -363,6 +363,18 @@
     "mtime": 1795058195.2857478,
     "seen": 1795058430.3941708,
     "ast_hash": "dee5fa4581046da5652db2ef271d9737",
+    "semantic_hash": ""
+  },
+  "controle-ir/controle_ir/seguranca.py": {
+    "mtime": 1795078472.2081735,
+    "seen": 1795078963.4465702,
+    "ast_hash": "4cd954af35f0227f1db56342258c60c8",
+    "semantic_hash": ""
+  },
+  "docs/seguranca.md": {
+    "mtime": 1795078953.112202,
+    "seen": 1795078963.4466078,
+    "ast_hash": "c2c88dcf7772d7c20c95ce1ce8d8a1fc",
     "semantic_hash": ""
   }
 }

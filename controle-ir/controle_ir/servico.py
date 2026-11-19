@@ -518,6 +518,11 @@ class Servico:
         raise ErroUso("acao deve ser listar, ver ou anotar")
 
     def executar_capacidade(self, nome, argumentos=None) -> dict:
+        from .seguranca import armado
+        pol = self.exec.politica.ler()
+        if pol["travado"] or not armado(pol):  # o guardião do MCP já barra; aqui vale para qualquer outro caminho
+            raise ErroUso("capacidades exigem o sistema armado e destravado: arme no celular (widget “Armar "
+                          "Controle IR” ou controle-ir armar)")
         try:
             return self.reg.executar(str(nome), argumentos or {}, {"CONTROLE_IR_DIR": str(self.pasta)})
         except ErroCapacidade as e:
@@ -557,16 +562,20 @@ class Servico:
 
     def autorizar(self, codigo=None, tarefa=None, liberar_minutos=None, capacidade=None, sha=None,
                   destravar=False) -> dict:
-        """Aprovação pelo Claude, de qualquer aparelho. Modo "chat" (padrão): basta o sim do usuário na conversa;
-        modo "codigo": exige o código de 6 dígitos do app autenticador; "desligada": só no celular."""
+        """Aprovação pelo Claude, de qualquer aparelho. Só existe no modo "codigo" (código de 6 dígitos do app
+        autenticador, de preferência noutro aparelho); "desligada" (padrão): aprova-se só no celular. Não há mais
+        aprovação "pelo chat": uma chamada do agente não pode aprovar o próprio agente."""
         if not any([tarefa, liberar_minutos, capacidade, destravar]):
             raise ErroUso("informe o que autorizar: tarefa, liberar_minutos, capacidade (com sha) ou destravar")
         if capacidade and not sha:
             raise ErroUso("para aprovar uma capacidade, informe o sha devolvido por propor_capacidade (o código "
                           "que o usuário viu)")
         modo = self.exec.politica.ler()["aprovacao_remota"]
-        if modo == "desligada":
-            raise ErroUso("a aprovação pelo Claude está desligada neste celular: aprove pela notificação")
+        if modo != "codigo":
+            self.exec.auditar({"evento": "autorizacao_remota", "resultado": "recusada_sem_codigo"})
+            raise ErroUso("aprovação remota desligada: aprove no celular (notificação, widget “Armar Controle IR” "
+                          "ou controle-ir exec destravar). Para aprovar daqui, o dono configura o código do "
+                          "autenticador no celular: controle-ir exec codigo configurar")
         if modo == "codigo":
             try:
                 ok = self.exec.autorizacao.verificar(codigo)
@@ -607,16 +616,21 @@ class Servico:
         p = self.exec.politica.ler()
         p["travado"], p["liberado_ate"] = True, 0
         self.exec.politica.gravar(p)
+        try:  # os laços em 2º plano das capacidades (sono, termômetro) param ao ver este arquivo
+            (Path(self.pasta) / "PARAR").write_text(str(time.time()))
+        except OSError:
+            pass
         n = self.exec.parar_todas()
         self.exec.auditar({"evento": "travado_remotamente", "tarefas_encerradas": n})
         self.exec.notificar({"tipo": "alerta", "texto": f"Execução TRAVADA pelo Claude ({n} tarefa(s) encerrada(s))"})
         return {"travado": True, "tarefas_encerradas": n,
-                "destravar": "no celular: controle-ir exec destravar · ou autorizar(codigo, destravar=true)"}
+                "destravar": "só no celular: widget “Armar Controle IR” ou controle-ir armar · ou "
+                             "autorizar(codigo do autenticador, destravar=true)"}
 
     def atualizar_sistema(self, ref, motivo=None, aguardar=40) -> dict:
         import re
-        if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._/-]{3,79}$", str(ref or "")):
-            raise ErroUso("ref deve ser o hash do commit (recomendado) ou o nome do branch")
+        if not re.fullmatch(r"[0-9a-f]{40}", str(ref or "")):  # nome de branch ou "a/../outro/repo" não servem
+            raise ErroUso("ref deve ser o hash completo do commit (40 caracteres hexadecimais)")
         r = self.exec.pedir(f"controle-ir atualizar --ref {ref}", aguardar=aguardar, tempo_limite=60, classe="sistema",
                             motivo=motivo or f"atualizar o controle-ir para {ref}")
         r["depois"] = ("Se aprovada, o serviço reinicia em ~1 min com a versão nova; confirme com consultar "

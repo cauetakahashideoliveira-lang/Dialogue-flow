@@ -57,7 +57,8 @@ class Origens:
     def verificar(self, xff: str | None) -> bool:
         if not xff:
             return True
-        ip = xff.split(",")[0].strip()
+        # o proxy confiável (ngrok/Cloudflare) acrescenta o IP real no FIM; o começo vem do próprio cliente
+        ip = xff.split(",")[-1].strip()
         pol = self.politica()
         ok = self.dentro(ip, pol["redes"])
         with self.trava:
@@ -188,7 +189,7 @@ class Notificador:
         self._rodar(["termux-notification", "--id", "controle-ir-servico", "--title", "Controle IR ativo",
                      "--content", f"{txt} · em segundo plano", "--ongoing", "--alert-once", "--priority", "low",
                      "--button1", "Painel", "--button1-action", f"{self.cli} painel",
-                     "--button2", "Copiar URL", "--button2-action", f"{self.cli} copiar",
+                     "--button2", "Travar", "--button2-action", f"{self.cli} exec travar",
                      "--button3", "Desligar", "--button3-action", f"{self.cli} desligar"])
 
 

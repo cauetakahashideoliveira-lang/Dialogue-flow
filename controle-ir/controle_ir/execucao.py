@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -28,9 +29,14 @@ import threading
 import time
 from pathlib import Path
 
-CLASSES = ("leitura", "rede", "pacotes", "sistema", "livre")
+CLASSES = ("leitura", "rede", "pacotes", "sistema", "livre", "protegido")
 PADRAO = {"leitura": "permitir", "rede": "perguntar", "pacotes": "perguntar", "sistema": "perguntar",
-          "livre": "perguntar"}
+          "livre": "perguntar", "protegido": "negar"}
+# segredos e estado do fiscal: nenhum comando remoto que os cite roda, em nenhum perfil. É uma barreira contra
+# o caminho óbvio (cat/cp/sed), não um isolamento: com a classe "livre" permitida, um interpretador lê qualquer
+# arquivo do mesmo usuário (docs/seguranca.md, limites da Etapa 0).
+PROTEGIDO = re.compile(r"\.controle-ir/(?:\S*\*|config\.json|autorizacao\.json|politica\.json|auditoria\.jsonl|"
+                       r"PARAR)|ngrok\.ya?ml|\.config/ngrok|\.ssh/|/proc/\S*/environ|\.termux/boot")
 LEITURA = {"ls", "cat", "head", "tail", "wc", "pwd", "whoami", "id", "uname", "uptime", "date", "df", "du",
            "free", "ps", "which", "file", "stat", "grep", "getprop", "ip", "termux-info", "termux-battery-status",
            "termux-wifi-connectioninfo", "termux-wifi-scaninfo", "termux-sensor", "termux-infrared-frequencies",
@@ -46,6 +52,8 @@ MAX_TEMPO = 3600
 
 
 def classificar(comando: str) -> str:
+    if PROTEGIDO.search(comando):
+        return "protegido"
     if any(c in META for c in comando):
         return "livre"
     try:
@@ -74,21 +82,26 @@ class Politica:
         except (OSError, ValueError):
             p = {}
         p["classes"] = {**PADRAO, **{k: v for k, v in (p.get("classes") or {}).items() if k in CLASSES}}
+        p["classes"]["protegido"] = "negar"
         p.setdefault("travado", False)
         p.setdefault("liberado_ate", 0)
-        # aprovação vinda do Claude (qualquer aparelho): "chat" = basta o "sim" do usuário na conversa;
-        # "codigo" = exige o código do app autenticador; "desligada" = só no celular
-        if p.get("aprovacao_remota") not in ("chat", "codigo", "desligada"):
-            p["aprovacao_remota"] = "chat"
+        # aprovação vinda do Claude: "codigo" = exige o código do app autenticador; "desligada" = só no celular.
+        # O antigo "chat" (bastava o agente chamar autorizar) virou "desligada": o agente não aprova a si mesmo.
+        if p.get("aprovacao_remota") not in ("codigo", "desligada"):
+            p["aprovacao_remota"] = "desligada"
+        if "armado_ate" not in p:  # migração: quem atualiza continua armado até a meia-noite; depois, todo dia
+            from .seguranca import fim_do_dia
+            p["armado_ate"] = fim_do_dia()
+            self.gravar(p)
+        p.setdefault("desarmado_permite", "ir")
         p["auto_capacidades"] = bool(p.get("auto_capacidades"))  # modo autônomo ativa código novo sem tocar no celular
         return p
 
     # perfis prontos (só mudam no celular): autônomo = rédea solta; cauteloso = pergunta o que age; leitura = só olhar
     PERFIS = {
-        "autonomo": {"classes": {c: "permitir" for c in CLASSES}, "auto_capacidades": True, "aprovacao_remota": "chat"},
-        "cauteloso": {"classes": dict(PADRAO), "auto_capacidades": False, "aprovacao_remota": "chat"},
-        "leitura": {"classes": {**{c: "negar" for c in CLASSES}, "leitura": "permitir"}, "auto_capacidades": False,
-                    "aprovacao_remota": "chat"},
+        "autonomo": {"classes": {c: "permitir" for c in CLASSES if c != "protegido"}, "auto_capacidades": True},
+        "cauteloso": {"classes": dict(PADRAO), "auto_capacidades": False},
+        "leitura": {"classes": {**{c: "negar" for c in CLASSES}, "leitura": "permitir"}, "auto_capacidades": False},
     }
 
     def aplicar_perfil(self, nome: str) -> dict:
@@ -96,8 +109,7 @@ class Politica:
             raise ValueError(f"perfil deve ser um de: {', '.join(self.PERFIS)}")
         p = self.ler()
         p.update(self.PERFIS[nome])
-        p["perfil"] = nome
-        p["travado"] = False
+        p["perfil"] = nome  # trocar de perfil não destrava nem arma: isso é explícito (armar/destravar)
         self.gravar(p)
         return p
 
@@ -109,8 +121,9 @@ class Politica:
         os.replace(tmp, self.arq)
 
     def decidir(self, classe: str) -> str:
+        from .seguranca import armado
         p = self.ler()
-        if p["travado"]:
+        if classe == "protegido" or p["travado"] or not armado(p):
             return "negar"
         modo = p["classes"].get(classe, "perguntar")
         if modo == "perguntar" and classe != "sistema" and time.time() < float(p["liberado_ate"] or 0):
@@ -118,15 +131,36 @@ class Politica:
         return modo
 
     def resumo(self) -> dict:
+        from .seguranca import armado
         p = self.ler()
         lib = float(p["liberado_ate"] or 0)
         return {"travado": p["travado"], "perfil": p.get("perfil"), "classes": p["classes"],
                 "auto_capacidades": p["auto_capacidades"], "aprovacao_remota": p["aprovacao_remota"],
                 "liberado_ate": time.strftime("%H:%M", time.localtime(lib)) if lib > time.time() else None,
-                "como_mudar": "no celular: controle-ir exec classe <classe> permitir|perguntar|negar · "
-                              "controle-ir exec liberar <minutos> · controle-ir exec travar|destravar · "
-                              "controle-ir exec remoto chat|codigo|desligada. De qualquer aparelho: "
-                              "autorizar(tarefa|liberar_minutos|capacidade|destravar) e travar."}
+                "armado": armado(p),
+                "armado_ate": time.strftime("%d/%m %H:%M", time.localtime(float(p["armado_ate"])))
+                if armado(p) else None,
+                "desarmado_permite": p["desarmado_permite"],
+                "como_mudar": "só no celular: controle-ir armar [horas] · controle-ir desarmar · "
+                              "controle-ir exec classe <classe> permitir|perguntar|negar · controle-ir exec "
+                              "travar|destravar · controle-ir exec remoto codigo|desligada. Pelo conector: travar "
+                              "(e autorizar só com o código do autenticador)."}
+
+    def armar(self, horas: float | None = None) -> dict:
+        """Só pelo celular (CLI/widget): libera as ferramentas de alto risco até a meia-noite ou por `horas`."""
+        from .seguranca import fim_do_dia
+        p = self.ler()
+        agora = time.time()
+        p["armado_ate"] = agora + max(0.1, min(float(horas), 24)) * 3600 if horas else fim_do_dia(agora)
+        p["travado"] = False
+        self.gravar(p)
+        return p
+
+    def desarmar(self) -> dict:
+        p = self.ler()
+        p["armado_ate"], p["liberado_ate"] = 0, 0
+        self.gravar(p)
+        return p
 
 
 # ------------------------------------------------------------- autorização remota (TOTP, RFC 6238)

@@ -519,9 +519,92 @@ class TestServidorMCP(unittest.TestCase):
         self.assertEqual(st, 200)  # padrão: só observa
         self.assertIn("203.0.113.9", (Path(self.srv_obj.pasta) / "origens.json").read_text())
         o = Origens(Path(tempfile.mkdtemp()), lambda: {"modo": "exigir"})
-        self.assertTrue(o.verificar("160.79.105.20, 10.0.0.1"))
+        self.assertTrue(o.verificar("10.0.0.1, 160.79.105.20"))  # vale o IP acrescentado pelo proxy, no fim
+        self.assertFalse(o.verificar("160.79.105.20, 203.0.113.9"))  # o começo vem do cliente: falsificável
         self.assertFalse(o.verificar("203.0.113.9"))
         self.assertTrue(o.verificar(None))  # chamada local, sem túnel
+
+
+class TestArmacao(unittest.TestCase):
+    """Etapa 0 de segurança: desarmado, pelo conector só passa o baixo risco; armar só no celular."""
+
+    def setUp(self):
+        from controle_ir.mcp import ServidorMCP
+        self.s, self.pasta = novo_servico(com_base=False)
+        self.pol = self.s.exec.politica
+        self.mcp = ServidorMCP(self.s)
+
+    def chamar(self, nome, **args):
+        r = self.mcp.chamar(nome, args)
+        return json.loads(r["content"][0]["text"]), r["isError"]
+
+    def test_quem_atualiza_fica_armado_ate_meia_noite(self):
+        from controle_ir.seguranca import fim_do_dia
+        p = self.pol.ler()
+        self.assertAlmostEqual(p["armado_ate"], fim_do_dia(), delta=2)
+        self.assertTrue(self.s.politica()["armado"])
+
+    def test_desarmado_so_baixo_risco(self):
+        self.pol.desarmar()
+        for alto in ("executar_comando", "tarefa", "executar_capacidade", "cap_estado_celular", "atualizar_sistema",
+                     "propor_capacidade", "capacidades", "autorizar"):
+            d, erro = self.chamar(alto, comando="ls") if alto == "executar_comando" else self.chamar(alto)
+            self.assertTrue(erro and d.get("bloqueado"), alto)
+            self.assertIn("DESARMADO", d["erro"])
+        d, erro = self.chamar("consultar")
+        self.assertFalse(erro)
+        d, erro = self.chamar("procurar_perfis", marca="Gree")  # infravermelho segue liberado
+        self.assertNotIn("bloqueado", d)
+        with self.assertRaises(Exception):  # e nenhum outro caminho do serviço roda capacidade
+            self.s.executar_capacidade("estado_celular")
+        self.assertEqual(self.s.exec.pedir("ls", aguardar=0)["status"], "negada")
+        p = self.pol.ler()
+        p["desarmado_permite"] = "nada"
+        self.pol.gravar(p)
+        self.assertTrue(self.chamar("procurar_perfis", marca="Gree")[0].get("bloqueado"))
+        self.assertFalse(self.chamar("politica")[1])
+        self.assertIn("bloqueado", (Path(self.pasta) / "auditoria.jsonl").read_text())
+
+    def test_travar_pelo_conector_e_definitivo_ate_armar_no_celular(self):
+        d, erro = self.chamar("travar")
+        self.assertFalse(erro)
+        self.assertTrue((Path(self.pasta) / "PARAR").exists())  # laços em 2º plano param
+        for nome, args in (("controlar", {"aparelho": "x"}), ("executar_comando", {"comando": "ls"}),
+                           ("autorizar", {"destravar": True})):
+            self.assertTrue(self.chamar(nome, **args)[0].get("bloqueado"), nome)
+        with self.assertRaises(Exception):
+            self.s.autorizar(destravar=True)  # nem chamando o serviço direto
+        self.pol.aplicar_perfil("autonomo")  # perfil não destrava
+        self.assertTrue(self.pol.ler()["travado"])
+        from controle_ir.execucao import Politica
+        self.assertTrue(Politica(Path(self.pasta)).ler()["travado"])  # sobrevive a reinício (arquivo)
+        self.pol.armar()  # só no celular
+        self.assertFalse(self.chamar("executar_comando", comando="echo ok", aguardar=5)[0].get("bloqueado"))
+
+    def test_armar_por_horas_e_expirar(self):
+        from controle_ir.seguranca import armado, permitido
+        p = self.pol.armar(2)
+        self.assertAlmostEqual(p["armado_ate"] - time.time(), 7200, delta=5)
+        self.assertTrue(permitido("executar_comando", p)[0])
+        self.assertFalse(armado(p, agora=p["armado_ate"] + 1))
+        self.assertFalse(permitido("executar_comando", p, agora=p["armado_ate"] + 1)[0])
+
+    def test_classe_protegida_nunca_roda(self):
+        from controle_ir.execucao import classificar
+        for cmd in ("cat ~/.controle-ir/config.json", "cat .controle-ir/autorizacao.json", "cp ~/.controle-ir/* /sdcard",
+                    "sed -i s/true/false/ ~/.controle-ir/politica.json", "cat ~/.config/ngrok/ngrok.yml",
+                    "cat /proc/123/environ", "ls ~/.ssh/"):
+            self.assertEqual(classificar(cmd), "protegido", cmd)
+        self.assertEqual(classificar("cat ~/.controle-ir/servico.log"), "leitura")
+        self.pol.aplicar_perfil("autonomo")
+        self.assertEqual(self.pol.decidir("protegido"), "negar")
+        self.assertEqual(self.s.exec.pedir("cat ~/.controle-ir/config.json", aguardar=0)["status"], "negada")
+
+    def test_tunel_sem_inspetor_e_sem_token_no_argv(self):
+        from controle_ir.tunel import Tunel
+        self.assertIn("--inspect=false", Tunel(8765, {"modo": "ngrok", "dominio": "x.ngrok-free.app"}).comando())
+        cmd = Tunel(8765, {"modo": "cloudflare", "token": "SEGREDO-TESTE"}).comando()
+        self.assertNotIn("SEGREDO-TESTE", " ".join(cmd))
 
 
 class TestGreeVariante(unittest.TestCase):
@@ -771,9 +854,10 @@ class TestExecucao(unittest.TestCase):
         p["liberado_ate"] = time.time() + 60
         pol.gravar(p)
         self.assertEqual(self.s.executar_comando("echo livre; true", aguardar=10)["status"], "concluida")
-        self.assertEqual(self.s.atualizar_sistema("abc1234", "teste", aguardar=0)["status"], "aguardando_aprovacao")
-        with self.assertRaises(Exception):
-            self.s.atualizar_sistema("x; rm -rf ~")
+        self.assertEqual(self.s.atualizar_sistema("a" * 40, "teste", aguardar=0)["status"], "aguardando_aprovacao")
+        for ref in ("x; rm -rf ~", "main", "abc1234", "a/../../../../atacante/repo/raw/main"):
+            with self.assertRaises(Exception):  # só o hash completo: nada de branch nem de outro repositório
+                self.s.atualizar_sistema(ref)
         r = self.s.executar_comando("sleep 5; echo", aguardar=0, tempo_limite=1)
         time.sleep(2.5)
         self.assertEqual(self.s.tarefa(r["id"])["status"], "tempo_esgotado")
@@ -836,8 +920,10 @@ class TestExecucao(unittest.TestCase):
         # o freio volta a barrar tudo, mesmo autônomo
         self.s.travar()
         self.assertEqual(self.s.executar_comando("ls", aguardar=1)["status"], "negada")
-        # cauteloso volta a pedir e não auto-ativa
+        # trocar de perfil NÃO destrava (antes destravava); só armar no celular devolve o poder
         self.ex.politica.aplicar_perfil("cauteloso")
+        self.assertEqual(self.s.executar_comando("ping -c1 1.1.1.1", aguardar=0)["status"], "negada")
+        self.ex.politica.armar()
         self.assertEqual(self.s.executar_comando("ping -c1 1.1.1.1", aguardar=0)["status"], "aguardando_aprovacao")
         self.s.propor_capacidade("eco2", manifesto=eco["manifesto"], arquivos=eco["arquivos"])
         self.assertEqual(self.s.capacidades("listar")["capacidades"][0].get("estado") if False else
@@ -846,20 +932,19 @@ class TestExecucao(unittest.TestCase):
         aud = (Path(self.pasta) / "auditoria.jsonl").read_text()
         self.assertIn("capacidade_auto_aprovada", aud)
 
-    def test_aprovar_pelo_chat_padrao_e_desligada(self):
+    def test_agente_nao_aprova_a_si_mesmo(self):
         r = self.s.executar_comando("echo pelo chat", aguardar=0)
         self.assertEqual(r["status"], "aguardando_aprovacao")
-        self.assertEqual(self.s.politica()["aprovacao_remota"], "chat")
-        out = self.s.autorizar(tarefa=r["id"])  # sem código: basta o sim do usuário na conversa
-        self.assertEqual(out["tarefa"]["status"], "executando")
-        with self.assertRaises(Exception):
-            self.s.autorizar()  # precisa dizer o que aprovar
+        self.assertEqual(self.s.politica()["aprovacao_remota"], "desligada")  # o antigo "chat" não existe mais
         p = self.ex.politica.ler()
-        p["aprovacao_remota"] = "desligada"
+        p["aprovacao_remota"] = "chat"  # política antiga gravada no arquivo vira "desligada"
         self.ex.politica.gravar(p)
-        with self.assertRaises(Exception):
-            self.s.autorizar(liberar_minutos=10)
-        self.assertIn('"modo": "chat"', (Path(self.pasta) / "auditoria.jsonl").read_text())
+        for pedido in ({"tarefa": r["id"]}, {"liberar_minutos": 10}, {"destravar": True},
+                       {"capacidade": "x", "sha": "abc"}):
+            with self.assertRaises(Exception):
+                self.s.autorizar(**pedido)
+        self.assertEqual(self.s.tarefa(r["id"])["status"], "aguardando_aprovacao")
+        self.assertIn("recusada_sem_codigo", (Path(self.pasta) / "auditoria.jsonl").read_text())
 
     def test_autorizar_de_outro_aparelho_e_travar(self):
         from controle_ir.execucao import totp

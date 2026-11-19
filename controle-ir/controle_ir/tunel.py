@@ -38,9 +38,10 @@ class Tunel:
         if self.modo == "rapido":
             return ["cloudflared", "tunnel", "--no-autoupdate", "--url", alvo]
         if self.modo == "cloudflare":
-            return ["cloudflared", "tunnel", "--no-autoupdate", "run", "--token", self.cfg["token"]]
+            return ["cloudflared", "tunnel", "--no-autoupdate", "run"]  # token pelo ambiente: fora do `ps`
         if self.modo == "ngrok":
-            cmd = ["ngrok", "http", f"--url={self.cfg['dominio']}", alvo, "--log", "stdout"]
+            # sem o inspetor local (127.0.0.1:4040), que mostraria o caminho com o segredo e as respostas
+            cmd = ["ngrok", "http", f"--url={self.cfg['dominio']}", alvo, "--log", "stdout", "--inspect=false"]
             # no Android o ngrok não acha o DNS; termux-chroot expõe um /etc/resolv.conf
             if self.cfg.get("chroot", True) and shutil.which("termux-chroot"):
                 cmd = ["termux-chroot"] + cmd
@@ -89,8 +90,9 @@ class Tunel:
             self.limpar_orfaos()
             try:
                 # grupo próprio: ao parar, encerra também o ngrok filho do termux-chroot (senão ele fica órfão)
+                env = dict(os.environ, TUNNEL_TOKEN=self.cfg["token"]) if self.modo == "cloudflare" else None
                 self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                             bufsize=1, start_new_session=True)
+                                             bufsize=1, start_new_session=True, env=env)
             except OSError as e:
                 self.ultimo_erro = str(e)
                 return

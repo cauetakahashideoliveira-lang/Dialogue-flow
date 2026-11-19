@@ -122,7 +122,9 @@ def main():
     elif acao == "monitorar":
         minutos = max(5, min(int(a.get("minutos", 60)), 720))
         voltas = max(1, minutos // 2)
-        cmd = (f"for i in $(seq {voltas}); do echo '{{\"acao\":\"ler\",\"segundos\":10}}' | "
+        parar = os.path.join(BASE, "PARAR")  # travar cria este arquivo: o laço termina na volta seguinte
+        cmd = (f"for i in $(seq {voltas}); do [ -e '{parar}' ] && break; "
+               f"echo '{{\"acao\":\"ler\",\"segundos\":10}}' | "
                f"python3 {os.path.abspath(__file__)} >/dev/null 2>&1; sleep 110; done")
         subprocess.Popen(["sh", "-c", cmd], start_new_session=True, stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=os.environ.copy())

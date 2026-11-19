@@ -1,0 +1,101 @@
+# Segurança do controle-ir: administração externa, armação e auditoria
+
+Princípio: **capacidade ≠ permissão**. O celular implementa tudo o que é possível fazer; o que pode ser usado em
+cada momento é concedido de fora do agente, por prazo, e pode ser reduzido ou revogado a qualquer hora.
+
+**Ameaça principal** (definida pelo dono em 19/11): acesso externo — URL do conector vazada, conta Google ou
+claude.ai invadida, conta/token do ngrok, instruções injetadas em conteúdo lido pelo agente (tela, páginas,
+nomes de dispositivos, e-mails).
+
+## 1. Diagnóstico (código da 1.0.22, auditoria de 19/11)
+
+| Porta de entrada | Credencial | Se vazar (antes da 1.0.23) |
+|---|---|---|
+| `POST /mcp/<segredo>` pelo ngrok (todas as ferramentas) | segredo estático de 256 bits, comparação em tempo constante, sem prazo nem escopo | controle total: shell, capacidades, tela, câmera, microfone, atualização por commit arbitrário, destravar |
+| `/painel?t=` e `/api/*` (só 127.0.0.1) | `token_local` | qualquer app do aparelho ou comando local aprova tarefas pendentes |
+| Botões das notificações | acesso ao aparelho / app com acesso a notificações / Shizuku | aprovar, liberar 30 min, copiar a URL |
+| Conta claude.ai (login Google) | sessão da conta | usar o conector salvo em qualquer conversa; gravar widgets da Central da Casa |
+| Conta/authtoken do ngrok | login ou `~/.config/ngrok/ngrok.yml` | sequestrar o domínio fixo e ficar no meio (ler o segredo, injetar respostas) |
+| Inspetor do ngrok em 127.0.0.1:4040 | nenhuma (local) | ver caminho com o segredo e respostas (fotos, telas) |
+| Conteúdo lido pelo agente | nenhuma | induzir o agente a chamar `autorizar` (bastava a chamada no modo "chat") |
+
+Achados críticos confirmados relendo o código: aprovação "chat" + perfil autônomo (a URL era a única barreira e
+`autorizar` confiava no próprio agente); capacidades embutidas ignoravam política e trava; a classe "leitura"
+expunha a semente TOTP, o segredo e o authtoken (`cat`); `atualizar_sistema` sem verificação e com ref que
+aceitava `..`; `travar` desfeito por `autorizar(destravar)` e trocas de perfil; política, aprovações, auditoria e
+código graváveis pelo mesmo usuário que roda os comandos remotos. Histórico do git e `dist/` sem segredos.
+
+## 2. Etapa 0 — armação diária local (1.0.23, implementada)
+
+- **Desarmado por padrão.** Pelo conector só passam infravermelho, consulta e `travar` (`seguranca.py`, aplicado em
+  `ServidorMCP.chamar`, por onde passam TODAS as ferramentas, inclusive `cap_*`; e de novo em
+  `Politica.decidir` e `Servico.executar_capacidade`). Terminal, tela, câmera, microfone, capacidades,
+  propostas de código e atualização exigem o sistema **armado**.
+- **Armar só no celular:** widget “Armar Controle IR” (até a meia-noite) ou `controle-ir armar [horas]`.
+  Chegar ao widget exige o celular desbloqueado — a digital. Não existe ferramenta remota que arme, destrave ou
+  libere. “Desarmar Controle IR” e “Travar” desligam na hora; a notificação fixa tem o botão Travar.
+- **O agente não aprova a si mesmo:** o modo “chat” deixou de existir; `autorizar` só com o código do autenticador
+  (de preferência noutro aparelho). Perfis não destravam.
+- **Travar é definitivo pelo lado remoto:** nega tudo menos consultar/politica/travar, encerra tarefas e cria
+  `~/.controle-ir/PARAR`, que encerra os laços do sono e do termômetro. Sobrevive a reinício (arquivo).
+- **Classe `protegido`:** comandos que citam a config, a política, as aprovações, a auditoria, o ngrok, `~/.ssh`,
+  `/proc/*/environ` ou `~/.termux/boot` são negados em qualquer perfil (barreira contra o caminho óbvio, não
+  isolamento — ver limites).
+- `atualizar_sistema` aceita só o hash completo (40 hex); ngrok com `--inspect=false`; token do cloudflared pelo
+  ambiente (fora do `ps`); filtro de origens usa o IP acrescentado pelo proxy (o último); notificação sem
+  “Copiar URL”.
+
+**Garantia:** desarmado, uma URL vazada só alcança infravermelho e consulta. **Limite:** com o sistema armado, quem
+tiver a URL tem o alcance da política (no perfil autônomo, shell livre) e, por ser o mesmo usuário do Linux, pode
+mexer nos arquivos do próprio fiscal até a armação vencer. É a Etapa 1 que tira o valor da URL.
+
+## 3. Etapa 1 — painel externo com passkey (a construir; depende das decisões da seção 5)
+
+```
+claude.ai / Claude Code ──OAuth 2.1+PKCE──▶ Painel (Cloudflare Worker + D1) ──túnel──▶ celular (controle-ir)
+        iPad / POCO ──passkey (digital/Face ID)──▶ Painel: armar, missões, revogar, auditoria
+```
+
+- **Identidade do dono:** passkeys (WebAuthn, biblioteca SimpleWebAuthn, `userVerification: required`), uma no
+  POCO (Google Password Manager) e outra no iPad (iCloud Keychain). Invadir o Gmail não entrega a passkey.
+  E-mail só para alertas. Aparelho novo só entra com aprovação biométrica num aparelho já cadastrado.
+- **Gateway na borda:** o conector do claude.ai passa a apontar para o Worker, que faz OAuth 2.1 (CIMD/DCR,
+  aceitos pelo claude.ai) com tokens curtos de audiência fixa; a URL secreta do ngrok deixa de existir. O celular
+  só aceita chamadas que venham do Worker (cabeçalho assinado). **Revogar e o botão de emergência agem na borda**
+  — fora do celular, então valem mesmo que o celular tenha sido adulterado.
+- **Missões e perfis → escopos aplicáveis:** cada autorização (JWS Ed25519 assinado pelo Worker, verificado no
+  celular com a chave pública fixa) diz cliente, aparelho, ferramentas, operações (ler / alterar / excluir /
+  executar / transmitir), destinos de dados, prazo e limites. Exemplos: *infravermelho* (controlar, opcoes…);
+  *internet* (diagnostico_rede, descobrir_rede, comandos da classe rede); *pasta* (leitura numa pasta);
+  *código* (shell num diretório de trabalho); *tela* (cap tela, com lista de apps); *ampla* (tudo, curta, passkey
+  no iPad). O Claude propõe a tradução de uma missão (“corrigir minha internet”) e o painel mostra a lista antes
+  de você aprovar. Ampliação: o Claude pede com justificativa; aprovação só no painel.
+- **Auditoria:** o celular envia ao Worker cada evento (pedido, decisão, início, fim, bloqueio, processos
+  filhos, mudanças de permissão), sem conteúdo integral, encadeado por hash no D1; o agente não escreve no D1.
+  Indicador de câmera, microfone e tela ativos.
+- **Revogação mensurável:** na borda, imediata; no celular, na próxima chamada (≤ 60 s para laços em 2º plano).
+  Sem conexão, a autorização local vence no prazo (no máximo 24 h). O painel só mostra “revogado” depois que o
+  celular confirmar.
+
+## 4. Etapa 2 — endurecer a execução (depois da Etapa 1)
+
+Executor separado do fiscal (proot com binds só-leitura do código e de `~/.controle-ir`, ou outro usuário/app),
+atualizações aceitas só com o hash aprovado no painel, hash do código em execução comparado com o pacote
+aprovado, segredos fora do alcance do shell, Central da Casa sem `executar_comando` em widgets automáticos.
+
+## 5. Decisões do dono
+
+1. **Hospedar o painel na Cloudflare** (grátis; precisa de uma conta sua). Recomendado.
+2. **Quem pode alterar o painel:** repositório separado, só seu (recomendado: o agente não tem acesso), ou este.
+3. **Armação:** até a meia-noite (atual) ou por N horas; desarmar após X horas sem uso?
+4. **Desarmado libera o infravermelho?** (atual: sim; a alternativa é “nada”).
+5. **Recuperação:** duas passkeys (POCO + iPad) + códigos de recuperação impressos, guardados fora do celular.
+6. **Sessão ampla:** permitir, com passkey no iPad e prazo máximo (sugestão: 2 h)?
+
+## 6. Limites que nenhuma etapa remove
+
+- Dados entregues ao Claude ou a outro provedor seguem a retenção desse provedor; o painel registra o que saiu.
+- Shizuku (usuário shell) toca em qualquer app e lê notificações quando armado; aprovações sensíveis ficam no iPad.
+- Durante uma sessão ampla, quem a controla tem o celular; por isso ela é curta, aprovada com passkey e auditada.
+- Precisa de teste no aparelho: formato do `X-Forwarded-For` que o ngrok entrega; os widgets Armar/Desarmar; a
+  parada dos laços com `PARAR`.

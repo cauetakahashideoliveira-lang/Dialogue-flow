@@ -234,7 +234,9 @@ def inicio_automatico(acao: str, silencioso: bool = False) -> int:
 
 
 ATALHOS = {"Ligar Controle IR": "ligar", "Desligar Controle IR": "desligar"}
-MODOS_WIDGET = {"Modo autonomo Controle IR": "exec modo autonomo",
+MODOS_WIDGET = {"Armar Controle IR": "armar",
+                "Desarmar Controle IR": "desarmar",
+                "Modo autonomo Controle IR": "exec modo autonomo",
                 "Modo cauteloso Controle IR": "exec modo cauteloso",
                 "Travar Controle IR": "exec travar"}
 
@@ -278,7 +280,8 @@ def criar_atalhos(silencioso: bool = False) -> int:
         os.replace(tmp, arq)
     if silencioso:
         return 0
-    print("✔ Atalhos criados: Ligar, Desligar, Reverter, Modo autonomo, Modo cauteloso e Travar (Controle IR).")
+    print("✔ Atalhos criados: Ligar, Desligar, Armar, Desarmar, Reverter, Modo autonomo, Modo cauteloso e Travar "
+          "(Controle IR).")
     print("  Para pôr na tela inicial (uma vez só):")
     print("  1. Instale o app Termux:Widget do F-Droid (mesma fonte do Termux).")
     print("  2. Toque e segure num espaço vazio da tela inicial → Widgets → Termux:Widget.")
@@ -317,6 +320,27 @@ echo "=== concluída: $(date) ==="
     return 0
 
 
+def armar_cli(acao: str, horas: float | None = None) -> int:
+    """Armar só existe aqui (celular desbloqueado: widget ou Termux). Nenhuma ferramenta do conector arma."""
+    from .execucao import Politica
+    pol = Politica(PASTA)
+    if acao == "armar":
+        p = pol.armar(horas)
+        (PASTA / "PARAR").unlink(missing_ok=True)
+        ate = time.strftime("%d/%m %H:%M", time.localtime(p["armado_ate"]))
+        _aviso(f"Controle IR ARMADO até {ate}: o Claude pode usar terminal, tela e capacidades")
+    else:
+        pol.desarmar()
+        _api("exec_parar_todas", sair=False)
+        _aviso("Controle IR DESARMADO: pelo conector só infravermelho, consulta e travar")
+    try:  # direto no arquivo: instanciar Execucao aqui marcaria as tarefas do serviço como interrompidas
+        with open(PASTA / "auditoria.jsonl", "a") as f:
+            f.write(json.dumps({"quando": time.strftime("%Y-%m-%d %H:%M:%S"), "evento": acao, "origem": "celular"}) + "\n")
+    except OSError:
+        pass
+    return 0
+
+
 def exec_cli(a) -> int:
     from .execucao import CLASSES, Politica
     pol = Politica(PASTA)
@@ -348,6 +372,7 @@ def exec_cli(a) -> int:
     if a.acao == "travar":
         p["travado"], p["liberado_ate"] = True, 0
         pol.gravar(p)
+        (PASTA / "PARAR").write_text(str(time.time()))  # laços das capacidades em 2º plano param
         r = _api("exec_parar_todas", sair=False)
         _aviso(f"Execução TRAVADA ({r.get('paradas', 0)} tarefa(s) encerrada(s))")
         return 0
@@ -370,13 +395,13 @@ def exec_cli(a) -> int:
                 "leitura": "Modo leitura: só olhar; ações negadas."}[a.valor])
         return 0
     if a.acao == "remoto":
-        if a.valor not in ("chat", "codigo", "desligada"):
-            print(f"Aprovação pelo Claude: {p['aprovacao_remota']}  (use: controle-ir exec remoto chat|codigo|desligada)")
+        if a.valor not in ("codigo", "desligada"):
+            print(f"Aprovação pelo Claude: {p['aprovacao_remota']}  (use: controle-ir exec remoto codigo|desligada; "
+                  "o modo “chat” foi removido: o agente não pode aprovar a si mesmo)")
             return 0
         p["aprovacao_remota"] = a.valor
         pol.gravar(p)
-        print({"chat": "Aprovação pelo chat ligada: basta dizer sim ao Claude, de qualquer aparelho.",
-               "codigo": "Aprovação pelo Claude exige o código do app autenticador (controle-ir exec codigo configurar).",
+        print({"codigo": "Aprovação pelo Claude exige o código do app autenticador (controle-ir exec codigo configurar).",
                "desligada": "Aprovação só no celular, pela notificação."}[a.valor])
         return 0
     if a.acao == "codigo":
@@ -970,6 +995,10 @@ def main(argv=None):
     sub.add_parser("reverter", help="volta para a versão anterior (~/controle-ir.anterior)")
     po = sub.add_parser("origens", help="origens das chamadas ao conector; exigir = recusar fora da Anthropic")
     po.add_argument("modo", nargs="?", choices=["observar", "exigir"])
+    par = sub.add_parser("armar", help="arma o sistema (só no celular): libera terminal, tela, capacidades e "
+                                       "atualização até a meia-noite ou por HORAS")
+    par.add_argument("horas", nargs="?", type=float)
+    sub.add_parser("desarmar", help="desarma: pelo conector só passam infravermelho, consulta e travar")
     pa = sub.add_parser("atalhos", help="cria os atalhos Ligar/Desligar para o Termux:Widget")
     pa.add_argument("--silencioso", action="store_true")
     pl = sub.add_parser("log", help="últimas linhas do registro do serviço em segundo plano")
@@ -1011,6 +1040,8 @@ def main(argv=None):
         return capacidade_cli(a)
     if cmd == "exec":
         return exec_cli(a)
+    if cmd in ("armar", "desarmar"):
+        return armar_cli(cmd, getattr(a, "horas", None))
     if cmd == "atualizar":
         return atualizar(a.ref)
     if cmd == "reverter":

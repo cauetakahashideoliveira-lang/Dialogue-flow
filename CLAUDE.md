@@ -25,6 +25,9 @@
 - **Central da Casa** (https://claude.ai/artifact/XSh6ivS8Cc6BsKakes2pCh, fonte `artefatos/central-da-casa.html`):
   app do claude.ai com o Gênio (controla, programa o celular, cria painéis). Republique com o mesmo arquivo;
   os dados (`widgets`, `memoria`, `eventos`) ficam no banco do artefato (ferramenta ArtifactData).
+- **Segurança** (`docs/seguranca.md`): desde a 1.0.23 o sistema fica DESARMADO por padrão (pelo conector só
+  infravermelho, consulta e travar); o dono arma no celular (widget “Armar Controle IR”). Não há como armar,
+  destravar ou aprovar pelo conector (autorizar só com o código do autenticador). Etapa 1: painel com passkey.
 - Pedidos de aprovação do conector vêm da regra da organização no claude.ai (`org_ask_ceiling`); não tente
   contornar. Ferramentas novas do conector só aparecem em conversas novas (lista fixa por conversa).
 - **`/god-mode`** (`.claude/skills/god-mode/`, adaptação AGPL do G0DM0D3): AutoTune, notas, STM, `perguntar` e

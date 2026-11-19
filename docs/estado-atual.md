@@ -1,7 +1,7 @@
 # Estado atual da instalação (19/11/2026)
 
 ## Resumo (fim do dia 19/11)
-- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.22** (19/11
+- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.23** (19/11
   de manhã), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
   Controle IR").
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz. Catálogo: base + ampliado (Flipper-IRDB completa) = 9.380
@@ -41,6 +41,10 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Segurança, Etapa 0 (1.0.23):** auditoria (2 agentes) mostrou que só a URL protegia tudo. Agora:
+  sistema desarmado por padrão (só IR/consulta/travar pelo conector), armar só no celular (widgets “Armar” e
+  “Desarmar Controle IR”), sem aprovação pelo chat, travar definitivo pelo remoto, classe `protegido`, ref de
+  commit completa, ngrok sem inspetor. Arquitetura e decisões em `docs/seguranca.md`.
 - **19/11 (manhã) — Toque pelo Shizuku (1.0.22):** mesmo com a opção de segurança ligada, o `input` dava "Failed
   transaction": o system_server recusa a saída de `cmd` apontando para a memória compartilhada ou para o cano do app.
   Com stdin `/dev/null` e saída em `/data/local/tmp` (copiada depois para a pasta de troca) passou. Teste real:

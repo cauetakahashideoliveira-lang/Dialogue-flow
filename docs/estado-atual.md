@@ -41,6 +41,9 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Painel no ar (PR #6) e POCO pareado.** Na 1ª sincronização o celular tentou mandar o histórico
+  antigo inteiro e o envio estourou o tempo (o pareamento valeu). 1.0.25 + PR #7: só o histórico novo, em lotes de
+  30 numa transação, sem repetidos; Safari do iPad com as opções da passkey buscadas antes do toque.
 - **19/11 — Segurança, Etapa 1a (1.0.24): Painel da Casa** (`painel/`, Cloudflare Worker + D1): entrar com
   passkey (digital), iPad por convite de uso único, celular pareado por código, armação/emergência/revogação por
   estado assinado (Ed25519) que o celular busca a cada 30 s, “aplicado × pendente”, histórico encadeado por hash.

@@ -38,6 +38,11 @@ public class Tela {
     static final long OCIOSO_MS = 60000;
 
     public static void main(String[] args) throws Exception {
+        try {  // a acessibilidade cria Handlers no laço principal: ele precisa existir (como no uiautomator)
+            Looper.prepareMainLooper();
+        } catch (Throwable t) {
+            // já preparado
+        }
         final String pasta = args.length > 0 ? args[0] : "/sdcard/Download/.controle-ir-tela";
         String token = args.length > 1 ? args[1] : "x";
         new File(pasta, "pronto-" + token).createNewFile();

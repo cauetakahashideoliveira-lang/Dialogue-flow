@@ -37,8 +37,10 @@ import java.lang.reflect.Method;
  * historico DESDE_MS (janelas surgidas depois de DESDE, uma por linha: "T pacote|classe|texto") |
  * toquesv PAUSA_MS X1 Y1… (como toques, mas para se surgir uma janela nova: "parou K pacote|classe|texto") |
  * aguardar M LIMITE_MS (espera o contador de mudanças sair de M; responde o contador atual) |
- * grade BX BY BL BA N PX PY PL PA K (lê uma grade NxN de algarismos desenhados, comparando cada casa com os K
- *   botões do teclado do próprio jogo; responde a grade em N linhas, 0 = vazia, e depois "duvidas i,j…") |
+ * modelos OFFSET K PX PY PL PA (guarda como modelos OFFSET..OFFSET+K-1 os símbolos dos K botões lado a lado da faixa
+ *   PX,PY,PL,PA — o teclado do jogo; chame de novo para outra página do teclado) | limparmodelos |
+ * ler N BX BY BL BA K (lê a grade NxN comparando cada casa com os K modelos guardados: N linhas de N campos,
+ *   "0" vazia, "s" símbolo s (1..K), "s:t:m" quando duvidoso — t o segundo mais parecido, m a margem; "?" sem modelo) |
  * shell HEX (roda um comando como shell, sem abrir outra conexão com o Shizuku) |
  * foto LARGURA LIMITE_BYTES CAMINHO [X Y L A] (JPEG reduzido direto da acessibilidade, sem PNG nem ffmpeg) | sair.
  * Sem uso por 60 s, desconecta da acessibilidade (bateria; apps que estranham automação ligada); sem uso por 5 min,
@@ -122,10 +124,10 @@ public class Tela {
             return "ok";
         }
         if (c.equals("toques")) {
-            int pausa = Math.max(0, Math.min(i(p[2]), 5000));
+            int pausa = pausaDe(p[2]), pressao = pressaoDe(p[2]);
             for (int k = 3; k + 1 < p.length; k += 2) {
                 if (k > 3 && pausa > 0) SystemClock.sleep(pausa);
-                tocarLeva(u, i(p[k]), i(p[k + 1]), k + 3 >= p.length);
+                tocarLeva(u, i(p[k]), i(p[k + 1]), k + 3 >= p.length, pressao);
             }
             return "ok";
         }
@@ -141,12 +143,12 @@ public class Tela {
             return sb.toString();
         }
         if (c.equals("toquesv")) {
-            int pausa = Math.max(0, Math.min(i(p[2]), 5000));
+            int pausa = pausaDe(p[2]), pressao = pressaoDe(p[2]);
             int base = janelas, feitos = 0;
             for (int k = 3; k + 1 < p.length; k += 2) {
                 if (k > 3 && pausa > 0) SystemClock.sleep(pausa);
                 if (janelas != base) return "parou " + feitos + " " + ultimaJanela;
-                tocarLeva(u, i(p[k]), i(p[k + 1]), k + 3 >= p.length);
+                tocarLeva(u, i(p[k]), i(p[k + 1]), k + 3 >= p.length, pressao);
                 feitos++;
             }
             SystemClock.sleep(Math.max(pausa, 30));  // o efeito do último toque também conta
@@ -158,10 +160,9 @@ public class Tela {
             while (mudancas == m && SystemClock.uptimeMillis() < fim) SystemClock.sleep(10);
             return String.valueOf(mudancas);
         }
-        if (c.equals("grade")) {
-            int[] b = {i(p[2]), i(p[3]), i(p[4]), i(p[5])}, t = {i(p[7]), i(p[8]), i(p[9]), i(p[10])};
-            return grade(u, b, i(p[6]), t, i(p[11]));
-        }
+        if (c.equals("limparmodelos")) { modelosGuardados = new int[64][]; return "ok"; }
+        if (c.equals("modelos")) return modelos(u, i(p[2]), i(p[3]), new int[]{i(p[4]), i(p[5]), i(p[6]), i(p[7])});
+        if (c.equals("ler")) return ler(u, i(p[2]), new int[]{i(p[3]), i(p[4]), i(p[5]), i(p[6])}, i(p[7]));
         if (c.equals("calma")) {
             long t0 = SystemClock.uptimeMillis();
             try {
@@ -188,6 +189,17 @@ public class Tela {
     }
 
     static int i(String s) { return Integer.parseInt(s); }
+
+    /** "PAUSA" ou "PAUSA:PRESSÃO" (ms) nas levas de toques. */
+    static int pausaDe(String s) {
+        int k = s.indexOf(':');
+        return Math.max(0, Math.min(i(k < 0 ? s : s.substring(0, k)), 5000));
+    }
+
+    static int pressaoDe(String s) {
+        int k = s.indexOf(':');
+        return k < 0 ? LEVA_MS : Math.max(3, Math.min(i(s.substring(k + 1)), 1000));
+    }
 
     static String limpo(CharSequence cs, int max) {
         if (cs == null) return "";
@@ -399,10 +411,10 @@ public class Tela {
 
     /** Toque de leva: direto no gerenciador de entrada (sem a UiAutomation, que espera as animações do app a cada
      *  evento), sem esperar a confirmação (a fila preserva a ordem); só o último espera o app consumir. */
-    static void tocarLeva(UiAutomation u, int x, int y, boolean ultimo) {
+    static void tocarLeva(UiAutomation u, int x, int y, boolean ultimo, int pressao) {
         long t = SystemClock.uptimeMillis();
         direto(u, t, MotionEvent.ACTION_DOWN, x, y, false);
-        SystemClock.sleep(LEVA_MS);
+        SystemClock.sleep(pressao);
         direto(u, t, MotionEvent.ACTION_UP, x, y, ultimo);
     }
 
@@ -515,42 +527,64 @@ public class Tela {
     }
 
     // ------------------------------------------------------------------ leitura de grade (sem OCR: modelos do teclado)
-    static final int S = 16;
+    static final int S = 32;  // 32x32: separa B de 8 e G de C (validado nas capturas do 16x16; 16x16 errava 2 em 131)
 
-    static String grade(UiAutomation u, int[] b, int n, int[] t, int k) {
+    static int[][] modelosGuardados = new int[64][];
+
+    static Bitmap captura(UiAutomation u) {
         Bitmap cap = u.takeScreenshot();
-        if (cap == null) return "ERRO sem captura";
+        if (cap == null) return null;
         Bitmap bm = cap.copy(Bitmap.Config.ARGB_8888, false);
         cap.recycle();
-        int[][] mod = new int[k][];
-        for (int d = 0; d < k; d++) {  // o algarismo grande fica na parte de cima do botão (embaixo vem a contagem)
+        return bm;
+    }
+
+    /** Modelos de símbolo tirados dos K botões do teclado do jogo (os modelos sobrevivem aos botões sumirem). */
+    static String modelos(UiAutomation u, int offset, int k, int[] t) {
+        Bitmap bm = captura(u);
+        if (bm == null) return "ERRO sem captura";
+        int ok = 0;
+        for (int d = 0; d < k && offset + d < modelosGuardados.length; d++) {
             int x = t[0] + d * t[2] / k, w = t[2] / k;
-            mod[d] = assinatura(bm, x + w / 8, t[1], w - w / 4, t[3] * 62 / 100);
+            modelosGuardados[offset + d] = assinatura(bm, x + w / 8, t[1], w - w / 4, t[3]);
+            if (modelosGuardados[offset + d] != null) ok++;
         }
-        StringBuilder out = new StringBuilder(), duv = new StringBuilder();
+        bm.recycle();
+        return "ok " + ok;
+    }
+
+    static String ler(UiAutomation u, int n, int[] b, int k) {
+        Bitmap bm = captura(u);
+        if (bm == null) return "ERRO sem captura";
+        StringBuilder out = new StringBuilder();
         for (int r = 0; r < n; r++) {
             for (int c = 0; c < n; c++) {
                 int x = b[0] + c * b[2] / n, y = b[1] + r * b[3] / n, w = b[2] / n, h = b[3] / n;
                 int[] a = assinatura(bm, x + w / 8, y + h / 8, w - w / 4, h - h / 4);
+                if (c > 0) out.append(' ');
                 if (a == null) { out.append('0'); continue; }
-                int melhor = -1, d1 = Integer.MAX_VALUE, d2 = Integer.MAX_VALUE;
-                for (int d = 0; d < k; d++) {
-                    if (mod[d] == null) continue;
+                int melhor = -1, segundo = -1, d1 = Integer.MAX_VALUE, d2 = Integer.MAX_VALUE;
+                for (int d = 0; d < k && d < modelosGuardados.length; d++) {
+                    int[] m = modelosGuardados[d];
+                    if (m == null) continue;
                     int dist = 0;
-                    for (int q = 0; q < S * S; q++) dist += Math.abs(a[q] - mod[d][q]);
-                    if (dist < d1) { d2 = d1; d1 = dist; melhor = d; } else if (dist < d2) d2 = dist;
+                    for (int q = 0; q < S * S; q++) dist += Math.abs(a[q] - m[q]);
+                    if (dist < d1) { d2 = d1; segundo = melhor; d1 = dist; melhor = d; }
+                    else if (dist < d2) { d2 = dist; segundo = d; }
                 }
-                out.append(melhor < 0 ? '?' : (char) ('1' + melhor));
-                if (melhor < 0 || d2 - d1 < 12) duv.append(r).append(',').append(c).append(' ');
+                if (melhor < 0) { out.append('?'); continue; }
+                out.append(melhor + 1);
+                if (segundo >= 0 && d2 - d1 < S * S / 40) out.append(':').append(segundo + 1).append(':').append(d2 - d1);
             }
             out.append('\n');
         }
         bm.recycle();
-        return out.append("duvidas ").append(duv.toString().trim()).toString();
+        return out.toString().trim();
     }
 
-    /** Desenho de uma casa reduzido a 16x16 (1 = tinta), enquadrado pela tinta; null se a casa está vazia.
-     *  Tinta = bem mais escura que o fundo da casa (o fundo é lido nas bordas: casa destacada também funciona). */
+    /** Desenho de uma casa reduzido a SxS (1 = tinta), enquadrado pela tinta; null se a casa está vazia.
+     *  Tinta = bem diferente do fundo da casa, mais escura ou mais clara (o fundo é lido nas bordas: casa destacada,
+     *  com algarismo branco sobre azul, também funciona). */
     static int[] assinatura(Bitmap bm, int x, int y, int w, int h) {
         x = Math.max(0, x); y = Math.max(0, y);
         w = Math.min(w, bm.getWidth() - x); h = Math.min(h, bm.getHeight() - y);
@@ -565,9 +599,17 @@ public class Tela {
         long soma = 0; int nb = 0;
         for (int q = 0; q < w; q++) { soma += lum[q] + lum[(h - 1) * w + q]; nb += 2; }
         for (int q = 0; q < h; q++) { soma += lum[q * w] + lum[q * w + w - 1]; nb += 2; }
-        int lim = (int) (soma / nb) - 60;
+        int fundo = (int) (soma / nb);
+        int topo = -1, base = h - 1, branco = 0, minimo = Math.max(1, w / 40);
+        for (int yy = 0; yy < h; yy++) {  // a primeira faixa de linhas com tinta: o símbolo principal
+            int nl = 0;
+            for (int xx = 0; xx < w; xx++) if (Math.abs(lum[yy * w + xx] - fundo) > 60) nl++;
+            if (nl >= minimo) { if (topo < 0) topo = yy; branco = 0; base = yy; }
+            else if (topo >= 0 && ++branco >= Math.max(3, h / 25)) break;
+        }
+        if (topo < 0) return null;
         int x0 = w, y0 = h, x1 = -1, y1 = -1, tinta = 0;
-        for (int yy = 0; yy < h; yy++) for (int xx = 0; xx < w; xx++) if (lum[yy * w + xx] < lim) {
+        for (int yy = topo; yy <= base; yy++) for (int xx = 0; xx < w; xx++) if (Math.abs(lum[yy * w + xx] - fundo) > 60) {
             tinta++;
             if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (yy < y0) y0 = yy; if (yy > y1) y1 = yy;
         }
@@ -578,8 +620,8 @@ public class Tela {
         for (int sy = 0; sy < S; sy++) for (int sx = 0; sx < S; sx++) {
             int ax = ox + sx * lado / S, ay = oy + sy * lado / S, bx = ox + (sx + 1) * lado / S, by = oy + (sy + 1) * lado / S;
             int tot = 0, sim = 0;
-            for (int yy = Math.max(ay, 0); yy < Math.min(by, h); yy++)
-                for (int xx = Math.max(ax, 0); xx < Math.min(bx, w); xx++) { tot++; if (lum[yy * w + xx] < lim) sim++; }
+            for (int yy = Math.max(ay, topo); yy < Math.min(by, base + 1); yy++)
+                for (int xx = Math.max(ax, 0); xx < Math.min(bx, w); xx++) { tot++; if (Math.abs(lum[yy * w + xx] - fundo) > 60) sim++; }
             sig[sy * S + sx] = tot > 0 && sim * 4 > tot ? 1 : 0;
         }
         return sig;

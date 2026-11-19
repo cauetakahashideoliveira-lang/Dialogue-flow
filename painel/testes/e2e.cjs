@@ -135,12 +135,26 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   let r = await (await chamar('executar_comando')).json();
   ok(/"via": ?"celular"/.test(r.result?.content?.[0]?.text || '') && await chamadasNoCelular() === 1,
     'armado: a chamada chega ao celular, com a assinatura do painel conferida pelo código real');
+  // 4b'. Canal direto: o celular (código real: controle_ir.canal) disca para a Central e mantém o WebSocket aberto;
+  //      as chamadas passam por ele (sem túnel) e os avisos da Central chegam na hora
+  const MARCA = path.join(PASTA, 'acordou.txt');
+  const acordadas = () => fs.existsSync(MARCA) ? fs.readFileSync(MARCA, 'utf8').length : 0;
+  const esperar = async (cond, ms = 8000) => { const fim = Date.now() + ms; while (Date.now() < fim) { if (await cond()) return true; await new Promise(z => setTimeout(z, 150)); } return false; };
+  const CANAL = `import sys,time,os\nfrom controle_ir.canal import Canal\nP=sys.argv[1]\nm=os.path.join(P,'acordou.txt')\ndef ac():\n  open(m,'a').write('x')\nCanal(P,8799,'segredo-teste',ao_sincronizar=ac).iniciar()\nwhile True: time.sleep(1)`;
+  const canal = spawn('python3', ['-c', CANAL, PASTA], { env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: 'ignore' });
+  ok(await esperar(() => acordadas() >= 1), 'canal direto aberto pelo celular, com o token do aparelho');
+  let rc = await chamar('controlar');
+  let tc = await rc.json();
+  ok(rc.headers.get('x-via') === 'canal' && /"via": ?"celular"/.test(tc.result?.content?.[0]?.text || '') && await chamadasNoCelular() === 2,
+    'com o canal, a chamada vai por ele (sem túnel), ainda assinada pela Central e conferida no celular');
   await pagina.unroute('https://claude.ai/**');
   await pagina.goto(BASE); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/Claude \(teste\) → claude\.ai/.test(await pagina.textContent('#acessos')), 'painel lista o acesso autorizado');
+  const antesDoAviso = acordadas();
   await clicar('#btDesarmar');
+  ok(await esperar(() => acordadas() > antesDoAviso, 3000), 'desarmar chega ao celular NA HORA pelo canal (antes: até 30 s)');
   r = await (await chamar('executar_comando')).json();
-  ok(r.result?.structuredContent?.onde === 'painel' && await chamadasNoCelular() === 1, 'desarmado: terminal barrado NA BORDA (nem chega ao celular)');
+  ok(r.result?.structuredContent?.onde === 'painel' && await chamadasNoCelular() === 2, 'desarmado: terminal barrado NA BORDA (nem chega ao celular)');
   r = await (await chamar('controlar')).json();
   ok(/"via": ?"celular"/.test(r.result?.content?.[0]?.text || ''), 'desarmado: infravermelho continua passando');
   // 4c. Atividade, "em uso agora" e tela ao vivo (sem nenhuma aprovação a mais)
@@ -148,6 +162,7 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   const ativ = await pagina.textContent('#chamadas');
   ok(/executar_comando/.test(ativ) && /barrado na Central/.test(ativ) && /controlar/.test(ativ) && /terminal/.test(ativ),
     'Atividade do Claude lista cada chamada (ok e barrada) com os recursos');
+  ok(/Conexão direta \(canal\) ativa/.test(await pagina.textContent('#celulares')), 'a Central mostra o canal direto ativo');
   celular(`import os,time\nos.makedirs(os.path.join(P,'tarefas'),exist_ok=True)\nopen(os.path.join(P,'tarefas','9.json'),'w').write(json.dumps({'id':'9','status':'executando','comando':'termux-camera-photo -c 0 /tmp/x.jpg','inicio':time.time()}))\nfrom controle_ir import observador\nr=painel.sincronizar(P,'e2e',em_uso=lambda o,v: observador.em_uso(P,False,v))\nprint(json.dumps(r))`);
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/termux-camera-photo/.test(await pagina.textContent('#emUso')) && /câmera/.test(await pagina.textContent('#emUso')),
@@ -164,6 +179,13 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   await pagina.check('#soPainel'); await pagina.waitForTimeout(800);
   ok(celular(`painel.sincronizar(P,'e2e')\nprint(json.dumps({'s':Politica(P).efetiva().get('so_pelo_painel')}))`).s === true,
     '"só pelo painel" chega ao celular pelo estado assinado');
+  process.kill(canal.pid, 'SIGSTOP');  // celular congelado: a conexão parece aberta, mas ninguém responde
+  let t0 = Date.now(), xc = await chamar('controlar');
+  ok(xc.headers.get('x-via') === 'tunel' && xc.ok && Date.now() - t0 < 9000,
+    `canal mudo (celular congelado): sem confirmação em 5 s, a chamada vai pelo túnel (${Date.now() - t0} ms)`);
+  t0 = Date.now(); xc = await chamar('controlar');
+  ok(xc.headers.get('x-via') === 'tunel' && Date.now() - t0 < 2000, 'depois disso o canal mudo é descartado: direto pelo túnel');
+  canal.kill('SIGKILL');
   await pagina.click('text=Revogar acesso'); await pagina.waitForTimeout(800);
   ok((await chamar('controlar')).status === 401, 'acesso revogado no painel: o token para de valer na hora');
   falso.kill();

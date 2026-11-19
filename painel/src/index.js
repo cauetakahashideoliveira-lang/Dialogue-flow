@@ -7,6 +7,7 @@ import {
 } from '@simplewebauthn/server';
 import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import { AuthorizationError, CimdFetchError, OAuthProvider } from '@cloudflare/workers-oauth-provider';
+import { DurableObject } from 'cloudflare:workers';
 
 const SESSAO_MAX = 12 * 3600, SESSAO_OCIOSA = 30 * 60, PASSKEY_FRESCA = 120, DESAFIO = 300, PAREAMENTO = 600;
 const HORAS_MAX = 24;
@@ -294,6 +295,118 @@ async function mudarEstado(env, aparelho, mudanca, por, motivo) {
   return e;
 }
 
+// ---------------------------------------------------------------- canal direto com o celular (Durable Object)
+// O celular abre um WebSocket para cá (com o token do aparelho) e o mantém aberto. As chamadas do Claude vão por ele
+// (sem túnel) e a Central EMPURRA avisos ("sync": sincronize agora — armado, desarmado, painel aberto).
+const canalDe = (env, aparelho) => env.CANAL.get(env.CANAL.idFromName(aparelho));
+async function empurrar(env, aparelho, msg = { t: 'sync' }) {
+  try { await canalDe(env, aparelho).fetch('https://canal/empurrar', { method: 'POST', body: JSON.stringify(msg) }); }
+  catch { /* sem canal: o celular pega na próxima sincronização (até 30 s) */ }
+}
+async function estadoCanal(env, aparelho) {
+  try { return await (await canalDe(env, aparelho).fetch('https://canal/estado')).json(); }
+  catch { return { conectado: false }; }
+}
+async function abrirCanal(req, env) {
+  if ((req.headers.get('upgrade') || '').toLowerCase() !== 'websocket') return erro('use WebSocket', 426);
+  await inicializar(env);
+  const ap = await aparelhoDoToken(env, req);
+  if (!ap) return erro('aparelho não autorizado', 401);
+  await env.DB.prepare('UPDATE aparelhos SET ultimo_contato = ? WHERE id = ?').bind(agora(), ap.id).run();
+  return canalDe(env, ap.id).fetch(new Request('https://canal/conectar', req));
+}
+
+export class Canal extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.pendentes = new Map();
+    // as batidas do celular ("ping") são respondidas sem acordar o objeto: canal parado não custa nada
+    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+  }
+  socket() {  // o canal vivo: o celular bate ("ping") a cada 25 s; sem batida há 70 s, a conexão morreu calada
+    const todos = this.ctx.getWebSockets();
+    const ws = todos.length ? todos[todos.length - 1] : null;
+    if (!ws) return null;
+    const batida = this.ctx.getWebSocketAutoResponseTimestamp(ws);
+    const ultimo = Math.max(batida ? batida.getTime() : 0, ws.deserializeAttachment()?.desde || 0);
+    if (Date.now() - ultimo > 70_000) { try { ws.close(4001, 'canal mudo'); } catch { } return null; }
+    return ws;
+  }
+  async fetch(req) {
+    const u = new URL(req.url);
+    if (u.pathname === '/conectar') {
+      for (const velho of this.ctx.getWebSockets()) try { velho.close(4000, 'substituído por conexão nova'); } catch { }
+      const [cliente, servidor] = Object.values(new WebSocketPair());
+      this.ctx.acceptWebSocket(servidor);
+      servidor.serializeAttachment({ desde: Date.now() });
+      return new Response(null, { status: 101, webSocket: cliente });
+    }
+    if (u.pathname === '/estado') {
+      const ws = this.socket();
+      return Response.json(ws ? { conectado: true, desde: ws.deserializeAttachment()?.desde || null } : { conectado: false });
+    }
+    if (u.pathname === '/empurrar') {
+      const ws = this.socket();
+      if (!ws) return new Response('sem canal', { status: 503 });
+      try { ws.send(await req.text()); } catch { return new Response('canal caiu', { status: 503 }); }
+      return new Response('ok');
+    }
+    if (u.pathname === '/rpc') {
+      const ws = this.socket();
+      if (!ws) return new Response('sem canal', { status: 503 });
+      const id = crypto.randomUUID(), h = {};
+      for (const k of ['x-painel-assinatura', 'content-type', 'accept', 'mcp-session-id', 'mcp-protocol-version'])
+        if (req.headers.get(k)) h[k] = req.headers.get(k);
+      const corpo = await req.text();
+      const resposta = new Promise((ok, falha) => {
+        const t = setTimeout(() => { this.pendentes.delete(id); falha(new Error('o celular não respondeu em 170 s')); }, 170_000);
+        // o celular confirma o recebimento na hora; sem confirmação em 5 s, a conexão morreu sem avisar:
+        // fecha e devolve 503 (a chamada não chegou, então é seguro ir pelo túnel; o celular ainda ignora reenvios)
+        const sem = setTimeout(() => {
+          this.pendentes.delete(id); clearTimeout(t);
+          try { ws.close(4002, 'sem confirmação'); } catch { }
+          falha(new Error('SEM_CONFIRMACAO'));
+        }, 5000);
+        this.pendentes.set(id, { ok, falha, t, sem });
+      });
+      try { ws.send(JSON.stringify({ t: 'req', id, h, b: corpo })); } catch {
+        clearTimeout(this.pendentes.get(id)?.t); this.pendentes.delete(id);
+        return new Response('canal caiu', { status: 503 });
+      }
+      try {
+        const r = await resposta;
+        return new Response(r.b ?? '', { status: r.s || 200, headers: { 'content-type': r.h?.['content-type'] || 'application/json' } });
+      } catch (e) {
+        if (e.message === 'SEM_CONFIRMACAO') return new Response('canal mudo', { status: 503 });
+        return Response.json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: String(e.message || e) } }, { status: 504 });
+      }
+    }
+    return new Response('rota desconhecida', { status: 404 });
+  }
+  async webSocketMessage(ws, msg) {
+    if (typeof msg !== 'string' || msg === 'ping' || msg === 'pong') return;
+    let m;
+    try { m = JSON.parse(msg); } catch { return; }
+    const p = m && (m.t === 'res' || m.t === 'ok') ? this.pendentes.get(m.id) : null;
+    if (!p) return;
+    clearTimeout(p.sem);  // recebida pelo celular
+    if (m.t === 'ok') return;
+    clearTimeout(p.t);
+    this.pendentes.delete(m.id);
+    p.ok(m);
+  }
+  falharTudo(motivo) {
+    for (const [id, p] of this.pendentes) { clearTimeout(p.t); clearTimeout(p.sem); p.falha(new Error(motivo)); this.pendentes.delete(id); }
+  }
+  async webSocketClose(ws, code, reason) {
+    try { ws.close(code, reason); } catch { }
+    if (!this.socket()) this.falharTudo('o canal com o celular caiu no meio da chamada');
+  }
+  async webSocketError() {
+    if (!this.socket()) this.falharTudo('erro no canal com o celular');
+  }
+}
+
 async function acaoDono(env, req, s, corpo, acao) {
   const aparelhos = (await env.DB.prepare('SELECT id FROM aparelhos WHERE revogado = 0').all()).results.map(a => a.id);
   const alvo = corpo.aparelho ? [String(corpo.aparelho)] : aparelhos;
@@ -326,6 +439,7 @@ async function acaoDono(env, req, s, corpo, acao) {
       feitos.push(await mudarEstado(env, ap, { desarmado_permite: v }, por, `desarmado permite ${v}`));
     }
   }
+  await Promise.all(alvo.map(ap => empurrar(env, ap)));  // o celular aplica NA HORA (antes: até 30 s)
   return json({ ok: true, estados: feitos });
 }
 
@@ -376,7 +490,7 @@ async function estadoParaCelular(env, req) {
   const o = await env.DB.prepare('SELECT observar_ate, ao_vivo_ate FROM observacao WHERE aparelho = ?').bind(ap.id).first();
   return json({ ...(await assinar(env, { v: 1, aparelho: ap.id, seq: e.seq, armado_ate: e.armado_ate, travado: e.travado,
     desarmado_permite: e.desarmado_permite, so_pelo_painel: e.so_pelo_painel, emitido_em: agora() })),
-    observar_ate: o ? o.observar_ate : 0, ao_vivo_ate: o ? o.ao_vivo_ate : 0 });
+    observar_ate: o ? o.observar_ate : 0, ao_vivo_ate: o ? o.ao_vivo_ate : 0, canal: true });  // esta Central tem canal direto
 }
 
 async function ackCelular(env, req, corpo) {
@@ -417,9 +531,12 @@ async function painel(env, s, origem) {
     a.em_uso = o && o.em_uso ? JSON.parse(o.em_uso) : null;
     a.em_uso_em = o ? o.em_uso_em : null;
     a.ao_vivo_ate = o ? o.ao_vivo_ate : 0;
-    if (!a.revogado && (!o || o.observar_ate < t + 60))  // painel aberto: o celular manda o relatório completo
+    if (!a.revogado && (!o || o.observar_ate < t + 60)) {  // painel aberto: o celular manda o relatório completo
       await env.DB.prepare(`INSERT INTO observacao (aparelho, observar_ate) VALUES (?, ?) ON CONFLICT(aparelho)
         DO UPDATE SET observar_ate = excluded.observar_ate`).bind(a.id, t + 120).run();
+      if (!o || o.observar_ate < t) await empurrar(env, a.id);  // acabou de abrir: relatório agora, não em 30 s
+    }
+    a.canal = a.revogado ? { conectado: false } : await estadoCanal(env, a.id);
     a.aplicado = a.aplicado_seq >= a.estado.seq;  // só mostra como aplicado depois que o celular confirmar
   }
   const creds = (await env.DB.prepare('SELECT id, nome, criada, ultimo_uso, revogada FROM credenciais ORDER BY criada').all()).results;
@@ -500,6 +617,7 @@ const painelApp = {
         if (!fresca(s)) return erro('confirme com a digital para revogar', 403);
         if (corpo.tipo === 'aparelho') {
           await env.DB.prepare('UPDATE aparelhos SET revogado = 1 WHERE id = ?').bind(String(corpo.id)).run();
+          await empurrar(env, String(corpo.id));
         } else if (corpo.tipo === 'passkey') {
           const ativas = (await env.DB.prepare('SELECT COUNT(*) AS n FROM credenciais WHERE revogada = 0').first()).n;
           if (ativas <= 1) return erro('não dá para revogar a última passkey (você perderia o painel)', 400);
@@ -518,7 +636,7 @@ const painelApp = {
           DO UPDATE SET ao_vivo_ate = excluded.ao_vivo_ate, observar_ate = MAX(observar_ate, excluded.observar_ate)`)
           .bind(ap, ate, ate).run();
         if (!corpo.ligar) await env.DB.prepare('DELETE FROM quadros WHERE aparelho = ?').bind(ap).run();
-        else if (corpo.inicio) await registrar(env, 'painel', 'tela_ao_vivo', { aparelho: ap });
+        else if (corpo.inicio) { await registrar(env, 'painel', 'tela_ao_vivo', { aparelho: ap }); await empurrar(env, ap); }
         return json({ ok: true, ao_vivo_ate: ate });
       }
       if (rota === '/api/tela/quadro') {
@@ -686,9 +804,9 @@ const mcpApi = {
     }
     // uma consulta só: aparelho, endereço e estado (antes eram três, em sequência)
     const ap = await env.DB.prepare(`SELECT a.id, x.mcp_url, e.armado_ate, e.travado, e.desarmado_permite
-      FROM aparelhos a JOIN extras x ON x.aparelho = a.id LEFT JOIN estado e ON e.aparelho = a.id
-      WHERE a.revogado = 0 AND x.mcp_url IS NOT NULL ORDER BY a.criado LIMIT 1`).first();
-    if (!ap) return rpc(msg?.id, { error: { code: -32000, message: 'nenhum celular disponível: o celular ainda não informou o endereço ao painel' } }, 503);
+      FROM aparelhos a LEFT JOIN extras x ON x.aparelho = a.id LEFT JOIN estado e ON e.aparelho = a.id
+      WHERE a.revogado = 0 ORDER BY a.criado LIMIT 1`).first();
+    if (!ap) return rpc(msg?.id, { error: { code: -32000, message: 'nenhum celular cadastrado na Central' } }, 503);
     const e = { armado_ate: ap.armado_ate || 0, travado: ap.travado || 0, desarmado_permite: ap.desarmado_permite || 'ir' };
     for (const m of Array.isArray(msg) ? msg : [msg]) {
       if (m?.method !== 'tools/call') continue;
@@ -704,16 +822,26 @@ const mcpApi = {
     const cab = { 'content-type': 'application/json', accept: req.headers.get('accept') || 'application/json, text/event-stream',
       'x-painel-assinatura': await assinarRequisicao(env, bruto), 'ngrok-skip-browser-warning': '1' };
     for (const h of ['mcp-session-id', 'mcp-protocol-version']) if (req.headers.get(h)) cab[h] = req.headers.get(h);
-    let r;
+    // 1º o canal direto (conexão aberta pelo celular: sem túnel); sem canal, o túnel (ngrok) como antes
+    let r = null, via = 'canal';
     try {
-      r = await fetch(ap.mcp_url, { method: 'POST', headers: cab, body: bruto });
-    } catch (err) {
-      return rpc(msg?.id, { error: { code: -32000, message: `o celular não respondeu: ${String(err.message || err).slice(0, 120)}` } }, 502);
+      const rc = await canalDe(env, ap.id).fetch('https://canal/rpc', { method: 'POST', headers: cab, body: bruto });
+      if (rc.status !== 503) r = rc;
+    } catch { /* objeto do canal indisponível: segue pelo túnel */ }
+    if (!r) {
+      via = 'túnel';
+      if (!ap.mcp_url) return rpc(msg?.id, { error: { code: -32000, message: 'o celular está fora do ar (sem canal direto e sem túnel): confira se o serviço controle-ir está ligado' } }, 503);
+      try {
+        r = await fetch(ap.mcp_url, { method: 'POST', headers: cab, body: bruto });
+      } catch (err) {
+        return rpc(msg?.id, { error: { code: -32000, message: `o celular não respondeu: ${String(err.message || err).slice(0, 120)}` } }, 502);
+      }
     }
     const chamada = (Array.isArray(msg) ? msg : [msg]).find(m => m?.method === 'tools/call');
     if (chamada) ctx.waitUntil(registrarChamada(env, String(chamada.params?.name || '?'), chamada.params?.arguments,
-      r.ok ? 'ok' : `HTTP ${r.status}`, Date.now() - t0).catch(() => {}));
-    const sai = { 'content-type': r.headers.get('content-type') || 'application/json', 'cache-control': 'no-store' };
+      `${r.ok ? 'ok' : `HTTP ${r.status}`} · ${via}`, Date.now() - t0).catch(() => {}));
+    const sai = { 'content-type': r.headers.get('content-type') || 'application/json', 'cache-control': 'no-store',
+      'x-via': via === 'canal' ? 'canal' : 'tunel' };  // cabeçalho só em ASCII
     if (r.headers.get('mcp-session-id')) sai['mcp-session-id'] = r.headers.get('mcp-session-id');
     return new Response(r.body, { status: r.status, headers: sai });
   },
@@ -743,7 +871,9 @@ function criarProvedor(origem) {
 }
 export default {
   fetch(req, env, ctx) {
-    const origem = new URL(req.url).origin;
+    const u = new URL(req.url);
+    if (u.pathname === '/api/celular/canal') return abrirCanal(req, env);
+    const origem = u.origin;
     if (!provedor || origemDoProvedor !== origem) { provedor = criarProvedor(origem); origemDoProvedor = origem; }
     return provedor.fetch(req, env, ctx);
   },

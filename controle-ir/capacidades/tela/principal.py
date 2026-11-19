@@ -494,99 +494,311 @@ def janela_nova(antes, depois, app=None):
 
 
 # --------------------------------------------------------------------------- grade de algarismos (lida no celular)
-def teclado_da_grade(els, regiao, n):
-    """Os n botões de algarismo do jogo: n clicáveis lado a lado (mesma altura), abaixo da grade. [(x, y, l, a)]."""
-    abaixo = [e for e in els if e.get("clicavel") and e["y"] > regiao[1] + regiao[3] and 0 < e.get("l", 0) < regiao[2] / n * 1.4]
+SIMBOLOS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def teclado_da_grade(els, regiao, n=None):
+    """Os botões de símbolo do jogo: uma fileira de 4+ clicáveis do mesmo tamanho, lado a lado, logo abaixo da grade.
+    Com n: a fileira de exatamente n botões, se houver; senão a maior (e a mais de baixo no empate).
+    [(x, y, l, a)] da esquerda para a direita, ou None."""
+    baixo = regiao[1] + regiao[3]
+    cands = [e for e in els if e.get("clicavel") and baixo < e["y"] < baixo + 900 and 0 < e.get("l", 0) < regiao[2] / 3]
     linhas = {}
-    for e in abaixo:
-        linhas.setdefault(round(e["y"] / 20), []).append(e)
-    for grupo in sorted(linhas.values(), key=lambda g: g[0]["y"]):
-        if len(grupo) == n:
-            return [(e["x"], e["y"], e["l"], e["a"]) for e in sorted(grupo, key=lambda e: e["x"])]
-    return None
+    for e in cands:
+        linhas.setdefault(round(e["y"] / 25), []).append(e)
+    grupos = []
+    for grupo in linhas.values():
+        med = sorted(e["l"] for e in grupo)[len(grupo) // 2]
+        grupo = [e for e in grupo if abs(e["l"] - med) <= 0.25 * med]
+        if len(grupo) >= 4:
+            grupos.append(grupo)
+    if not grupos:
+        return None
+    exatos = [g for g in grupos if n and len(g) == n]
+    melhor = max(exatos or grupos, key=lambda g: (len(g), g[0]["y"]))
+    return [(e["x"], e["y"], e["l"], e["a"]) for e in sorted(melhor, key=lambda e: e["x"])]
 
 
-def resolver_sudoku(g):
-    """Grade 9x9 (listas, 0 = vazia) → solução, ou None (leitura errada ou sem solução). Rápido (menos opções primeiro)."""
-    g = [r[:] for r in g]
-    lin = [set(r) - {0} for r in g]
-    col = [{g[r][c] for r in range(9)} - {0} for c in range(9)]
-    cx = [{g[r][c] for r in range(b // 3 * 3, b // 3 * 3 + 3) for c in range(b % 3 * 3, b % 3 * 3 + 3)} - {0}
-          for b in range(9)]
-    if any(len([v for v in r if v]) != len(lin[i]) for i, r in enumerate(g)):
-        return None  # repetido na linha: leitura errada
-    vazias = [(r, c) for r in range(9) for c in range(9) if not g[r][c]]
+def _caixa(n):
+    """Dimensões do bloco: 9 → 3x3, 16 → 4x4, 6 → 2x3, 8 → 2x4, 12 → 3x4."""
+    br = max(d for d in range(1, int(n ** 0.5) + 1) if n % d == 0)
+    return br, n // br
 
-    def passo():
+
+def resolver_grade(g, prazo=10.0):
+    """Sudoku NxN (listas, 0 = vazia; 9x9, 16x16, 6x6…) → solução, ou None (repetido, sem solução ou difícil demais
+    para o prazo). Máscaras de bits e a casa com menos opções primeiro."""
+    n = len(g)
+    br, bc = _caixa(n)
+    nb = n // bc
+    g = [list(r) for r in g]
+    lin, col, cx = [0] * n, [0] * n, [0] * n
+    for r in range(n):
+        for c in range(n):
+            v = g[r][c]
+            if v:
+                b, k = 1 << (v - 1), (r // br) * nb + c // bc
+                if lin[r] & b or col[c] & b or cx[k] & b:
+                    return None  # repetido: leitura errada
+                lin[r] |= b
+                col[c] |= b
+                cx[k] |= b
+    todos = (1 << n) - 1
+    fim = time.time() + prazo
+
+    def busca(vazias):
         if not vazias:
             return True
-        k = max(range(len(vazias)), key=lambda i: len(lin[vazias[i][0]] | col[vazias[i][1]]
-                                                     | cx[vazias[i][0] // 3 * 3 + vazias[i][1] // 3]))
-        r, c = vazias.pop(k)
-        b = r // 3 * 3 + c // 3
-        for v in set(range(1, 10)) - lin[r] - col[c] - cx[b]:
-            g[r][c] = v
-            lin[r].add(v); col[c].add(v); cx[b].add(v)
-            if passo():
+        if time.time() > fim:
+            raise TimeoutError
+        mi, mm, mk = 0, 0, 99
+        for i, (r, c) in enumerate(vazias):
+            m = todos & ~(lin[r] | col[c] | cx[(r // br) * nb + c // bc])
+            k = bin(m).count("1")
+            if k < mk:
+                mi, mm, mk = i, m, k
+                if k <= 1:
+                    break
+        if mk == 0:
+            return False
+        r, c = vazias[mi]
+        resto = vazias[:mi] + vazias[mi + 1:]
+        k = (r // br) * nb + c // bc
+        while mm:
+            b = mm & -mm
+            mm ^= b
+            g[r][c] = b.bit_length()
+            lin[r] |= b
+            col[c] |= b
+            cx[k] |= b
+            if busca(resto):
                 return True
-            lin[r].discard(v); col[c].discard(v); cx[b].discard(v)
+            lin[r] ^= b
+            col[c] ^= b
+            cx[k] ^= b
         g[r][c] = 0
-        vazias.insert(k, (r, c))
         return False
 
-    return g if passo() else None
+    try:
+        return g if busca([(r, c) for r in range(n) for c in range(n) if not g[r][c]]) else None
+    except (TimeoutError, RecursionError):
+        return None
+
+
+def resolver_sudoku(g):  # compatibilidade
+    return resolver_grade(g)
+
+
+def _conflitos(g):
+    """Casas envolvidas em repetições (linha, coluna ou bloco)."""
+    n = len(g)
+    br, bc = _caixa(n)
+    ruins = set()
+    grupos = [[(r, c) for c in range(n)] for r in range(n)] + [[(r, c) for r in range(n)] for c in range(n)]
+    grupos += [[(r, c) for r in range(R, R + br) for c in range(C, C + bc)] for R in range(0, n, br) for C in range(0, n, bc)]
+    for grupo in grupos:
+        vistos = {}
+        for r, c in grupo:
+            v = g[r][c]
+            if v > 0:
+                if v in vistos:
+                    ruins |= {vistos[v], (r, c)}
+                vistos[v] = (r, c)
+    return ruins
+
+
+def _ler_grade(aj, reg, n, k):
+    """Grade lida pelos modelos guardados: (g, dúvidas {(r,c): (segundo, margem)}, desconhecidas {(r,c)}).
+    g[r][c]: 0 vazia, -1 desconhecida (sem modelo), senão o símbolo (1..k)."""
+    r = aj.pedir(f"ler {n} {int(reg[0])} {int(reg[1])} {int(reg[2])} {int(reg[3])} {k}", 15)
+    if not r or r.startswith("ERRO"):
+        return None, {}, set()
+    g, duv, desc = [], {}, set()
+    for i, linha in enumerate(r.strip().split("\n")[:n]):
+        campos = linha.split()
+        if len(campos) != n:
+            return None, {}, set()
+        lin = []
+        for j, cpo in enumerate(campos):
+            if cpo == "?":
+                lin.append(-1)
+                desc.add((i, j))
+                continue
+            partes = cpo.split(":")
+            lin.append(int(partes[0]))
+            if len(partes) == 3:
+                duv[(i, j)] = (int(partes[1]), int(partes[2]))
+        g.append(lin)
+    return (g if len(g) == n else None), duv, desc
+
+
+def _modelos_do_teclado(aj, reg, els, n=None, tec=None):
+    """Guarda os modelos de todas as páginas do teclado (desliza a fileira se ela rola) e volta à 1ª página.
+    Devolve (páginas [(primeiro_simbolo_0based, botões)], total de símbolos, geometria do deslize)."""
+    aj.pedir("limparmodelos", 5)
+    dado = tec is not None
+    tec = tec or teclado_da_grade(els, reg, n)
+    if not tec:
+        return [], 0, None
+    x0 = min(t[0] - t[2] // 2 for t in tec)
+    x1 = max(t[0] + t[2] // 2 for t in tec)
+    y = tec[0][1]
+    rola = not dado and any(e.get("rolavel") and abs(e["y"] - y) < 60 for e in els)
+    paginas, total = [], 0
+    for _ in range(4):
+        topo = min(t[1] - t[3] // 2 for t in tec)
+        alt = max(t[3] for t in tec)
+        xa = min(t[0] - t[2] // 2 for t in tec)
+        xb = max(t[0] + t[2] // 2 for t in tec)
+        aj.pedir(f"modelos {total} {len(tec)} {xa} {topo} {xb - xa} {alt}", 15)
+        paginas.append((total, tec))
+        total += len(tec)
+        if not rola or (n and total >= n):
+            break
+        _injetar(f"deslizar {x1 - 20} {y} {x0 + 20} {y} 450")  # próxima página do teclado
+        calma(100, 1200)
+        novo = teclado_da_grade(elementos(dump_ui(), limite=300), reg)
+        if not novo or [t[0] for t in novo] == [t[0] for t in tec]:
+            break  # não mudou: não há outra página
+        tec = novo
+    for _ in range(len(paginas) - 1):  # volta à primeira página
+        _injetar(f"deslizar {x0 + 20} {y} {x1 - 20} {y} 450")
+        calma(100, 1200)
+    return paginas, total, (x0, x1, y)
+
+
+def _plano(casas, sol, reg, paginas, geo, pagina_atual, intervalo, pressao):
+    """Passos para preencher `casas` com a solução, página por página do teclado. (passos, página final)."""
+    n = len(sol)
+
+    def centro(i, j):
+        return [int(reg[0] + reg[2] * (j + 0.5) / n), int(reg[1] + reg[3] * (i + 0.5) / n)]
+
+    por_pagina = {}
+    for i, j in casas:
+        v = sol[i][j] - 1
+        for p, (ini, tec) in enumerate(paginas):
+            if ini <= v < ini + len(tec):
+                b = tec[v - ini]
+                por_pagina.setdefault(p, []).extend([centro(i, j), [b[0], b[1]]])
+                break
+    passos, atual = [], pagina_atual
+    ordem = sorted(por_pagina, key=lambda p: (p != atual, p))
+    for p in ordem:
+        while atual != p and geo:
+            x0, x1, y = geo
+            d = [x1 - 20, y, x0 + 20, y, 450] if p > atual else [x0 + 20, y, x1 - 20, y, 450]
+            passos += [{"calma": 0.3}, {"deslizar": d, "confiar": True}, {"calma": 0.8}]
+            atual += 1 if p > atual else -1
+        passos.append({"tocar": por_pagina[p], "intervalo": intervalo, "pressao": pressao, "confiar": True})
+    return passos, atual
 
 
 def grade(a):
-    """Lê no celular a grade NxN de algarismos (tabuleiro sem texto na acessibilidade) usando como modelo os botões
-    1..N do próprio jogo. resolver=true (sudoku 9x9): resolve e preenche numa leva só."""
+    """Lê no celular uma grade NxN de símbolos desenhados (tabuleiro sem texto na acessibilidade): os modelos vêm dos
+    botões do próprio jogo (todas as páginas do teclado, deslizando a fileira) e ficam guardados. Espera a grade ficar
+    estável (avisos do app são dispensados pelos reflexos guardados; anúncio é fechado). antes=[passos] roda o preparo
+    na mesma chamada. resolver=true: resolve (9x9, 16x16, 6x6…), preenche página por página, relê e repete o que não
+    pegou. n é descoberto pelo teclado (símbolos de todas as páginas) se não for informado."""
     aj = _ajudante()
     if not aj:
         return {"erro": "precisa do leitor rápido (Shizuku)"}
-    xml = dump_ui()
-    els = elementos(xml, limite=300)
-    n = int(a.get("n", 9))
-    reg = a.get("recorte") or (regioes_visuais(xml) or [None])[0]
-    if not reg:
-        return {"erro": "não achei a grade (área sem texto); informe recorte=[x,y,l,a]"}
-    tec = a.get("teclado") or teclado_da_grade(els, reg, n)
-    if not tec:
-        return {"erro": f"não achei os {n} botões de algarismo abaixo da grade; informe teclado=[[x,y,l,a],...]"}
-    x0 = min(t[0] - t[2] // 2 for t in tec)
-    x1 = max(t[0] + t[2] // 2 for t in tec)
     t0 = time.time()
-    r = aj.pedir(f"grade {int(reg[0])} {int(reg[1])} {int(reg[2])} {int(reg[3])} {n} {x0} "
-                 f"{tec[0][1] - tec[0][3] // 2} {x1 - x0} {tec[0][3]} {n}", 15)
-    if not r or r.startswith("ERRO"):
-        return {"erro": f"leitura falhou: {(r or 'sem resposta')[:120]}"}
-    linhas = r.strip().split("\n")
-    g = [[int(ch) if ch.isdigit() else 0 for ch in ln] for ln in linhas[:n]]
-    duvidas = linhas[n].replace("duvidas", "").split() if len(linhas) > n else []
-    out = {"grade": ["".join(map(str, ln)) for ln in g], "vazias": sum(ln.count(0) for ln in g),
-           "leitura_s": round(time.time() - t0, 2)}
-    if duvidas:
-        out["duvidas"] = duvidas
+    tempos = {}
+    antes = None
+    if a.get("antes"):
+        antes = sequencia({"passos": a["antes"], "ver_depois": "nada"})
+        tempos["preparo"] = round(time.time() - t0, 2)
+    n_pedido = int(a["n"]) if a.get("n") else None
+    limite = time.time() + min(float(a.get("ate", 12)), 40)
+    reg = tec = els = None
+    usados = []
+    while time.time() < limite:  # a grade e o teclado à vista (sem aviso por cima)
+        if em_anuncio():
+            fechar_anuncio(foco())
+            continue
+        xml = dump_ui()
+        els = elementos(xml, limite=300)
+        reg = a.get("recorte") or (regioes_visuais(xml) or [None])[0]
+        tec = (a.get("teclado") or teclado_da_grade(els, reg, n_pedido)) if reg else None
+        if reg and tec:
+            break
+        r = aplicar_regras(els=els)
+        if r:
+            usados.append(r)
+            continue
+        time.sleep(0.15)
+    if not (reg and tec):
+        return {"erro": "não achei a grade e o teclado do jogo", **({"antes": antes} if antes and antes.get("erro") else {}),
+                **({"reflexos": usados} if usados else {})}
+    t1 = time.time()
+    paginas, total, geo = _modelos_do_teclado(aj, reg, els, n_pedido, a.get("teclado"))
+    n = n_pedido or total
+    if total < n:
+        return {"erro": f"o teclado tem {total} símbolos e a grade precisa de {n}"}
+    g, duv, anterior = None, {}, None
+    while time.time() < limite + 5:  # leitura estável: duas iguais seguidas (a grade entra animada)
+        g, duv, desc = _ler_grade(aj, reg, n, total)
+        if g and g == anterior and any(v > 0 for ln in g for v in ln):
+            break
+        anterior = g
+        time.sleep(0.12)
+    else:
+        return {"erro": "a grade não ficou estável a tempo"}
+    tempos["ler"] = round(time.time() - t1, 2)
+    simb = lambda v: "." if v == 0 else ("?" if v < 0 else SIMBOLOS[v - 1])  # noqa: E731
+    texto = lambda gg: ["".join(simb(v) for v in ln) for ln in gg]  # noqa: E731
+    out = {"n": n, "vazias": sum(1 for ln in g for v in ln if v == 0)}
+    if usados:
+        out["reflexos"] = usados
     if not a.get("resolver"):
-        return out
-    if n != 9:
-        return {**out, "erro": "resolver só para sudoku 9x9"}
-    sol = resolver_sudoku(g)
+        return {**out, "grade": texto(g), **({"duvidas": [f"{i},{j}→{SIMBOLOS[s - 1]}?" for (i, j), (s, _) in duv.items()]}
+                                            if duv else {}), "tempos": tempos}
+    t2 = time.time()
+    ruins = _conflitos(g)
+    for (i, j) in sorted(ruins & set(duv), key=lambda c: duv[c][1]):  # repetido numa casa duvidosa: tenta o 2º
+        g[i][j] = duv[(i, j)][0]
+        out.setdefault("corrigidas", []).append(f"{i},{j}")
+        if not _conflitos(g):
+            break
+    sol = resolver_grade([[max(v, 0) for v in ln] for ln in g]) if not any(v < 0 for ln in g for v in ln) else None
+    tempos["resolver"] = round(time.time() - t2, 2)
     if not sol:
-        return {**out, "erro": "a grade lida não tem solução (leitura duvidosa): confira com ver + recorte",
-                "recorte": reg}
-    pontos = []
-    for i in range(9):
-        for j in range(9):
-            if not g[i][j]:
-                pontos += [[int(reg[0] + reg[2] * (j + 0.5) / 9), int(reg[1] + reg[3] * (i + 0.5) / 9)],
-                           [tec[sol[i][j] - 1][0], tec[sol[i][j] - 1][1]]]
-    out["resolvido_s"] = round(time.time() - t0, 2)
-    if not pontos:
-        return {**out, "feito": "nada a preencher"}
-    _ULTIMA["janela"] = (eventos() or (0, 0, None))[2]  # as coordenadas acabaram de ser lidas desta tela
-    r2 = sequencia({"passos": [{"tocar": pontos, "intervalo": float(a.get("intervalo", 0.015))}],
-                    "ver_depois": a.get("ver_depois", "mudancas")})
-    return {**out, **r2}
+        return {**out, "erro": "a grade lida não tem solução (leitura duvidosa)", "grade": texto(g),
+                **({"duvidas": [f"{i},{j}" for (i, j) in duv]} if duv else {}), "tempos": tempos}
+    vazias = [(i, j) for i in range(n) for j in range(n) if g[i][j] == 0]
+    if not vazias:
+        return {**out, "feito": "nada a preencher", "tempos": tempos}
+    janela = (eventos() or (0, 0, None))[2]
+    _ULTIMA["janela"] = janela  # as coordenadas acabaram de ser lidas desta tela
+    t3 = time.time()
+    intervalo, pressao = float(a.get("intervalo", 0.008)), int(a.get("pressao", 8))
+    passos, pagina = _plano(vazias, sol, reg, paginas, geo, 0, intervalo, pressao)
+    r2 = sequencia({"passos": passos, "ver_depois": "nada"})
+    tempos["preencher"] = round(time.time() - t3, 2)
+    if r2.get("erro") or r2.get("interrompido"):
+        return {**out, **r2, "tempos": tempos}
+    # conferência com os modelos guardados (os botões somem quando um símbolo se completa; os modelos ficam)
+    if a.get("conferir", True):
+        calma(80, 400)
+        ev = eventos()
+        if not ev or ev[2] != janela:
+            out["concluido"] = True  # a tela mudou (resultado do jogo)
+        else:
+            lido, _, _ = _ler_grade(aj, reg, n, total)
+            faltam = [(i, j) for i, j in vazias if lido and lido[i][j] == 0]
+            if not faltam:
+                out["conferido"] = True
+            elif len(faltam) <= 8:
+                pr, _ = _plano(faltam, sol, reg, paginas, geo, pagina, 0.05, 30)
+                sequencia({"passos": pr, "ver_depois": "nada"})
+                out["refeitos"] = len(faltam)
+                out["conferido"] = True
+            else:
+                out["conferencia"] = "inconclusiva (a tela estava animando)"
+    tempos["total"] = round(time.time() - t0, 2)
+    out["tempos"] = tempos
+    return out
 
 
 # --------------------------------------------------------------------------- anúncios (resolvidos no celular)
@@ -604,9 +816,22 @@ def classe_janela(info):
     return (info.split("|") + ["", ""])[1]
 
 
-def em_anuncio():
+def atividade_no_topo():
+    """A atividade de fato em primeiro plano (o último evento de janela pode ser da barra do sistema por cima)."""
+    out, _, _ = rish("dumpsys activity activities | grep -m1 topResumedActivity", timeout=10)
+    m = re.search(r"\s([\w.]+)/([\w.$]+)", out or "")
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+def em_anuncio(certeza=False):
+    """Há anúncio em primeiro plano? Rápido pelo último evento; se ele veio do sistema (notificação, gravador de
+    tela) ou certeza=True, confere a atividade no topo de verdade."""
     ev = eventos()
-    return bool(ev and ANUNCIO.search(classe_janela(ev[2])))
+    if ev and ANUNCIO.search(classe_janela(ev[2])):
+        return True
+    if certeza or (ev and IGNORAR_APP.search(ev[2].split("|")[0] or "")):
+        return bool(ANUNCIO.search(atividade_no_topo()[1] or ""))
+    return False
 
 
 def botao_fechar(els):
@@ -645,7 +870,7 @@ def fechar_anuncio(pacote, limite=45):
             _abrir(pacote)
             calma(150, 2500)
             continue
-        if not em_anuncio():
+        if not em_anuncio(certeza=True):
             return {"anuncio": "fechado", "segundos": round(time.time() - t0, 1), "passos": feitos}
         b = botao_fechar(elementos(dump_ui()))
         chave = (b["x"], b["y"]) if b else None
@@ -1017,7 +1242,65 @@ def _rodar_bloco(linhas, rx):
 
 # --------------------------------------------------------------------------- reflexos guardados no celular
 REFLEXOS_ARQ = os.path.join(BASE, "tela_reflexos.json")
-MAX_REFLEXOS = 20
+MAX_REFLEXOS = 30
+
+
+def achar_regra(els, texto, exato=False):
+    """Como achar, mas texto curto (até 4 letras, ex.: 'OK') só vale igual: 'ok' não casa com 'Facebook'."""
+    alvo = normalizar(texto)
+    if not alvo:
+        return None
+    if exato or len(alvo) <= 4:
+        for grupo in ([e for e in els if e.get("clicavel")], els):
+            for e in grupo:
+                if alvo in (normalizar(e.get("texto")), normalizar(e.get("desc"))):
+                    return e
+        return None
+    return achar(els, texto)
+
+
+def regra_vale(r, app, els_fn, info=""):
+    """Onde a regra age agora: ('tecla', código) ou (x, y); None se ela não casa (outro app, texto ausente…)."""
+    if r.get("app") and not str(app or "").startswith(str(r["app"])):
+        return None
+    if r.get("janela"):
+        if not info or normalizar(r["janela"]) not in normalizar(info):
+            return None
+    elif not achar_regra(els_fn(), r["se"], r.get("exato")):
+        return None
+    if r.get("tecla"):
+        return ("tecla", TECLAS[normalizar(r["tecla"])])
+    alvo = r["tocar"]
+    if isinstance(alvo, str):
+        e = achar_regra(els_fn(), alvo, r.get("exato"))
+        return (e["x"], e["y"]) if e else None
+    return (int(alvo[0]), int(alvo[1]))
+
+
+def aplicar_regras(app=None, els=None, info=""):
+    """Fora de uma sequência (ex.: esperando a grade): aplica a primeira regra que casar e espera assentar.
+    Devolve o nome da regra ou None. Nunca em app bloqueado (banco, pagamento, senha)."""
+    regras = _regras()
+    if not regras or not _ajudante():
+        return None
+    app = app or foco()
+    if bloqueado(app, bloqueados()):
+        return None
+    cache = {"els": els}
+
+    def els_fn():
+        if cache["els"] is None:
+            cache["els"] = elementos(dump_ui())
+        return cache["els"]
+
+    for r in regras:
+        alvo = regra_vale(r, app, els_fn, info)
+        if not alvo:
+            continue
+        _injetar(f"tecla {alvo[1]}" if alvo[0] == "tecla" else f"tocar {alvo[0]} {alvo[1]}")
+        calma(120, 1500)
+        return r.get("se") or r.get("janela")
+    return None
 
 
 def _regras():
@@ -1031,7 +1314,8 @@ def _regras():
 
 def reflexos(regras=None):
     """Lista (sem regras) ou troca as regras. Cada uma: {se:'texto' | janela:'trecho de pacote/classe/texto',
-    tocar:[x,y]|'texto' | tecla:'voltar'}. Valem dentro das sequências: no lugar de parar, o celular resolve e segue."""
+    tocar:[x,y]|'texto' | tecla:'voltar', app:'pacote' (opcional: só nesse app), exato:true (opcional)}.
+    Valem nas sequências (no lugar de parar, e enquanto espera um texto) e na espera da grade."""
     if regras is None:
         return {"regras": _regras()}
     if not isinstance(regras, list) or len(regras) > MAX_REFLEXOS:
@@ -1041,12 +1325,92 @@ def reflexos(regras=None):
             return {"erro": f"regra {k + 1}: precisa de se/janela e de tocar/tecla"}
         if r.get("tecla") and normalizar(r["tecla"]) not in TECLAS:
             return {"erro": f"regra {k + 1}: tecla deve ser uma de: {', '.join(TECLAS)}"}
+        if r.get("app") and not re.match(r"^[A-Za-z][\w.]{2,120}$", str(r["app"])):
+            return {"erro": f"regra {k + 1}: app deve ser o nome do pacote"}
     os.makedirs(BASE, exist_ok=True)
     tmp = REFLEXOS_ARQ + ".tmp"
     with open(tmp, "w") as f:
         json.dump(regras, f, ensure_ascii=False)
     os.replace(tmp, REFLEXOS_ARQ)
     return {"regras": regras, "feito": f"{len(regras)} reflexo(s) guardado(s)"}
+
+
+# --------------------------------------------------------------------------- rotinas guardadas no celular
+ROTINAS_ARQ = os.path.join(BASE, "tela_rotinas.json")
+ROTINA_ACOES = ("sequencia", "grade", "ver", "tocar", "digitar", "tecla", "deslizar", "abrir", "fechar_anuncio")
+
+
+def _rotinas():
+    try:
+        with open(ROTINAS_ARQ) as f:
+            r = json.load(f)
+        return r if isinstance(r, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _resumo_volta(r, segundos):
+    """Uma volta de rotina repetida, em poucas palavras (o resultado inteiro de cada uma seria texto demais)."""
+    v = {"ok": not r.get("erro") and not r.get("interrompido"), "s": round(segundos, 1)}
+    for k in ("n", "vazias", "concluido", "conferido", "refeitos", "erro", "interrompido"):
+        if r.get(k) is not None:
+            v[k] = str(r[k])[:80] if k in ("erro", "interrompido") else r[k]
+    for k in ("anuncios", "reflexos"):
+        if r.get(k):
+            v[k] = len(r[k])
+    return v
+
+
+def rotina(a):
+    """Rotinas guardadas no celular: uma chamada curta no lugar de repetir argumentos longos.
+    salvar={nome, args} guarda; apagar=nome apaga; nome roda; nome + vezes=N repete (até 20, dentro de orcamento s,
+    padrão 100) e devolve um resumo por volta; sem nada lista."""
+    rot = _rotinas()
+
+    def gravar():
+        os.makedirs(BASE, exist_ok=True)
+        tmp = ROTINAS_ARQ + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(rot, f, ensure_ascii=False)
+        os.replace(tmp, ROTINAS_ARQ)
+
+    if a.get("salvar"):
+        sv = a["salvar"] if isinstance(a["salvar"], dict) else {}
+        nome, args = str(sv.get("nome") or ""), sv.get("args")
+        if not re.match(r"^[\w-]{1,40}$", nome):
+            return {"erro": "nome: até 40 letras, números, _ ou -"}
+        if not isinstance(args, dict) or args.get("acao") not in ROTINA_ACOES:
+            return {"erro": f"args deve ter acao entre: {', '.join(ROTINA_ACOES)}"}
+        rot[nome] = args
+        gravar()
+        return {"feito": f"rotina {nome} guardada", "rotinas": sorted(rot)}
+    if a.get("apagar"):
+        rot.pop(str(a["apagar"]), None)
+        gravar()
+        return {"feito": "apagada", "rotinas": sorted(rot)}
+    nome = a.get("nome")
+    if not nome:
+        return {"rotinas": {k: v.get("acao") for k, v in rot.items()}}
+    if nome not in rot:
+        return {"erro": f"rotina {nome} não existe", "rotinas": sorted(rot)}
+    vezes = max(1, min(int(a.get("vezes") or 1), 20))
+    if vezes == 1:
+        return {"rotina": nome, **executar(dict(rot[nome]))}
+    orcamento = max(10.0, min(float(a.get("orcamento") or 100), 140))
+    t0, voltas, ultimo = time.time(), [], {}
+    for _ in range(vezes):
+        if voltas and time.time() - t0 + max(v["s"] for v in voltas) > orcamento:
+            break  # a próxima volta não cabe no tempo desta chamada
+        t = time.time()
+        ultimo = executar(dict(rot[nome]))
+        voltas.append(_resumo_volta(ultimo, time.time() - t))
+        if not voltas[-1]["ok"] and not a.get("seguir"):
+            break
+    out = {"rotina": nome, "feitas": len(voltas), "pedidas": vezes, "segundos": round(time.time() - t0, 1),
+           "voltas": voltas}
+    if voltas and not voltas[-1]["ok"] and ultimo.get("tela"):
+        out["tela"] = ultimo["tela"]  # parou num problema: já mostra a tela
+    return out
 
 
 class _Falha(Exception):
@@ -1103,6 +1467,7 @@ class _Executor:
         self.anuncios = []  # anúncios que o celular fechou sozinho
         self.com_anuncios = True
         self.app_inicial = None  # trava de app inesperado
+        self.pressao = None  # ms de cada toque nas levas (None: o padrão do leitor, 12 ms)
 
     # --- utilidades
     def descarregar(self):
@@ -1129,26 +1494,21 @@ class _Executor:
         """Alguma regra guardada resolve o que surgiu? Age (tocar/tecla), espera assentar e diz True."""
         if not self.regras or len(self.usados) >= 10:
             return False
-        els = None
+        cache = {}
+
+        def els_fn():
+            if "els" not in cache:
+                cache["els"] = self.ver_elementos()
+            return cache["els"]
+
+        app = self.app or foco()
         for r in self.regras:
-            if r.get("janela"):
-                if normalizar(r["janela"]) not in normalizar(info):
-                    continue
+            alvo = regra_vale(r, app, els_fn, info)
+            if not alvo:
+                continue
+            if alvo[0] == "tecla":
+                self.injetar(f"tecla {alvo[1]}", [f"input keyevent {alvo[1]} || exit 3"])
             else:
-                els = els if els is not None else self.ver_elementos()
-                if not achar(els, r["se"]):
-                    continue
-            if r.get("tecla"):
-                cod = TECLAS[normalizar(r["tecla"])]
-                self.injetar(f"tecla {cod}", [f"input keyevent {cod} || exit 3"])
-            else:
-                alvo = r["tocar"]
-                if isinstance(alvo, str):
-                    els = els if els is not None else self.ver_elementos()
-                    e = achar(els, alvo)
-                    if not e:
-                        continue
-                    alvo = [e["x"], e["y"]]
                 x, y = int(alvo[0]), int(alvo[1])
                 self.app_em = 0.0
                 self.injetar(f"tocar {x} {y}", [f"input tap {x} {y} || exit 3"])
@@ -1244,7 +1604,8 @@ class _Executor:
             parte = pontos[k:k + pedaco]
             # a mesma tela se anunciando sem parar (animação): o resto da leva vai sem o reflexo de janela
             cmd = "toquesv" if self.parar_em_janela is not False and reanuncios < 20 else "toques"
-            r = (self.injetar_cru(f"{cmd} {int(pausa * 1000)} " + " ".join(f"{x} {y}" for x, y in parte)))
+            ritmo = f"{int(pausa * 1000)}" + (f":{int(self.pressao)}" if self.pressao else "")
+            r = (self.injetar_cru(f"{cmd} {ritmo} " + " ".join(f"{x} {y}" for x, y in parte)))
             if r is None:  # leitor caiu: o resto pelo shell, sem reflexo
                 linhas = []
                 for x, y in pontos[k:]:
@@ -1357,6 +1718,7 @@ class _Executor:
                 self.conferir_coordenadas(p, onde)
             pontos = [[int(x), int(y)] for x, y in pontos]
             self.tocados += pontos
+            self.pressao = p.get("pressao") or self.pressao
             pausa = max(0.0, min(float(p.get("intervalo", 0.05)), 5.0))
             if p.get("segurar"):
                 ms = max(50, min(int(p["segurar"]), 5000))
@@ -1425,6 +1787,8 @@ class _Executor:
                 if self.lidar_anuncio():
                     limite = max(limite, time.time() + 5)  # o tempo do anúncio não conta
                     continue
+                if self.rapido and self.regras and self.aplicar_reflexo():
+                    continue  # um aviso conhecido estava por cima: dispensado, olha de novo
                 if time.time() > limite:
                     raise _Falha({"erro": f"{onde}: “{texto}” {'não apareceu' if quer else 'não sumiu'} a tempo",
                                   "app": foco()})
@@ -1604,8 +1968,10 @@ def executar(a):
                     so_mudancas=bool(a.get("so_mudancas")), formato=a.get("formato", "curto"))
         elif acao == "grade":
             r = grade(a)
+        elif acao == "rotina":
+            r = rotina(a)
         elif acao == "fechar_anuncio":
-            r = fechar_anuncio(foco(), min(float(a.get("limite", 45)), 120)) if em_anuncio() else {"anuncio": "nenhum"}
+            r = fechar_anuncio(foco(), min(float(a.get("limite", 45)), 120)) if em_anuncio(True) else {"anuncio": "nenhum"}
         elif acao == "reflexos":
             r = reflexos(a.get("regras"))
         else:

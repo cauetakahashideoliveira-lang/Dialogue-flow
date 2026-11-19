@@ -30,6 +30,52 @@ PAINEL = Path(__file__).with_name("painel.html")
 ORIGENS_OK = ("claude.ai", "claude.com", "anthropic.com")
 LIMITE_CORPO = 2_000_000
 REDES_ANTHROPIC = ("160.79.104.0/21",)  # saída dos conectores do claude.ai (docs de autenticação de conectores)
+REENVIO_S = 3.0  # depois de terminada, a mesma chamada repetida em até 3 s é reenvio da rede, não um pedido novo
+
+
+class Reenvios:
+    """Idempotência do /mcp: se a MESMA chamada de ferramenta (corpo idêntico, inclusive o id do JSON-RPC) chega de
+    novo enquanto a primeira ainda roda, ou logo depois de ela terminar, é um reenvio (a resposta se perdeu no
+    caminho e alguém repetiu o POST): devolve a mesma resposta em vez de executar duas vezes — tocar, digitar ou
+    mandar infravermelho em dobro. Um pedido de verdade repetido pelo Claude chega bem depois (ele precisa ler a
+    resposta e escrever o próximo), fora da janela."""
+
+    def __init__(self, janela: float = REENVIO_S):
+        self.janela = janela
+        self.trava = threading.Lock()
+        self.itens: dict[str, dict] = {}
+
+    @staticmethod
+    def chave(bruto: bytes, corpo) -> str | None:
+        msgs = corpo if isinstance(corpo, list) else [corpo]
+        if not any(isinstance(m, dict) and m.get("method") == "tools/call" for m in msgs):
+            return None  # só chamadas de ferramenta têm efeito; o resto pode repetir à vontade
+        import hashlib
+        return hashlib.sha256(bruto).hexdigest()
+
+    def executar(self, chave: str | None, fazer):
+        """(status, resposta, era_reenvio)."""
+        if chave is None:
+            return (*fazer(), False)
+        agora = time.time()
+        with self.trava:
+            for k in [k for k, v in self.itens.items() if v["fim"] and agora - v["fim"] > self.janela]:
+                del self.itens[k]
+            item = self.itens.get(chave)
+            dono = item is None
+            if dono:
+                item = self.itens[chave] = {"pronto": threading.Event(), "fim": 0.0, "resposta": None}
+        if not dono:
+            item["pronto"].wait(300)
+            if item["resposta"] is not None:
+                return (*item["resposta"], True)
+            return (*fazer(), False)  # a primeira falhou sem resposta: executa esta
+        try:
+            item["resposta"] = fazer()
+            return (*item["resposta"], False)
+        finally:
+            item["fim"] = time.time()
+            item["pronto"].set()
 
 
 class Origens:
@@ -202,6 +248,7 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
     log = log or (lambda *a: None)
     mcp = ServidorMCP(servico, log)
     origens = Origens(servico.pasta, politica_origens)
+    reenvios = Reenvios()
 
     def token_ok(t: str | None) -> bool:
         return bool(t) and hmac.compare_digest(str(t).encode(), segredo.encode())
@@ -334,8 +381,12 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
                     if not origens.verificar(self.headers.get("X-Forwarded-For")):
                         return self._json(403, {"erro": "origem não permitida"})
                 servico.ultima_requisicao_claude = time.time()
-                status, resp = mcp.tratar(corpo)
-                return self._json(status, resp)
+                chave = Reenvios.chave(getattr(self, "_bruto", b""), corpo)
+                status, resp, repetida = reenvios.executar(chave, lambda: mcp.tratar(corpo))
+                if repetida:
+                    servico.exec.auditar({"evento": "reenvio_ignorado", "nota": "mesma chamada repetida pela rede: "
+                                                                             "devolvida a resposta da primeira"})
+                return self._json(status, resp, {"X-Reenvio": "1"} if repetida else None)
             if len(partes) == 2 and partes[0] == "api" and partes[1] in acoes:
                 if not local_ok(self, self._token_req(q)):
                     return self._json(401, {"erro": "segredo inválido"})

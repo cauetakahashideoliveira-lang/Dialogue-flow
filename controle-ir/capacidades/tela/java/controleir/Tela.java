@@ -37,6 +37,8 @@ import java.lang.reflect.Method;
  * historico DESDE_MS (janelas surgidas depois de DESDE, uma por linha: "T pacote|classe|texto") |
  * toquesv PAUSA_MS X1 Y1… (como toques, mas para se surgir uma janela nova: "parou K pacote|classe|texto") |
  * aguardar M LIMITE_MS (espera o contador de mudanças sair de M; responde o contador atual) |
+ * grade BX BY BL BA N PX PY PL PA K (lê uma grade NxN de algarismos desenhados, comparando cada casa com os K
+ *   botões do teclado do próprio jogo; responde a grade em N linhas, 0 = vazia, e depois "duvidas i,j…") |
  * shell HEX (roda um comando como shell, sem abrir outra conexão com o Shizuku) |
  * foto LARGURA LIMITE_BYTES CAMINHO [X Y L A] (JPEG reduzido direto da acessibilidade, sem PNG nem ffmpeg) | sair.
  * Sem uso por 60 s, desconecta da acessibilidade (bateria; apps que estranham automação ligada); sem uso por 5 min,
@@ -155,6 +157,10 @@ public class Tela {
             long fim = SystemClock.uptimeMillis() + Math.max(10, Math.min(i(p[3]), 30000));
             while (mudancas == m && SystemClock.uptimeMillis() < fim) SystemClock.sleep(10);
             return String.valueOf(mudancas);
+        }
+        if (c.equals("grade")) {
+            int[] b = {i(p[2]), i(p[3]), i(p[4]), i(p[5])}, t = {i(p[7]), i(p[8]), i(p[9]), i(p[10])};
+            return grade(u, b, i(p[6]), t, i(p[11]));
         }
         if (c.equals("calma")) {
             long t0 = SystemClock.uptimeMillis();
@@ -506,6 +512,77 @@ public class Tela {
         if (base != soft) base.recycle();
         soft.recycle();
         return lw + " " + lh + " " + dados.length;
+    }
+
+    // ------------------------------------------------------------------ leitura de grade (sem OCR: modelos do teclado)
+    static final int S = 16;
+
+    static String grade(UiAutomation u, int[] b, int n, int[] t, int k) {
+        Bitmap cap = u.takeScreenshot();
+        if (cap == null) return "ERRO sem captura";
+        Bitmap bm = cap.copy(Bitmap.Config.ARGB_8888, false);
+        cap.recycle();
+        int[][] mod = new int[k][];
+        for (int d = 0; d < k; d++) {  // o algarismo grande fica na parte de cima do botão (embaixo vem a contagem)
+            int x = t[0] + d * t[2] / k, w = t[2] / k;
+            mod[d] = assinatura(bm, x + w / 8, t[1], w - w / 4, t[3] * 62 / 100);
+        }
+        StringBuilder out = new StringBuilder(), duv = new StringBuilder();
+        for (int r = 0; r < n; r++) {
+            for (int c = 0; c < n; c++) {
+                int x = b[0] + c * b[2] / n, y = b[1] + r * b[3] / n, w = b[2] / n, h = b[3] / n;
+                int[] a = assinatura(bm, x + w / 8, y + h / 8, w - w / 4, h - h / 4);
+                if (a == null) { out.append('0'); continue; }
+                int melhor = -1, d1 = Integer.MAX_VALUE, d2 = Integer.MAX_VALUE;
+                for (int d = 0; d < k; d++) {
+                    if (mod[d] == null) continue;
+                    int dist = 0;
+                    for (int q = 0; q < S * S; q++) dist += Math.abs(a[q] - mod[d][q]);
+                    if (dist < d1) { d2 = d1; d1 = dist; melhor = d; } else if (dist < d2) d2 = dist;
+                }
+                out.append(melhor < 0 ? '?' : (char) ('1' + melhor));
+                if (melhor < 0 || d2 - d1 < 12) duv.append(r).append(',').append(c).append(' ');
+            }
+            out.append('\n');
+        }
+        bm.recycle();
+        return out.append("duvidas ").append(duv.toString().trim()).toString();
+    }
+
+    /** Desenho de uma casa reduzido a 16x16 (1 = tinta), enquadrado pela tinta; null se a casa está vazia.
+     *  Tinta = bem mais escura que o fundo da casa (o fundo é lido nas bordas: casa destacada também funciona). */
+    static int[] assinatura(Bitmap bm, int x, int y, int w, int h) {
+        x = Math.max(0, x); y = Math.max(0, y);
+        w = Math.min(w, bm.getWidth() - x); h = Math.min(h, bm.getHeight() - y);
+        if (w < 4 || h < 4) return null;
+        int[] px = new int[w * h];
+        bm.getPixels(px, 0, w, x, y, w, h);
+        int[] lum = new int[w * h];
+        for (int q = 0; q < px.length; q++) {
+            int v = px[q];
+            lum[q] = (((v >> 16) & 255) * 30 + ((v >> 8) & 255) * 59 + (v & 255) * 11) / 100;
+        }
+        long soma = 0; int nb = 0;
+        for (int q = 0; q < w; q++) { soma += lum[q] + lum[(h - 1) * w + q]; nb += 2; }
+        for (int q = 0; q < h; q++) { soma += lum[q * w] + lum[q * w + w - 1]; nb += 2; }
+        int lim = (int) (soma / nb) - 60;
+        int x0 = w, y0 = h, x1 = -1, y1 = -1, tinta = 0;
+        for (int yy = 0; yy < h; yy++) for (int xx = 0; xx < w; xx++) if (lum[yy * w + xx] < lim) {
+            tinta++;
+            if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (yy < y0) y0 = yy; if (yy > y1) y1 = yy;
+        }
+        if (tinta < w * h / 60 || x1 < 0) return null;
+        int bw = x1 - x0 + 1, bh = y1 - y0 + 1, lado = Math.max(bw, bh);
+        int ox = x0 - (lado - bw) / 2, oy = y0 - (lado - bh) / 2;  // quadrado centrado: "1" não vira bloco
+        int[] sig = new int[S * S];
+        for (int sy = 0; sy < S; sy++) for (int sx = 0; sx < S; sx++) {
+            int ax = ox + sx * lado / S, ay = oy + sy * lado / S, bx = ox + (sx + 1) * lado / S, by = oy + (sy + 1) * lado / S;
+            int tot = 0, sim = 0;
+            for (int yy = Math.max(ay, 0); yy < Math.min(by, h); yy++)
+                for (int xx = Math.max(ax, 0); xx < Math.min(bx, w); xx++) { tot++; if (lum[yy * w + xx] < lim) sim++; }
+            sig[sy * S + sx] = tot > 0 && sim * 4 > tot ? 1 : 0;
+        }
+        return sig;
     }
 
     static String deHex(String h) throws Exception {

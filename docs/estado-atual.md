@@ -41,6 +41,10 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Grade lida no celular (1.0.42):** `acao=grade` lê um tabuleiro de algarismos desenhado (sem texto na
+  acessibilidade) no próprio leitor (Java `grade`): cada casa vira uma assinatura 16x16 comparada com os botões 1..N do
+  teclado do jogo (achados sozinhos abaixo da grade). Validado offline numa captura antiga: 81/81. `resolver=true`
+  resolve o sudoku (MRV) e preenche numa leva só — uma chamada, sem imagem para o Claude.
 - **19/11 — Anúncios resolvidos no celular (1.0.41):** medição de uma rodada de Sudoku difícil: 2 min 24 s, sendo ~2 min
   de anúncios (83%), 21 s de leitura/solução do Claude e 3,5 s de execução. Agora: telas de anúncio (regex `ANUNCIO`)
   são fechadas pelo próprio celular (botão fechar/pular pelo nome ou pequeno no canto, nunca "instalar/peça agora";

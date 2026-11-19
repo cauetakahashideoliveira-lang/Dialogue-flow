@@ -2006,6 +2006,18 @@ for linha in sys.stdin:
         self.assertIn("leitor tocar 1180 260", self.registro.read_text())  # tocou o fechar, não o anúncio
         self.m.dump_ui = orig
 
+    def test_grade_teclado_e_sudoku(self):
+        reg = [14, 617, 1252, 1252]
+        els = [{"clicavel": True, "x": 90 + 137 * k, "y": 2362, "l": 128, "a": 190} for k in range(9)]
+        els += [{"clicavel": True, "x": 198 + 300 * k, "y": 2115, "l": 200, "a": 150} for k in range(4)]
+        tec = self.m.teclado_da_grade(els, reg, 9)
+        self.assertEqual([t[0] for t in tec], [90 + 137 * k for k in range(9)])
+        g = ["850700206", "201090080", "769000150", "670059800", "000000000",
+             "005360072", "027000948", "080040605", "406002017"]
+        sol = self.m.resolver_sudoku([[int(c) for c in ln] for ln in g])
+        self.assertEqual("".join(map(str, sol[0])), "854713296")
+        self.assertIsNone(self.m.resolver_sudoku([[5, 5] + [0] * 7] + [[0] * 9] * 8))  # leitura com repetido
+
     def test_leitor_recusa_app_bloqueado(self):
         foco = self.tmp / "foco.txt"
         foco.write_text("com.nu.production")

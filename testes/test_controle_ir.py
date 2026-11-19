@@ -1,6 +1,7 @@
 """Testes do controle-ir (rodar na raiz: python3 -m unittest discover -s testes -v)."""
 from __future__ import annotations
 
+import base64
 import json
 import os
 import random
@@ -14,6 +15,7 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest import mock
 
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "controle-ir"))
@@ -1313,6 +1315,82 @@ class TestTela(unittest.TestCase):
     def test_tela_embutida_e_ativa(self):
         s, _ = novo_servico(com_base=False)
         self.assertEqual({c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}.get("tela"), "ativa")
+
+
+class TestTelaPorArquivo(unittest.TestCase):
+    """O rish devolve a saída por arquivo na pasta de troca (o cano do rish cortava e misturava saídas no POCO).
+
+    Um rish falso roda o comando com sh, e screencap/uiautomator/input falsos ficam no PATH."""
+
+    def setUp(self):
+        import importlib.util
+        caminho = Path(__file__).resolve().parent.parent / "controle-ir" / "capacidades" / "tela" / "principal.py"
+        spec = importlib.util.spec_from_file_location("tela_por_arquivo", caminho)
+        self.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.m)
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        rish = self.tmp / "rish" / "rish"
+        rish.parent.mkdir()
+        rish.write_text('[ "$1" = "-c" ] && shift && exec sh -c "$1"\n')  # imita o rish: roda como "shell"
+        bin_ = self.tmp / "bin"
+        bin_.mkdir()
+        (bin_ / "uiautomator").write_text(f'cat > "$2" <<\'FIM\'\n{TestTela.XML}\nFIM\necho "UI hierchary dumped to: $2"\n')
+        (bin_ / "input").write_text('if [ -n "$BLOQUEAR_INPUT" ]; then echo "java.lang.SecurityException: Injecting '
+                                    'to another application requires INJECT_EVENTS permission" >&2; exit 1; fi\n'
+                                    'echo "input $*" >> "$REGISTRO_INPUT"\n')
+        for f in bin_.iterdir():
+            f.chmod(0o755)
+        self.m.RISH = str(rish)
+        self.m.COMPARTILHADA = str(self.tmp / "compartilhada")
+        self.m.TMP = str(self.tmp / "tela")
+        self.registro = self.tmp / "input.log"
+        self.env = mock.patch.dict(os.environ, {"PATH": f"{bin_}:{os.environ['PATH']}",
+                                                "REGISTRO_INPUT": str(self.registro)})
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
+    def _sobras(self):
+        return [p.name for p in Path(self.m.COMPARTILHADA).iterdir() if p.name != ".nomedia"]
+
+    def test_saida_erro_e_codigo_por_arquivo(self):
+        out, err, cod = self.m.rish("echo oi; echo ruim >&2; exit 3")
+        self.assertEqual((out, err, cod), ("oi\n", "ruim\n", 3))
+        grande = self.m.rish("head -c 300000 /dev/zero | tr '\\0' x")[0]
+        self.assertEqual(len(grande), 300000)  # sem corte
+        self.assertEqual(self._sobras(), [])  # nada fica na memória compartilhada
+        self.assertTrue((Path(self.m.COMPARTILHADA) / ".nomedia").exists())
+
+    def test_dump_ui_e_toque(self):
+        self.assertTrue(self.m.dump_ui().startswith("<?xml"))
+        r = self.m.agir({"acao": "tocar", "texto": "bluetooth"})
+        self.assertEqual(r["feito"], "toque em 220,450")
+        self.assertIn("input tap 220 450", self.registro.read_text())
+        with mock.patch.dict(os.environ, {"BLOQUEAR_INPUT": "1"}):
+            r = self.m.agir({"acao": "tecla", "tecla": "voltar"})
+        self.assertIn("Configurações de segurança", r["erro"])
+        self.assertEqual(self._sobras(), [])
+
+    def test_captura_por_arquivo(self):
+        if not shutil.which("ffmpeg"):
+            self.skipTest("ffmpeg ausente")
+        png = self.tmp / "origem.png"
+        subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=red:s=640x360", "-frames:v", "1",
+                        str(png)], check=True, capture_output=True)
+        screencap = self.tmp / "bin" / "screencap"
+        screencap.write_text(f'cp "{png}" "$2"\n')
+        screencap.chmod(0o755)
+        b64, largura = self.m.captura(320)
+        self.assertTrue(base64.b64decode(b64).startswith(b"\xff\xd8"))  # JPEG
+        self.assertEqual(largura, 320)
+        self.assertEqual(self._sobras(), [])
+        screencap.write_text("exit 0\n")  # sem imagem (ex.: app protegido): não quebra
+        self.assertEqual(self.m.captura(320), (None, None))
+
+    def test_shizuku_parado(self):
+        Path(self.m.RISH).write_text("echo 'Shizuku is not running' >&2; exit 1\n")
+        with self.assertRaises(self.m.SemShizuku):
+            self.m.rish("id")
 
 
 class TestTermometro(unittest.TestCase):

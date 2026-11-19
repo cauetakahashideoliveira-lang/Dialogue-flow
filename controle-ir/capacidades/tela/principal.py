@@ -2,6 +2,10 @@
 
 O rish roda comandos com o usuário "shell" do adb (uid 2000): screencap, uiautomator, input e monkey.
 Arquivos: ~/.controle-ir/rish/{rish, rish_shizuku.dex} (exportados pelo app Shizuku).
+
+A saída dos comandos volta por ARQUIVO numa pasta oculta da memória compartilhada (COMPARTILHADA), apagado logo
+após a leitura: no POCO (Shizuku 13, Android 16) o cano do rish cortava saídas grandes e misturava stdout e stderr
+(a captura PNG chegava com 28 KB de 317 KB e o `id` voltava vazio).
 """
 import base64
 import json
@@ -18,6 +22,8 @@ import xml.etree.ElementTree as ET
 BASE = os.environ.get("CONTROLE_IR_DIR") or os.path.expanduser("~/.controle-ir")
 RISH = os.path.join(BASE, "rish", "rish")
 TMP = os.path.join(BASE, "tela")
+# pasta de troca com o usuário shell: ele escreve aqui e o Termux (com acesso ao armazenamento) lê
+COMPARTILHADA = os.environ.get("CONTROLE_IR_COMPARTILHADA") or "/storage/emulated/0/Download/.controle-ir-tela"
 BLOQUEADOS_ARQ = os.path.join(BASE, "tela_bloqueados.json")
 # Apps em que a ferramenta não toca nem digita (bancos, pagamentos, senhas, autenticadores). Editável no arquivo acima.
 BLOQUEADOS_PADRAO = [
@@ -108,18 +114,71 @@ class SemShizuku(RuntimeError):
     pass
 
 
-def rish(cmd, timeout=20, binario=False):
+def _pasta_troca():
+    try:
+        os.makedirs(COMPARTILHADA, exist_ok=True)
+        nomedia = os.path.join(COMPARTILHADA, ".nomedia")  # fora da galeria
+        if not os.path.exists(nomedia):
+            open(nomedia, "w").close()
+    except OSError:
+        pass  # o mkdir do lado do shell ainda tenta
+    return COMPARTILHADA
+
+
+def _ler(caminho):
+    try:
+        with open(caminho, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def _apagar(*caminhos):
+    for c in caminhos:
+        try:
+            os.remove(c)
+        except OSError:
+            pass
+
+
+def rish(cmd, timeout=20):
+    """Roda `cmd` como usuário shell pelo Shizuku. Devolve (stdout, stderr, código), lidos de arquivos."""
     if not os.path.exists(RISH):
         raise SemShizuku("rish não instalado: exporte os arquivos no app Shizuku (Usar o Shizuku em aplicativos de "
                          "terminal → Exportar) e peça ao Claude para copiá-los")
     env = dict(os.environ, RISH_APPLICATION_ID="com.termux")
-    r = subprocess.run(["sh", RISH, "-c", cmd], capture_output=True, timeout=timeout, env=env,
-                       text=not binario)
-    erro = r.stderr if not binario else r.stderr.decode(errors="ignore")
-    if r.returncode != 0 and ("Shizuku" in erro or "not running" in erro.lower() or "permission" in erro.lower()):
+    pasta = _pasta_troca()
+    if not os.access(pasta, os.R_OK | os.W_OK):
+        raise SemShizuku(f"o Termux não acessa a pasta de troca {pasta}: rode termux-setup-storage e permita o "
+                         "acesso aos arquivos")
+    base = os.path.join(pasta, f"cmd-{os.getpid()}-{time.monotonic_ns()}")
+    saida, erros, codigo = base + ".out", base + ".err", base + ".rc"
+    remoto = (f"mkdir -p {shlex.quote(pasta)}; ( {cmd} ) > {shlex.quote(saida)} 2> {shlex.quote(erros)}; "
+              f"echo $? > {shlex.quote(codigo)}")
+    try:
+        r = subprocess.run(["sh", RISH, "-c", remoto], capture_output=True, timeout=timeout, env=env)
+        out, err, rc = _ler(saida), _ler(erros), _ler(codigo)
+    finally:
+        _apagar(saida, erros, codigo)
+    if rc is None:  # o comando nem chegou a rodar do lado do shell
+        detalhe = (r.stderr + r.stdout).decode(errors="ignore").strip()
         raise SemShizuku("o Shizuku não respondeu: abra o app Shizuku e toque em Iniciar (depois de reiniciar o "
-                         f"celular ele precisa ser iniciado de novo). Detalhe: {erro.strip()[:200]}")
-    return r.stdout, erro, r.returncode
+                         f"celular ele precisa ser iniciado de novo). Detalhe: {detalhe[:200] or 'sem saída'}")
+    try:
+        cod = int(rc.strip())
+    except ValueError:
+        cod = 1
+    return out or "", err or "", cod
+
+
+def _bloqueio_de_toque(err, cod):
+    """A Xiaomi bloqueia `input` sem a opção 'Depuração USB (Configurações de segurança)'."""
+    if "INJECT_EVENTS" in err or "SecurityException" in err:
+        return ("a Xiaomi bloqueou o toque: ligue 'Depuração USB (Configurações de segurança)' nas Opções do "
+                "desenvolvedor e toque em Iniciar de novo no Shizuku")
+    if cod != 0:
+        return f"o comando falhou (código {cod}): {err.strip()[:200]}"
+    return None
 
 
 def foco():
@@ -141,35 +200,43 @@ def bloqueados():
 
 
 def dump_ui():
+    arq = os.path.join(_pasta_troca(), f"ui-{os.getpid()}.xml")
     for _ in range(2):
-        out, _, _ = rish("uiautomator dump /data/local/tmp/cir_ui.xml >/dev/null 2>&1; cat /data/local/tmp/cir_ui.xml",
-                         timeout=25)
-        if out.strip().startswith("<?xml"):
-            return out
+        try:
+            rish(f"uiautomator dump {shlex.quote(arq)}", timeout=25)
+            xml = _ler(arq) or ""
+        finally:
+            _apagar(arq)
+        if xml.strip().startswith("<?xml"):
+            return xml
         time.sleep(0.8)
     return ""
 
 
 def captura(largura):
-    png, _, _ = rish("screencap -p", timeout=20, binario=True)
-    if not png.startswith(b"\x89PNG"):
-        return None, None
+    """screencap grava o PNG na pasta de troca; o ffmpeg reduz para JPEG (≤110 KB). Sem imagem: (None, None)."""
+    png = os.path.join(_pasta_troca(), f"tela-{os.getpid()}.png")
     os.makedirs(TMP, exist_ok=True)
-    origem, destino = os.path.join(TMP, "tela.png"), os.path.join(TMP, "tela.jpg")
-    with open(origem, "wb") as f:
-        f.write(png)
+    jpg = os.path.join(TMP, "tela.jpg")
     try:
+        rish(f"screencap -p {shlex.quote(png)}", timeout=20)
+        try:
+            with open(png, "rb") as f:
+                if not f.read(8).startswith(b"\x89PNG"):
+                    return None, None
+        except OSError:
+            return None, None
         for q in (6, 10, 16):
-            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", origem, "-vf", f"scale='min({largura},iw)':-2",
-                            "-q:v", str(q), destino], capture_output=True, timeout=30)
-            if os.path.exists(destino) and os.path.getsize(destino) <= 110_000:
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", png, "-vf", f"scale='min({largura},iw)':-2",
+                            "-q:v", str(q), jpg], capture_output=True, timeout=30)
+            if os.path.exists(jpg) and os.path.getsize(jpg) <= 110_000:
                 break
-        with open(destino, "rb") as f:
+        if not os.path.exists(jpg):
+            return None, None
+        with open(jpg, "rb") as f:
             return base64.b64encode(f.read()).decode(), largura
     finally:
-        for p in (origem, destino):
-            if os.path.exists(p):
-                os.remove(p)
+        _apagar(png, jpg)
 
 
 def ver(imagem=True, largura=720):
@@ -186,7 +253,8 @@ def ver(imagem=True, largura=720):
             out["_imagem"] = {"mime": "image/jpeg", "base64": b64}
             out["largura_imagem"] = w
         else:
-            out["imagem_erro"] = "screencap não devolveu imagem (app com proteção de tela mostra preto)"
+            out["imagem_erro"] = ("screencap não devolveu imagem (app com proteção de tela mostra preto, ou o "
+                                  "Termux sem acesso ao armazenamento: rode termux-setup-storage)")
     return out
 
 
@@ -205,24 +273,32 @@ def agir(a):
             x, y = alvo["x"], alvo["y"]
         if x is None or y is None:
             return {"erro": "informe x e y, ou texto"}
-        rish(f"input tap {int(x)} {int(y)}")
+        _, err, cod = rish(f"input tap {int(x)} {int(y)}")
+        if _bloqueio_de_toque(err, cod):
+            return {"erro": _bloqueio_de_toque(err, cod)}
         res = {"feito": f"toque em {int(x)},{int(y)}", "elemento": alvo}
     elif acao == "digitar":
         texto, aviso = escapar_input_text(a.get("texto", ""))
         if not texto:
             return {"erro": "nada para digitar"}
-        rish("input text " + shlex.quote(texto))
+        _, err, cod = rish("input text " + shlex.quote(texto))
+        if _bloqueio_de_toque(err, cod):
+            return {"erro": _bloqueio_de_toque(err, cod)}
         res = {"feito": f"digitado ({len(a.get('texto', ''))} caracteres)", "aviso": aviso}
     elif acao == "tecla":
         cod = TECLAS.get(normalizar(a.get("tecla")))
         if cod is None:
             return {"erro": f"tecla deve ser uma de: {', '.join(TECLAS)}"}
-        rish(f"input keyevent {cod}")
+        _, err, rc = rish(f"input keyevent {cod}")
+        if _bloqueio_de_toque(err, rc):
+            return {"erro": _bloqueio_de_toque(err, rc)}
         res = {"feito": f"tecla {a['tecla']}"}
     elif acao == "deslizar":
         if None in (a.get("x"), a.get("y"), a.get("x2"), a.get("y2")):
             return {"erro": "informe x, y, x2, y2"}
-        rish(f"input swipe {int(a['x'])} {int(a['y'])} {int(a['x2'])} {int(a['y2'])} 350")
+        _, err, cod = rish(f"input swipe {int(a['x'])} {int(a['y'])} {int(a['x2'])} {int(a['y2'])} 350")
+        if _bloqueio_de_toque(err, cod):
+            return {"erro": _bloqueio_de_toque(err, cod)}
         res = {"feito": "deslizou"}
     elif acao == "abrir":
         pac = a.get("pacote") or ""

@@ -479,6 +479,46 @@ def diferenca_curta(dif):
     return linhas
 
 
+# --------------------------------------------------------------------------- tabuleiro de xadrez (acessibilidade)
+_PECAS = {"rei": "k", "dama": "q", "torre": "r", "bispo": "b", "cavalo": "n", "peao": "p",
+          "king": "k", "queen": "q", "rook": "r", "bishop": "b", "knight": "n", "pawn": "p"}
+_CASA_PECA = re.compile(r"^(brancas|pretas|white|black) (\w+) (?:em|on) ([a-h][1-8])$")
+_CASA_VAZIA = re.compile(r"^([a-h][1-8]),? (?:vazio|vazia|empty)$")
+_RELOGIO = re.compile(r"^\d{1,2}:\d\d(\.\d)?$")
+
+
+def casas_xadrez(els):
+    """{casa: (x, y, peça)} dos apps que descrevem cada casa ("Brancas Cavalo em f3", "e4, vazio"); peça em FEN
+    (maiúscula = brancas, '' = vazia). None se não houver um tabuleiro inteiro na tela."""
+    casas = {}
+    for e in els:
+        d = normalizar(e.get("desc") or e.get("texto") or "")
+        m = _CASA_PECA.match(d)
+        if m and m.group(2) in _PECAS:
+            pc = _PECAS[m.group(2)]
+            casas[m.group(3)] = (e["x"], e["y"], pc.upper() if m.group(1) in ("brancas", "white") else pc)
+            continue
+        m = _CASA_VAZIA.match(d)
+        if m:
+            casas[m.group(1)] = (e["x"], e["y"], "")
+    return casas if len(casas) == 64 else None
+
+
+def tabuleiro_curto(els):
+    """O tabuleiro em 8 linhas (8ª fileira primeiro, FEN: KQRBNP brancas, kqrbnp pretas, . vazia), os relógios
+    (esquerda → direita, como aparecem) e os últimos lances escritos na tela. Sem tabuleiro: os textos da tela."""
+    casas = casas_xadrez(els)
+    if not casas:
+        return {"textos": [e["texto"] for e in els if e.get("texto")][:25]}
+    linhas = ["".join(casas[f"{c}{r}"][2] or "." for c in "abcdefgh") + f" {r}" for r in range(8, 0, -1)]
+    rel = sorted((e for e in els if _RELOGIO.match(e.get("texto") or "")), key=lambda e: (e["y"], e["x"]))
+    banda = [e for e in els if e.get("texto") and re.match(r"^(O-O(-O)?|[KQRBNkqrbn]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBNqrbn])?)[+#]?$",
+                                                         e["texto"])]
+    banda.sort(key=lambda e: e["x"])
+    return {"tabuleiro": linhas + ["abcdefgh"], "relogios": [e["texto"] for e in rel],
+            "ultimos": [e["texto"] for e in banda][-2:]}
+
+
 TECLADO = re.compile(r"SoftInputWindow|InputMethod", re.I)
 
 
@@ -1194,6 +1234,8 @@ def _ver_depois(a, padrao=None, tocados=()):
                 tela["recorte"] = reg
         return {"tela": tela, **({"calma_ms": esperou} if esperou is not None else {}),
                 **({"anuncio_fechado": fechado} if fechado else {})}
+    if a.get("ver_depois") == "tabuleiro":  # xadrez: 8 linhas + relógios, sem a lista de elementos
+        return {"app": foco(), **tabuleiro_curto(elementos(dump_ui(), limite=300))}
     modo = a.get("ver_depois") or ("imagem" if a.get("imagem") else padrao)
     esperou = None
     if modo != "nada" and a.get("calma", True) is not False:
@@ -1256,7 +1298,8 @@ def _linhas_do_passo(p):
         if not re.match(r"^[A-Za-z][\w.]{2,120}$", pac):
             raise ValueError("pacote inválido")
         return [f"monkey -p {pac} -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1 || exit 4", "sleep 1"]
-    if any(k in p for k in ("esperar_texto", "esperar_sumir", "se", "se_nao", "repetir", "calma", "esperar_mudanca")):
+    if any(k in p for k in ("esperar_texto", "esperar_sumir", "se", "se_nao", "repetir", "calma", "esperar_mudanca",
+                            "lance", "esperar_vez")):
         return None
     raise ValueError(f"passo desconhecido: {json.dumps(p, ensure_ascii=False)[:80]}")
 
@@ -1744,6 +1787,15 @@ class _Executor:
                 self.bloco += linhas
                 return
             self.descarregar()  # passo que depende da tela: roda o que acumulou e olha
+        if "lance" in p:  # xadrez: "e2e4" → toca a casa de origem e a de destino (lidas agora da tela)
+            lance = str(p["lance"]).strip().lower()
+            if not re.match(r"^[a-h][1-8][a-h][1-8]$", lance):
+                raise ValueError("lance no formato e2e4")
+            casas = casas_xadrez(elementos(dump_ui(), limite=300))
+            if not casas:
+                raise _Falha({"erro": f"{onde}: não há tabuleiro de xadrez na tela", "app": foco()})
+            a_, b_ = casas[lance[:2]], casas[lance[2:]]
+            p = {"tocar": [[a_[0], a_[1]], [b_[0], b_[1]]], "intervalo": float(p.get("intervalo", 0.06)), "confiar": True}
         if "tocar" in p:
             alvo = p["tocar"]
             if isinstance(alvo, str):
@@ -1831,6 +1883,22 @@ class _Executor:
                     raise _Falha({"erro": f"{onde}: “{texto}” {'não apareceu' if quer else 'não sumiu'} a tempo",
                                   "app": foco()})
                 time.sleep(0.08 if self.rapido else 0.4)
+            self.t_esperas += time.time() - t
+        elif "esperar_vez" in p:  # xadrez: espera o adversário mexer (o tabuleiro muda depois do meu lance assentar)
+            t = time.time()
+            fim = t + min(float(p["esperar_vez"]), 30)
+            time.sleep(0.2)
+
+            def foto():
+                c = casas_xadrez(elementos(dump_ui(), limite=300))
+                return "".join(c[k][2] or "." for k in sorted(c)) if c else None
+
+            base = foto()
+            while time.time() < fim:
+                agora = foto()
+                if agora != base:
+                    break
+                time.sleep(0.03)
             self.t_esperas += time.time() - t
         elif "esperar_mudanca" in p:
             self.esperar_mudanca(min(float(p["esperar_mudanca"]), 30), p.get("ignorar") or [])

@@ -2192,6 +2192,25 @@ for linha in sys.stdin:
         self.assertTrue({(0, 0), (0, 1)} <= self.m._conflitos(g))  # (e o outro D da coluna)
         self.assertIsNone(self.m.resolver_grade(g))
 
+    def test_tabuleiro_de_xadrez_compacto(self):
+        ini = {"a1": "Brancas Torre", "e1": "Brancas Rei", "e4": "Brancas Peão", "e8": "Pretas Rei", "f6": "Pretas Cavalo"}
+        els = []
+        for r in range(1, 9):
+            for f in "abcdefgh":
+                sq = f + str(r)
+                els.append({"desc": f"{ini[sq]} em {sq}" if sq in ini else f"{sq}, vazio",
+                            "x": 80 + 160 * "abcdefgh".index(f), "y": 967 + 160 * (8 - r)})
+        els += [{"texto": "0:58", "x": 205, "y": 2245}, {"texto": "0:41.2", "x": 1153, "y": 2245},
+                {"texto": "e4", "x": 100, "y": 2434}, {"texto": "Nf6", "x": 200, "y": 2434}]
+        t = self.m.tabuleiro_curto(els)
+        self.assertEqual(t["tabuleiro"][0], "....k... 8")
+        self.assertEqual(t["tabuleiro"][2], ".....n.. 6")
+        self.assertEqual(t["tabuleiro"][7], "R...K... 1")
+        self.assertEqual(t["relogios"], ["0:58", "0:41.2"])
+        self.assertEqual(t["ultimos"], ["e4", "Nf6"])
+        self.assertEqual(self.m.casas_xadrez(els)["e4"], (720, 1607, "P"))
+        self.assertIsNone(self.m.casas_xadrez(els[:10]))
+
     def test_teclado_em_paginas_e_regra_de_texto_curto(self):
         reg = [17, 617, 1244, 1243]
         pag2 = [{"clicavel": True, "x": x, "y": 2362, "l": 150, "a": 190} for x in (107, 285, 462, 640, 818, 996, 1173)]

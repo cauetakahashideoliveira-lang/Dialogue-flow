@@ -1,4 +1,4 @@
--- Painel da Casa (D1). Valores secretos nunca ficam em claro: tokens e códigos são guardados como SHA-256.
+-- Central de Controle (D1). Valores secretos nunca ficam em claro: tokens e códigos são guardados como SHA-256.
 CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS credenciais (
   id TEXT PRIMARY KEY, chave TEXT NOT NULL, contador INTEGER NOT NULL DEFAULT 0, transportes TEXT,

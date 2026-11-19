@@ -1,4 +1,4 @@
-// Painel da Casa — administração do controle-ir fora do agente (docs/seguranca.md, Etapa 1).
+// Central de Controle — administração do controle-ir fora do agente (docs/seguranca.md, Etapa 1).
 // Dono: passkeys (WebAuthn, SimpleWebAuthn). Celular: token de aparelho + estado ASSINADO (Ed25519) que ele confere
 // com a chave pública fixada no pareamento. Nada aqui é alcançável pelas ferramentas do conector.
 import {
@@ -195,7 +195,7 @@ async function registroOpcoes(env, req, corpo) {
   const { rpID } = rp(req);
   const existentes = await env.DB.prepare('SELECT id, transportes FROM credenciais WHERE revogada = 0').all();
   const opcoes = await generateRegistrationOptions({
-    rpName: 'Painel da Casa', rpID, userName: 'dono', userDisplayName: 'Dono',
+    rpName: 'Central de Controle', rpID, userName: 'dono', userDisplayName: 'Dono',
     userID: enc.encode('dono'), attestationType: 'none',
     authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
     excludeCredentials: existentes.results.map(c => ({ id: c.id, transports: c.transportes ? JSON.parse(c.transportes) : undefined })),
@@ -557,7 +557,7 @@ main{max-width:560px;margin:0 auto;padding:16px}section{background:var(--cartao)
 button{font:inherit;border:0;border-radius:10px;padding:14px;width:100%;margin:6px 0;background:var(--botao);color:#fff}
 button.sec{background:transparent;color:var(--texto);border:1px solid var(--linha)}.alerta{color:var(--alerta)}.perigo{color:var(--perigo)}
 .suave{color:var(--suave);font-size:.9rem}#msg{min-height:1.4em}</style></head><body><main>
-<h1>Painel da Casa</h1><section id="pedido" data-handle="${escapar(handle)}">
+<h1>Central de Controle</h1><section id="pedido" data-handle="${escapar(handle)}">
 <h2>Autorizar <strong>${escapar(d.clientName)}</strong> a usar o Controle master?</h2>
 <p>${verificado} O acesso vai para <strong>${escapar(d.redirectHost)}</strong>.</p>${local}
 <p class="suave">O que ele poderá fazer continua limitado pelo painel: desarmado, só infravermelho e consulta; armado (com a sua digital), o resto. Você revoga este acesso no painel quando quiser.</p>
@@ -574,10 +574,10 @@ const BAIXO_RISCO = new Set([...SEMPRE, 'procurar_perfis', 'opcoes', 'controlar'
   'enviar_sinal']);
 function bloqueioNaBorda(nome, e) {
   if (SEMPRE.has(nome)) return null;
-  if (e.travado) return 'EMERGÊNCIA ativa no Painel da Casa: só consultar, politica e travar respondem. Para voltar, arme pelo painel com a digital.';
+  if (e.travado) return 'EMERGÊNCIA ativa na Central de Controle: só consultar, politica e travar respondem. Para voltar, arme pelo painel com a digital.';
   if (e.armado_ate > agora()) return null;
   if (e.desarmado_permite === 'ir' && BAIXO_RISCO.has(nome)) return null;
-  return `o sistema está DESARMADO: “${nome}” precisa dele armado. Para usar, arme pelo Painel da Casa, com a digital.`;
+  return `o sistema está DESARMADO: “${nome}” precisa dele armado. Para usar, arme pela Central de Controle, com a digital.`;
 }
 const rpc = (id, result, status = 200) => json({ jsonrpc: '2.0', id: id ?? null, ...result }, status);
 

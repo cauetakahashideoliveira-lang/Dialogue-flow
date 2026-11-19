@@ -14,6 +14,6 @@ graphify-out/.graphify_partial.txt
 graphify-out/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
 # configurações pessoais do Claude Code (podem ter chaves de API em "env")
 .claude/settings.local.json
-# Painel da Casa: dependências e estado local do wrangler (o webauthn.js em public/ é versionado de propósito)
+# Central de Controle: dependências e estado local do wrangler (o webauthn.js em public/ é versionado de propósito)
 painel/node_modules/
 painel/.wrangler/

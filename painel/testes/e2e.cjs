@@ -1,4 +1,4 @@
-// Teste de ponta a ponta do Painel da Casa contra o Worker local (wrangler dev) e o código real do celular.
+// Teste de ponta a ponta da Central de Controle contra o Worker local (wrangler dev) e o código real do celular.
 // Uso: (em painel/) npm run dev em outro terminal com --var CODIGO_INICIAL:codigo-de-teste-123; depois
 //      node testes/e2e.cjs http://localhost:8787
 // A "digital" é o autenticador virtual do Chromium (CDP WebAuthn), com verificação do usuário.

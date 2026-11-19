@@ -323,14 +323,14 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
                     return self._json(401, {"erro": "segredo inválido"},
                                       {"WWW-Authenticate": 'Bearer realm="controle-ir"'})
                 ass = self.headers.get("X-Painel-Assinatura")
-                if ass is not None:  # repassada pelo Painel da Casa (OAuth na borda): só vale assinada por ele
+                if ass is not None:  # repassada pela Central de Controle (OAuth na borda): só vale assinada por ela
                     if not painel_mod.verificar_requisicao(servico.pasta, ass, getattr(self, "_bruto", b"")):
                         servico.exec.auditar({"evento": "assinatura_do_painel_recusada"})
                         return self._json(401, {"erro": "assinatura do painel inválida ou repetida"})
                 else:
                     if servico.exec.politica.efetiva().get("so_pelo_painel"):
                         servico.exec.auditar({"evento": "chamada_direta_recusada"})
-                        return self._json(403, {"erro": "este celular só aceita o Claude pelo Painel da Casa"})
+                        return self._json(403, {"erro": "este celular só aceita o Claude pela Central de Controle"})
                     if not origens.verificar(self.headers.get("X-Forwarded-For")):
                         return self._json(403, {"erro": "origem não permitida"})
                 servico.ultima_requisicao_claude = time.time()

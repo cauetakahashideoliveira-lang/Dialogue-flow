@@ -1,7 +1,7 @@
 # Estado atual da instalação (19/11/2026)
 
 ## Resumo (fim do dia 19/11)
-- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.27**, pareado com a
+- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.28**, pareado com a
   Central de Controle (só o painel arma, com a digital do POCO ou do iPad), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
   Controle IR").
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz. Catálogo: base + ampliado (Flipper-IRDB completa) = 9.380
@@ -42,7 +42,7 @@
 
 ## Histórico de 19/11 (mais recente primeiro)
 - **19/11 — 1.0.28:** o atalho “Armar Controle IR” da tela inicial, com o celular pareado, abre a Central de
-  Controle (quem arma é ela, com a digital). Shizuku parado nesta hora (rish: timeout) — religar no app.
+  Controle (quem arma é ela, com a digital). Instalada; Shizuku religado (rish responde uid 2000), modo autônomo.
 - **19/11 — Etapa 1b em uso:** conector **“Controle Geral”** no claude.ai entra pela Central de Controle
   (`https://painel-casa.cauetakahashideoliveira.workers.dev/mcp`, OAuth com a digital). “Só pelo painel” LIGADO
   (seq 3): o conector antigo “Controle master” (URL do ngrok) passou a receber 403 — conferido. Celular na 1.0.27.

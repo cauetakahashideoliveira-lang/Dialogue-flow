@@ -1198,5 +1198,29 @@ class TestOuvirBipe(unittest.TestCase):
         self.assertEqual(self.m.comparar(bipes, {"freq_hz": 2750}), [{"freq_hz": 2700}])
         self.assertEqual(self.m.comparar(bipes, None), [])
 
+
+class TestImagemNoMcp(unittest.TestCase):
+    """Capacidade que devolve _imagem vira conteúdo de imagem do MCP (o Claude enxerga), sem base64 no texto."""
+
+    def test_imagem_vira_conteudo_de_imagem(self):
+        from controle_ir.mcp import ServidorMCP
+        r = ServidorMCP._resultado({"capacidade": "foto", "status": "ok",
+                                    "resultado": {"bytes": 3, "_imagem": {"mime": "image/jpeg", "base64": "QUJD"}}},
+                                   False)
+        tipos = [c["type"] for c in r["content"]]
+        self.assertEqual(tipos, ["text", "image"])
+        self.assertEqual(r["content"][1], {"type": "image", "data": "QUJD", "mimeType": "image/jpeg"})
+        self.assertNotIn("QUJD", r["content"][0]["text"])
+        self.assertEqual(r["structuredContent"]["resultado"]["imagens_anexadas"], 1)
+
+    def test_sem_imagem_fica_igual(self):
+        from controle_ir.mcp import ServidorMCP
+        r = ServidorMCP._resultado({"ok": True}, False)
+        self.assertEqual([c["type"] for c in r["content"]], ["text"])
+
+    def test_foto_embutida_e_ativa(self):
+        s, _ = novo_servico(com_base=False)
+        self.assertEqual({c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}.get("foto"), "ativa")
+
 if __name__ == "__main__":
     unittest.main()

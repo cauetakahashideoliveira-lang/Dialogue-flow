@@ -48,6 +48,8 @@ Responda ao usuário em português.
 - Confirmação pelo som: controlar com ouvir=true grava pelo microfone durante o envio; o campo "ouvido" diz se
   houve bipe logo depois do envio. Sem referência salva, pergunte ao usuário se o aparelho apitou; se sim, salve
   com executar_capacidade(nome="ouvir_bipe", argumentos={acao:"analisar", aparelho, salvar_referencia:true}).
+- Confirmação pela imagem: executar_capacidade(nome="foto", argumentos={camera:"traseira"}) devolve a foto como
+  imagem (visor do ar, tela da TV). Descreva o que vê; a foto é apagada no celular depois.
 - No modo autônomo (politica.perfil=="autonomo"), tudo roda sem perguntar e as capacidades que você cria já entram
   ativas: aja direto (pesquise, crie a ferramenta, rode, observe, ajuste) sem pedir aprovação a cada passo. Só pare
   para confirmar o que é claramente arriscado e irreversível (apagar dados do usuário, enviar algo em nome dele,
@@ -375,6 +377,21 @@ class ServidorMCP:
 
     @staticmethod
     def _resultado(dados: dict, erro: bool) -> dict:
+        imagens = _extrair_imagens(dados)
         texto = json.dumps(dados, ensure_ascii=False, default=str)
-        return {"content": [{"type": "text", "text": texto}], "structuredContent": json.loads(texto),
+        return {"content": [{"type": "text", "text": texto}] + imagens, "structuredContent": json.loads(texto),
                 "isError": erro}
+
+
+def _extrair_imagens(dados) -> list[dict]:
+    """Uma capacidade pode devolver {"_imagem": {"base64", "mime"}} (ou "_imagens": [...]) no resultado: a imagem
+    sai como conteúdo de imagem do MCP, para o Claude enxergar, e o base64 some do texto."""
+    res = dados.get("resultado") if isinstance(dados, dict) else None
+    if not isinstance(res, dict):
+        return []
+    brutas = ([res.pop("_imagem")] if "_imagem" in res else []) + list(res.pop("_imagens", None) or [])
+    imagens = [{"type": "image", "data": i["base64"], "mimeType": i.get("mime") or "image/jpeg"}
+               for i in brutas if isinstance(i, dict) and i.get("base64")]
+    if imagens:
+        res["imagens_anexadas"] = len(imagens)
+    return imagens

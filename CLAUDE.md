@@ -32,8 +32,8 @@
   (`https://<painel>/mcp`, OAuth com a digital, bloqueio na borda). Conector em uso: **Controle Geral** (o antigo
   “Controle master”, pela URL do ngrok, é recusado desde que “só pelo painel” foi ligado). Mudança no painel = PR que o dono aprova (merge);
   teste local: `painel/testes/e2e.cjs` com `wrangler dev` sem as variáveis de proxy.
-- Pedidos de aprovação do conector vêm da regra da organização no claude.ai (`org_ask_ceiling`); não tente
-  contornar. Ferramentas novas do conector só aparecem em conversas novas (lista fixa por conversa).
+- Pedidos de aprovação do conector vêm das permissões dele no claude.ai (claude.ai/customize/connectors →
+  Controle Geral → “Sempre permitir”; a regra da organização `org_ask_ceiling` pode travar); não tente contornar. Ferramentas novas do conector só aparecem em conversas novas (lista fixa por conversa).
 - **`/god-mode`** (`.claude/skills/god-mode/`, adaptação AGPL do G0DM0D3): AutoTune, notas, STM, `perguntar` e
   `comparar` vários modelos (OpenRouter com `OPENROUTER_API_KEY` ou servidor local) com síntese pelo Claude. Sem
   os prompts de jailbreak nem o Parseltongue do original. Não confundir com `/godmode` (capacidade máxima).

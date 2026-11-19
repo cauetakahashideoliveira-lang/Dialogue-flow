@@ -41,6 +41,9 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Permissões do Controle Geral:** liberadas pelo dono em claude.ai/customize/connectors (o
+  `.claude/settings.json` também lista `mcp__Controle_Geral`). Sudoku aberto pelo Termux (`am start -n
+  easy.sudoku.puzzle.solver.free/com.meevii.ui.activity.SplashActivity`); Shizuku caindo — HyperOS derruba.
 - **19/11 — Central 1.0.29 + PR #10:** atividade do Claude (cada chamada), “Agora no celular” (terminal,
   capacidades, câmera/microfone por AppOps) e tela ao vivo no painel. E2E 47/47.
 - **19/11 — 1.0.28:** o atalho “Armar Controle IR” da tela inicial, com o celular pareado, abre a Central de

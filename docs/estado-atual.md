@@ -41,6 +41,8 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — 1.0.28:** o atalho “Armar Controle IR” da tela inicial, com o celular pareado, abre a Central de
+  Controle (quem arma é ela, com a digital). Shizuku parado nesta hora (rish: timeout) — religar no app.
 - **19/11 — Etapa 1b em uso:** conector **“Controle Geral”** no claude.ai entra pela Central de Controle
   (`https://painel-casa.cauetakahashideoliveira.workers.dev/mcp`, OAuth com a digital). “Só pelo painel” LIGADO
   (seq 3): o conector antigo “Controle master” (URL do ngrok) passou a receber 403 — conferido. Celular na 1.0.27.

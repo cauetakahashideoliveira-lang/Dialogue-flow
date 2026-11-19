@@ -328,6 +328,12 @@ def armar_cli(acao: str, horas: float | None = None) -> int:
         try:
             p = pol.armar(horas)
         except ValueError as e:
+            from . import painel
+            cfg = painel.ler(PASTA)
+            if cfg and cfg.get("url"):  # pareado: quem arma é a Central de Controle — o atalho abre ela
+                _termux("termux-open-url", cfg["url"])
+                _aviso("Abrindo a Central de Controle: arme lá, com a digital")
+                return 0
             _aviso(f"Controle IR: {e}")
             return 1
         (PASTA / "PARAR").unlink(missing_ok=True)

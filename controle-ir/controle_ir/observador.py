@@ -9,7 +9,6 @@ Só observa e relata ao painel (nada aqui pede aprovação nem muda a política)
 """
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import re
@@ -39,11 +38,9 @@ def recursos_do_comando(cmd: str) -> list[str]:
 def _tela():
     """A capacidade tela (rish por arquivo, screencap + ffmpeg), importada uma vez."""
     global _tela_mod
-    if _tela_mod is None:
-        spec = importlib.util.spec_from_file_location("cap_tela_observador", CAPS / "tela" / "principal.py")
-        m = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(m)
-        _tela_mod = m
+    if _tela_mod is None:  # o mesmo módulo das chamadas do Claude: um só leitor rápido aberto
+        from .capacidades import modulo_embutido
+        _tela_mod = modulo_embutido(CAPS / "tela", "tela")
     return _tela_mod
 
 

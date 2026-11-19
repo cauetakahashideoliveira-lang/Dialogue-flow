@@ -41,6 +41,70 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Grade lida no celular (1.0.42):** `acao=grade` lê um tabuleiro de algarismos desenhado (sem texto na
+  acessibilidade) no próprio leitor (Java `grade`): cada casa vira uma assinatura 16x16 comparada com os botões 1..N do
+  teclado do jogo (achados sozinhos abaixo da grade). Validado offline numa captura antiga: 81/81. `resolver=true`
+  resolve o sudoku (MRV) e preenche numa leva só — uma chamada, sem imagem para o Claude.
+- **19/11 — Anúncios resolvidos no celular (1.0.41):** medição de uma rodada de Sudoku difícil: 2 min 24 s, sendo ~2 min
+  de anúncios (83%), 21 s de leitura/solução do Claude e 3,5 s de execução. Agora: telas de anúncio (regex `ANUNCIO`)
+  são fechadas pelo próprio celular (botão fechar/pular pelo nome ou pequeno no canto, nunca "instalar/peça agora";
+  volta se abrir outro app; após 45 s, `am force-stop` + reabrir + Continuar). Trava de app inesperado entre passos,
+  erro já com a tela atual, e `esperar_mudanca` olha a tela a cada 0,7 s (vídeo não gera eventos). Incidente: um toque
+  por coordenada no cartão final de um anúncio abriu uma conversa do WhatsApp (nada enviado).
+- **19/11 — Toques direto no gerenciador de entrada (1.0.40):** com a 1.0.39 o Sudoku (51 casas, 102 toques) caiu
+  para 68 ms/toque, não ~30: a UiAutomation chama `syncInputTransactions(waitForAnimations=true)` antes/depois de
+  cada evento e o app anima a cada número. Agora a leva injeta por `InputManagerGlobal`/`InputManager.injectInputEvent`
+  (como o scrcpy; o shell tem INJECT_EVENTS), assíncrono, e só o último toque espera o app consumir; se o sistema
+  recusar, volta para a UiAutomation. No teste, um anúncio jogável sem botão de fechar travou o app: a linha do
+  tempo mostrou quando surgiu; foi fechado com `am force-stop` pelo Shizuku (sem tocar no anúncio).
+- **19/11 — Toques de leva assíncronos (1.0.39):** teste com a 1.0.38: Sudoku médio novo 39/39 sem erros, 78 toques
+  em 7,0 s (89 ms cada, porque cada evento esperava o app confirmar). Agora a leva entrega à fila de entrada sem
+  esperar (a ordem é mantida), com 12 ms de pressão; só o último toque espera a confirmação.
+- **19/11 — Quando tocar às cegas × olhar de novo (1.0.38):** coordenada só vale na janela em que o Claude a leu
+  (`_ULTIMA["janela"]`): se a janela mudou desde a última olhada, ou depois de voltar/abrir/rolar, o toque por
+  coordenada não sai e volta `interrompido` com a tela atual; toque por texto, esperar_texto, abrir, se/repetir
+  reancoram. Na mesma tela, levas seguem direto. `ver_depois="auto"` (padrão): só o que mudou + imagem apenas do
+  recorte visual sem texto (tabuleiro/jogo, `regioes_visuais`) quando a tela é nova ou a ação tocou nele.
+- **19/11 — Ciclo econômico (1.0.37):** medido de ponta a ponta: 4,3 s por volta, ~2 s são rede + o Claude
+  escrever/ler (piso que código não remove). Por isso: respostas curtas (elemento numa linha, mudanças como +/-/~,
+  ~metade dos tokens), `surgiu` com as janelas que apareceram desde a última olhada (anel de 32 no leitor) e
+  reflexos guardados no celular (`acao=reflexos`, `~/.controle-ir/tela_reflexos.json`): numa sequência, o que bate
+  com uma regra é resolvido em ms e a leva segue, sem gastar uma volta do Claude.
+- **19/11 — Reflexos na tela (1.0.36):** o leitor conta os eventos da acessibilidade (janelas novas e mudanças).
+  Numa leva de toques (`toquesv`), se surgir outra janela (aviso, anúncio, fim de jogo, outro app) ele para na hora e
+  a sequência volta com `interrompido` + o que está na tela; a mesma tela se reanunciando não para (nem o teclado).
+  `parar_em_janela=true` vigia também entre passos; `parar_se=[textos]` para quando um texto aparecer (lido só se algo
+  mudou); passo `esperar_mudanca` fica olhando até a tela mudar de verdade (`ignorar` relógios etc.). Medido na
+  1.0.35: esperar a tela assentar + olhar (só o que mudou) em 0,59 s no aparelho.
+- **19/11 — Ciclo rápido de ver-agir-decidir (1.0.35):** na sequência, toques, deslizes e teclas vão injetados pelo
+  leitor (`toques` num pedido só), não mais pelo `input` do shell (~0,18 s por toque). Depois de agir, espera a tela
+  assentar (`calma`, `waitForIdle` da acessibilidade) em vez de pausa fixa e responde só o que mudou desde a última
+  olhada (`ver_depois="mudancas"`, padrão). Condições e laços rodam no próprio celular (`se`/`se_nao` com
+  `entao`/`senao`, `repetir` com `vezes` e `ate_texto`/`ate_sumir`), sem ida e volta. Estado (app em foco e tela
+  acesa) direto do leitor, sem `dumpsys`. Elementos trazem marcado/selecionado/rolável/desativado. Sudoku médio
+  inteiro: 43 casas em ~8 s com o caminho antigo (antes desta versão).
+- **19/11 — 1.0.33/1.0.34 medidos no POCO:** leitura da tela 0,04 s (antes 2,6–10 s), `ver` só elementos 0,21 s,
+  shell 0,09 s (antes 0,32), foto 480 px 0,11 s e 720 px 0,15 s direto da acessibilidade (antes 1,37 s com
+  screencap+ffmpeg), `ver` completo 0,48 s (antes ~3 s). Central: /mcp com 1 consulta ao D1 (PR #11).
+- **19/11 — Leitor de tela rápido (1.0.32):** `capacidades/tela/java/controleir/Tela.java`, compilado no celular
+  (ecj + dx do Termux, na 1ª vez) e rodando pelo Shizuku (app_process): lê a acessibilidade direto (30–180 ms contra
+  2,5–8 s do `uiautomator dump`, que espera a tela parar), injeta toques/teclas e digita com acento; também roda os
+  comandos de shell sem reabrir o rish (~0,3 s a menos cada). A capacidade tela roda dentro do serviço (`em_processo`)
+  para o leitor ficar aberto; desconecta da acessibilidade após 60 s parado e encerra após 5 min. Sem ele, tudo segue
+  pelo caminho antigo.
+- **19/11 — Agente de tela mais rápido (1.0.30):** `acao=sequencia` com `passos` (vários toques, digitar,
+  teclas, esperas e `esperar_texto` numa chamada; os passos sem leitura de tela vão num só script ao Shizuku);
+  `ver` faz dump + captura + foco + tela acesa numa viagem; ações respondem só o app (ver_depois=elementos|imagem
+  quando precisar); `recorte=[x,y,l,a]`; elementos sem campos vazios. Pela conversa atual use
+  executar_capacidade(nome="tela", argumentos={...}) — o esquema novo do cap_tela só aparece em conversa nova.
+- **19/11 — Shizuku congelando em 2º plano (HyperOS):** rish dava timeout com o app do Shizuku em segundo
+  plano. Feito pelo rish, para moe.shizuku.privileged.api, com.termux e com.termux.api: `dumpsys deviceidle whitelist +pkg`,
+  `cmd appops set pkg RUN_IN_BACKGROUND|RUN_ANY_IN_BACKGROUND allow`, `am set-standby-bucket pkg active` (ficou 5 =
+  isento) e `cmd appops set pkg 10008 allow` (autostart do MIUI). Reverter: `whitelist -pkg` e `appops ... default`.
+  Também recomendado travar o Shizuku nos recentes (cadeado).
+- **19/11 — Permissões do Controle Geral:** liberadas pelo dono em claude.ai/customize/connectors (o
+  `.claude/settings.json` também lista `mcp__Controle_Geral`). Sudoku aberto pelo Termux (`am start -n
+  easy.sudoku.puzzle.solver.free/com.meevii.ui.activity.SplashActivity`); Shizuku caindo — HyperOS derruba.
 - **19/11 — Central 1.0.29 + PR #10:** atividade do Claude (cada chamada), “Agora no celular” (terminal,
   capacidades, câmera/microfone por AppOps) e tela ao vivo no painel. E2E 47/47.
 - **19/11 — 1.0.28:** o atalho “Armar Controle IR” da tela inicial, com o celular pareado, abre a Central de

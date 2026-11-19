@@ -783,6 +783,17 @@ class TestPainel(unittest.TestCase):
         self.assertEqual(post(corpo, {"X-Painel-Assinatura": self.assinar_req(corpo)}), 200)
 
 
+class TestImagensAninhadas(unittest.TestCase):
+    def test_imagem_dentro_de_sequencia_vira_anexo(self):
+        from controle_ir.mcp import _extrair_imagens
+        d = {"capacidade": "tela", "resultado": {"feito": "2 passos", "tela": {"app": "x",
+             "_imagem": {"mime": "image/jpeg", "base64": "QUJD"}}}}
+        imgs = _extrair_imagens(d)
+        self.assertEqual([i["data"] for i in imgs], ["QUJD"])
+        self.assertNotIn("_imagem", json.dumps(d))  # o base64 não vai no texto
+        self.assertEqual(d["resultado"]["tela"]["imagens_anexadas"], 1)
+
+
 class TestObservador(unittest.TestCase):
     """O que a Central mostra em "Agora no celular": tarefas, capacidades, câmera/microfone (AppOps)."""
 
@@ -1624,7 +1635,7 @@ class TestTelaPorArquivo(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         rish = self.tmp / "rish" / "rish"
         rish.parent.mkdir()
-        rish.write_text('[ "$1" = "-c" ] && shift && exec sh -c "$1"\n')  # imita o rish: roda como "shell"
+        rish.write_text('if [ "$1" = "-c" ]; then shift; exec sh -c "$1"; else exec sh; fi\n')  # imita o rish
         bin_ = self.tmp / "bin"
         bin_.mkdir()
         (bin_ / "uiautomator").write_text(f'cat > "$2" <<\'FIM\'\n{TestTela.XML}\nFIM\necho "UI hierchary dumped to: $2"\n')
@@ -1671,6 +1682,358 @@ class TestTelaPorArquivo(unittest.TestCase):
                 r = self.m.agir({"acao": "tecla", "tecla": "voltar"})
             self.assertIn("Configurações de segurança", r["erro"], modo)
         self.assertEqual(self._sobras(), [])
+
+    def _dumpsys_falso(self, foco="com.android.settings"):
+        d = self.tmp / "bin" / "dumpsys"
+        d.write_text('case "$1" in window) echo "  mCurrentFocus=Window{1a2b u0 ${FOCO:-%s}/.Principal}";; '
+                     'power) echo "  mWakefulness=Awake";; esac\n' % foco)
+        d.chmod(0o755)
+
+    def test_sequencia_numa_viagem(self):
+        self._dumpsys_falso()
+        chamadas = []
+        original = self.m.rish
+        self.m.rish = lambda cmd, timeout=20: (chamadas.append(cmd), original(cmd, timeout))[1]
+        r = self.m.agir({"acao": "sequencia", "passos": [
+            {"tocar": [10, 20]}, {"tocar": [[1, 2], [3, 4]], "intervalo": 0}, {"tecla": "voltar"},
+            {"digitar": "oi mundo"}, {"esperar": 0.01}, {"esperar_texto": "Bluetooth", "ate": 2},
+            {"tocar": "bluetooth"}, {"deslizar": [1, 2, 3, 4]}]})
+        self.assertIn("8 passos", r["feito"])
+        log = self.registro.read_text().splitlines()
+        self.assertEqual(log, ["input tap 10 20", "input tap 1 2", "input tap 3 4", "input keyevent 4",
+                               "input text oi%smundo", "input tap 220 450", "input swipe 1 2 3 4 300"])
+        toques = [c for c in chamadas if "input " in c]
+        self.assertEqual(len(toques), 2)  # 5 passos de uma vez; o toque por texto precisou ler a tela antes
+        self.assertEqual(r["app"], "com.android.settings")
+        self.assertEqual(self._sobras(), [])
+
+    def test_sequencia_recusa_app_bloqueado_e_texto_ausente(self):
+        self._dumpsys_falso("com.nu.production")
+        r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [10, 20]}]})
+        self.assertIn("bloqueados", r["erro"])
+        self.assertNotIn("toque", self.registro.read_text() if self.registro.exists() else "")  # nenhum toque saiu
+        self._dumpsys_falso()
+        r = self.m.agir({"acao": "sequencia", "passos": [{"esperar_texto": "Inexistente", "ate": 0.5}]})
+        self.assertIn("não apareceu", r["erro"])
+        self.assertIn("passo", self.m.agir({"acao": "sequencia", "passos": [{"pular": 1}]})["erro"])
+
+    def test_ver_em_uma_chamada_e_compacto(self):
+        self._dumpsys_falso()
+        if shutil.which("ffmpeg"):
+            png = self.tmp / "origem.png"
+            subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=blue:s=400x800", "-frames:v", "1",
+                            str(png)], check=True, capture_output=True)
+            sc = self.tmp / "bin" / "screencap"
+            sc.write_text(f'cp "{png}" "$2"\n')
+            sc.chmod(0o755)
+        chamadas = []
+        original = self.m.rish
+        self.m.rish = lambda cmd, timeout=20: (chamadas.append(cmd), original(cmd, timeout))[1]
+        r = self.m.ver(imagem=bool(shutil.which("ffmpeg")), largura=320, recorte=[0, 0, 200, 200], formato="json")
+        self.assertEqual(len(chamadas), 1)  # dump, captura, foco e tela acesa numa viagem só
+        self.assertEqual((r["app"], r["tela_acesa"]), ("com.android.settings", True))
+        bt = [e for e in r["elementos"] if e.get("texto") == "Bluetooth"][0]
+        self.assertNotIn("classe", bt)
+        self.assertNotIn("desc", bt)  # vazio não vai na resposta
+        if shutil.which("ffmpeg"):
+            self.assertEqual(r["resolucao"], "400x800")
+            self.assertTrue(base64.b64decode(r["_imagem"]["base64"]).startswith(b"\xff\xd8"))
+        self.assertEqual(self._sobras(), [])
+        r2 = self.m.agir({"acao": "tecla", "tecla": "voltar"})  # sem ver_depois: resposta curta
+        self.assertEqual(set(r2), {"feito", "app"})
+
+    def _leitor_falso(self, quebrado=False):
+        """app_process falso: fala o protocolo do Tela.java (linhas na entrada, respostas em PASTA/ID.r)."""
+        ap = self.tmp / "bin" / "app_process"
+        ap.write_text(f"""#!{sys.executable}
+import os, subprocess, sys
+import time
+pasta, token = sys.argv[3], sys.argv[4]
+if {quebrado!r}:
+    sys.exit(1)
+open(os.path.join(pasta, "pronto-" + token), "w").close()
+xml = {TestTela.XML!r}
+reg = os.environ["REGISTRO_INPUT"]
+cont = 0
+for linha in sys.stdin:
+    p = linha.split()
+    if not p:
+        continue
+    ident, cmd = p[0], p[1]
+    if cmd == "dump":
+        r = xml
+    elif cmd in ("foco", "estado"):
+        arq = os.environ.get("FOCO_ARQ", "")
+        r = open(arq).read().strip() if arq and os.path.exists(arq) else "com.android.settings"
+        if cmd == "estado":
+            r += "\\n1"
+    elif cmd == "calma":
+        open(reg, "a").write("leitor " + " ".join(p[1:]) + "\\n")
+        r = "ok 3"
+    elif cmd == "eventos":
+        cont += 1
+        jan = os.path.join(os.path.dirname(reg), "janela.txt")
+        chave = open(jan).read().strip() if os.path.exists(jan) else "com.android.settings|com.android.settings.Principal|"
+        r = f"0 {{cont}} {{int(time.monotonic() * 1000)}} " + chave
+    elif cmd == "historico":
+        h = os.path.join(os.path.dirname(reg), "historico.txt")
+        r = f"{{int(time.monotonic() * 1000) - 1500}} " + open(h).read().strip() if os.path.exists(h) else ""
+    elif cmd == "toquesv":
+        open(reg, "a").write("leitor " + " ".join(p[1:]) + "\\n")
+        parar = os.path.join(os.path.dirname(reg), "parar.txt")
+        r = "ok"
+        if os.path.exists(parar):
+            r = "parou 1 " + open(parar).read().strip()
+            os.remove(parar)
+    elif cmd == "aguardar":
+        r = str(int(p[2]) + 1)
+    elif cmd == "shell":
+        pr = subprocess.run(["sh", "-c", bytes.fromhex(p[2]).decode()], capture_output=True, text=True)
+        r = f"{{pr.returncode}} {{len(pr.stdout)}}\\n" + pr.stdout + pr.stderr
+    elif cmd == "texto":
+        open(reg, "a").write("leitor texto " + bytes.fromhex(p[2]).decode() + "\\n")
+        r = "ok"
+    else:
+        open(reg, "a").write("leitor " + " ".join(p[1:]) + "\\n")
+        r = "ok"
+    tmp = os.path.join(pasta, ident + ".tmp")
+    open(tmp, "w").write(r)
+    os.replace(tmp, os.path.join(pasta, ident + ".r"))
+    if cmd == "sair":
+        break
+""")
+        ap.chmod(0o755)
+        jar = self.tmp / "falso.jar"
+        jar.write_bytes(b"jar")
+        self.m._jar = lambda: str(jar)
+        self.m.EM_PROCESSO = True
+        self.m.AJUDANTE = self.m.Ajudante()
+        self.addCleanup(self.m.AJUDANTE._matar)
+
+    def test_leitor_rapido_aberto_entre_chamadas(self):
+        self._leitor_falso()
+        aberturas = []
+        popen = subprocess.Popen
+        with mock.patch.object(self.m.subprocess, "Popen", side_effect=lambda *a, **k: (aberturas.append(a), popen(*a, **k))[1]):
+            self.assertTrue(self.m.dump_ui().startswith("<?xml"))
+            self.assertEqual(self.m.foco(), "com.android.settings")
+            self.assertEqual(self.m.rish("echo oi; echo ruim >&2; exit 2"), ("oi\n", "ruim\n", 2))
+            r = self.m.agir({"acao": "tocar", "texto": "bluetooth"})
+            self.assertEqual(r["feito"], "toque em 220,450")
+            self.m.agir({"acao": "digitar", "texto": "olá, mundo"})
+            rs = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [5, 6]}, {"digitar": "ação"}, {"tecla": "voltar"}]})
+            self.assertIn("3 passos", rs.get("feito", ""), rs)
+        self.assertEqual(len(aberturas), 1)  # um só processo do leitor para tudo
+        log = self.registro.read_text()
+        self.assertIn("leitor tocar 220 450", log)  # toque injetado, sem o input do shell
+        self.assertIn("leitor texto olá, mundo", log)  # com acento
+        self.assertIn("leitor texto ação", log)
+        self.assertIn("leitor toques 50 5 6", log)  # na sequência, os toques também vão injetados
+        self.assertIn("leitor tecla 4", log)
+        self.assertNotIn("input ", log)  # nada pelo `input` do shell
+        self.assertIn("calma", log)  # depois de agir, espera a tela assentar antes de olhar
+        self.assertEqual([p for p in self._sobras() if not p.startswith("pronto")], [])
+
+    def test_ver_depois_diz_so_o_que_mudou(self):
+        self._leitor_falso()
+        r1 = self.m.agir({"acao": "tecla", "tecla": "voltar"})  # primeira olhada: lista inteira
+        self.assertIn("elementos", r1["tela"])
+        self.assertEqual(r1["tela"]["app"], "com.android.settings")
+        self.assertIs(r1["tela"]["tela_acesa"], True)  # pelo leitor, sem dumpsys
+        r2 = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [5, 6]}]})
+        self.assertEqual(r2["tela"]["mudancas"], "nenhuma")
+        self.assertIn("acoes", r2["tempos"])
+
+    def test_diferenca_entre_telas(self):
+        a = [{"id": "placar", "texto": "0", "x": 1, "y": 1}, {"texto": "Sair", "x": 5, "y": 5},
+             {"id": "ok", "x": 9, "y": 9, "clicavel": True}]
+        d = [{"id": "placar", "texto": "10", "x": 1, "y": 1}, {"id": "ok", "x": 9, "y": 9, "clicavel": True},
+             {"texto": "Venceu!", "x": 3, "y": 3}]
+        dif = self.m.diferenca(a, d, "app", "app")
+        self.assertEqual(dif["entrou"], [{"texto": "Venceu!", "x": 3, "y": 3}])
+        self.assertEqual(dif["saiu"], [{"texto": "Sair", "x": 5, "y": 5}])
+        self.assertEqual(dif["mudou"], [{"id": "placar", "texto": "10", "x": 1, "y": 1, "antes": {"texto": "0"}}])
+        self.assertIsNone(self.m.diferenca(a, d, "app", "outro"))  # outro app: lista inteira
+        self.assertIsNone(self.m.diferenca(None, d))  # primeira olhada
+        muitos = [{"texto": str(k), "x": k, "y": k} for k in range(40)]
+        self.assertIsNone(self.m.diferenca(a, muitos, "app", "app"))  # tela nova de fato
+
+    def test_condicoes_e_lacos_no_celular(self):
+        self._leitor_falso()
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [
+            {"se": "Bluetooth", "entao": [{"tocar": [1, 1]}], "senao": [{"tocar": [2, 2]}]},
+            {"se_nao": "Bluetooth", "entao": [{"tocar": [3, 3]}]},
+            {"repetir": [{"tocar": [4, 4], "intervalo": 0}], "vezes": 5, "ate_texto": "Bluetooth"},
+            {"tocar": [[7, 8]], "segurar": 600}, {"calma": 0.5}]})
+        self.assertIn("7 passos", r["feito"], r)  # 5 da lista + 2 dos ramos e do laço
+        log = self.registro.read_text()
+        self.assertIn("leitor toques 50 1 1", log)
+        self.assertNotIn(" 2 2", log)
+        self.assertNotIn(" 3 3", log)
+        self.assertEqual(log.count("leitor toques 0 4 4"), 1)  # o texto já estava lá: uma volta só
+        self.assertIn("leitor tocar 7 8 600", log)
+        self.assertIn("leitor calma 120 500", log)
+        r = self.m.agir({"acao": "sequencia", "passos": [
+            {"repetir": [{"tocar": [4, 4]}], "vezes": 3, "ate_sumir": "Bluetooth"}]})
+        self.assertIn("repetiu 3 vezes", r["erro"])
+        r = self.m.agir({"acao": "sequencia", "passos": [{"repetir": [{"repetir": [{"repetir": [{"repetir": [
+            {"repetir": [{"tocar": [1, 1]}]}]}]}]}]}]})
+        self.assertIn("aninhados", r["erro"])
+
+    def test_reflexo_para_quando_surge_outra_janela(self):
+        self._leitor_falso()
+        (self.tmp / "parar.txt").write_text("com.outro|com.outro.PopupActivity|Aviso")
+        r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}, {"tocar": [9, 9]}]})
+        self.assertIn("janela nova", r["interrompido"])
+        self.assertIn("PopupActivity", r["interrompido"])
+        self.assertIn("depois de 1 de 3 toques", r["interrompido"])
+        self.assertNotIn(" 9 9", self.registro.read_text())  # o passo seguinte não saiu
+        self.assertIn("tela", r)  # e já vem o que está na tela para decidir de novo
+
+    def test_reflexo_segue_se_e_a_mesma_tela(self):
+        self._leitor_falso()
+        (self.tmp / "parar.txt").write_text("com.android.settings|com.android.settings.Principal|")
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}]})
+        self.assertNotIn("interrompido", r)
+        log = self.registro.read_text()
+        self.assertIn("leitor toquesv 50 1 1 2 2 3 3", log)
+        self.assertIn("leitor toquesv 50 2 2 3 3", log)  # retomou de onde parou
+
+    def test_reflexo_por_texto_e_espera_de_mudanca(self):
+        self._leitor_falso()
+        r = self.m.agir({"acao": "sequencia", "parar_se": ["bluetooth"], "ver_depois": "nada",
+                         "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}]})
+        self.assertIn("Bluetooth", r["interrompido"])
+        self.assertIn("220,450", r["elemento"])
+        self.assertNotIn(" 3 3", self.registro.read_text())  # parou depois do 1º pedaço de 2 toques
+        t = time.time()
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [{"esperar_mudanca": 0.3}]})
+        self.assertGreaterEqual(time.time() - t, 0.25)  # nada mudou: esperou o prazo e seguiu
+        self.assertIn("1 passos", r["feito"])
+        self.assertTrue(self.m.janela_nova("a|A|", "b|B|"))
+        self.assertFalse(self.m.janela_nova("a|A|", "a|A|outro"))
+        self.assertFalse(self.m.janela_nova("a|A|", "teclado|android.inputmethodservice.SoftInputWindow|"))
+
+    def test_formato_curto(self):
+        e = {"texto": "Sincronizar", "id": "syncTv", "x": 640, "y": 2375, "clicavel": True, "marcado": False}
+        self.assertEqual(self.m.curto(e), '"Sincronizar" #syncTv 640,2375 cm')
+        self.assertEqual(self.m.curto({"desc": "Voltar", "x": 1, "y": 2}), "(Voltar) 1,2")
+        dif = {"entrou": [{"texto": "Venceu!", "x": 3, "y": 3}], "saiu": [{"texto": "Sair", "x": 5, "y": 5}],
+               "mudou": [{"id": "placar", "texto": "10", "x": 1, "y": 1, "antes": {"texto": "0"}}]}
+        self.assertEqual(self.m.diferenca_curta(dif), ['+ "Venceu!" 3,3', '- "Sair" 5,5', '~ "10" #placar 1,1 (era "0")'])
+
+    def test_linha_do_tempo_e_reflexos(self):
+        self._leitor_falso()
+        self.m.REFLEXOS_ARQ = str(self.tmp / "reflexos.json")
+        self.m.ver(imagem=False)  # primeira olhada marca a hora
+        (self.tmp / "historico.txt").write_text("com.x|com.x.Popup|Oi")
+        r = self.m.ver(imagem=False, so_mudancas=True)
+        self.assertEqual(r["surgiu"], ["-1.5s com.x Popup «Oi»"])  # o que surgiu enquanto o Claude pensava
+        self.assertIn("erro", self.m.reflexos([{"se": "x"}]))  # sem ação
+        self.assertIn("erro", self.m.reflexos([{"se": "x", "tecla": "pular"}]))
+        self.m.reflexos([{"janela": "PopupActivity", "tecla": "voltar"}])
+        self.assertEqual(self.m.executar({"acao": "reflexos"})["regras"][0]["janela"], "PopupActivity")
+        (self.tmp / "parar.txt").write_text("com.outro|com.outro.PopupActivity|Aviso")
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}]})
+        self.assertNotIn("interrompido", r)  # o reflexo resolveu sem parar
+        self.assertEqual(r["reflexos"], ["PopupActivity"])
+        log = self.registro.read_text()
+        self.assertIn("leitor tecla 4", log)
+        self.assertIn("leitor toquesv 50 2 2 3 3", log)  # e seguiu com os toques que faltavam
+
+    def test_coordenada_so_vale_na_tela_em_que_foi_lida(self):
+        self._leitor_falso()
+        self.m.ver(imagem=False)  # o Claude olhou: a referência é a janela de agora
+        (self.tmp / "janela.txt").write_text("com.android.settings|com.android.settings.Aviso|Sair?")
+        r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [[1, 1], [2, 2]]}]})
+        self.assertIn("a tela mudou", r["interrompido"])  # surgiu outra janela desde a olhada: não toca às cegas
+        self.assertFalse(self.registro.exists() and " 1 1" in self.registro.read_text())
+        # a resposta interrompida já mostrou a tela nova: agora ela é a referência. Se mudar de novo, não toca
+        (self.tmp / "janela.txt").write_text("com.android.settings|com.android.settings.Outra|")
+        r = self.m.agir({"acao": "tocar", "x": 5, "y": 5})  # ação única: mesma regra
+        self.assertIn("interrompido", r)
+        self.assertNotIn("tocar 5 5", self.registro.read_text() if self.registro.exists() else "")
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada",
+                         "passos": [{"tocar": "bluetooth"}, {"tocar": [[1, 1], [2, 2]]}]})
+        self.assertNotIn("interrompido", r)  # tocou por texto (leu a tela): reancorou e as coordenadas valem
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [
+            {"deslizar": [1, 900, 1, 300]}, {"deslizar": [1, 900, 1, 300]}, {"tocar": [7, 7]}]})
+        self.assertIn("rolou", r["interrompido"])  # rolar de novo pode; tocar onde estava antes, não
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada",
+                         "passos": [{"deslizar": [1, 900, 1, 300]}, {"tocar": [7, 7], "confiar": True}]})
+        self.assertNotIn("interrompido", r)
+
+    def test_imagem_so_da_area_visual(self):
+        xml = ('<?xml version="1.0"?><hierarchy><node bounds="[0,0][1000,2000]" text="" content-desc="">'
+               '<node bounds="[0,200][1000,1200]" text="" content-desc="" class="BoardView"/>'
+               '<node bounds="[0,1300][500,1400]" text="Desfazer" content-desc=""/></node></hierarchy>')
+        self.assertEqual(self.m.regioes_visuais(xml), [[0, 200, 1000, 1000]])
+        self.assertEqual(self.m.regioes_visuais(TestTela.XML), [])  # tela só de texto: nada de imagem
+        self.assertTrue(self.m.dentro([500, 700], [0, 200, 1000, 1000]))
+        self._leitor_falso()
+        self.m.ver(imagem=False)
+        self.m._ULTIMA["regioes"] = [[0, 200, 1000, 1000]]
+        self.m.dump_ui = lambda: xml
+        self.m.agir({"acao": "sequencia", "passos": [{"tocar": [500, 700]}]})
+        self.assertIn("leitor foto 480 110000", self.registro.read_text())  # pediu o recorte do tabuleiro
+        self.assertIn(" 0 200 1000 1000", self.registro.read_text())
+
+    def test_botao_de_fechar_anuncio(self):
+        els = [{"texto": "", "desc": "Peça agora", "x": 640, "y": 1973, "l": 900, "a": 150, "clicavel": True},
+               {"texto": "5s", "desc": "", "x": 1165, "y": 275, "l": 90, "a": 90, "desativado": True},
+               {"texto": "", "desc": "", "x": 640, "y": 1462, "l": 1280, "a": 2772, "clicavel": True}]
+        self.assertIsNone(self.m.botao_fechar(els))  # contagem ainda correndo e o resto é o próprio anúncio
+        els.append({"texto": "", "desc": "Anúncio fechado", "x": 1182, "y": 262, "l": 80, "a": 80, "clicavel": True})
+        self.assertEqual(self.m.botao_fechar(els)["x"], 1182)
+        self.assertEqual(self.m.botao_fechar([{"texto": "Instalar e fechar", "desc": "", "x": 1, "y": 1}]), None)
+        self.assertTrue(self.m.ANUNCIO.search("com.applovin.adview.AppLovinFullscreenActivity"))
+        self.assertTrue(self.m.ANUNCIO.search("com.bytedance.sdk.openadsdk.activity.TTFullScreenExpressVideoActivity"))
+        self.assertFalse(self.m.ANUNCIO.search("easy.sudoku.MainActivity"))
+
+    def test_anuncio_e_fechado_no_celular(self):
+        self._leitor_falso()
+        jan = self.tmp / "janela.txt"
+        jan.write_text("app|com.applovin.adview.AppLovinFullscreenActivity|")
+        xml = ('<?xml version="1.0"?><hierarchy><node bounds="[0,0][1280,2772]" text="" content-desc="" '
+               'clickable="true"><node bounds="[1140,220][1220,300]" text="" content-desc="Fechar" clickable="true"/>'
+               '</node></hierarchy>')
+        orig = self.m.dump_ui
+        self.m.dump_ui = lambda: xml
+        self.m._injetar = lambda c: (jan.write_text("com.android.settings|com.android.settings.Principal|"),
+                                     open(self.registro, "a").write("leitor " + c + "\n"))[0] is None
+        r = self.m.fechar_anuncio("com.android.settings", limite=3)
+        self.assertEqual(r["anuncio"], "fechado")
+        self.assertIn("leitor tocar 1180 260", self.registro.read_text())  # tocou o fechar, não o anúncio
+        self.m.dump_ui = orig
+
+    def test_grade_teclado_e_sudoku(self):
+        reg = [14, 617, 1252, 1252]
+        els = [{"clicavel": True, "x": 90 + 137 * k, "y": 2362, "l": 128, "a": 190} for k in range(9)]
+        els += [{"clicavel": True, "x": 198 + 300 * k, "y": 2115, "l": 200, "a": 150} for k in range(4)]
+        tec = self.m.teclado_da_grade(els, reg, 9)
+        self.assertEqual([t[0] for t in tec], [90 + 137 * k for k in range(9)])
+        g = ["850700206", "201090080", "769000150", "670059800", "000000000",
+             "005360072", "027000948", "080040605", "406002017"]
+        sol = self.m.resolver_sudoku([[int(c) for c in ln] for ln in g])
+        self.assertEqual("".join(map(str, sol[0])), "854713296")
+        self.assertIsNone(self.m.resolver_sudoku([[5, 5] + [0] * 7] + [[0] * 9] * 8))  # leitura com repetido
+
+    def test_leitor_recusa_app_bloqueado(self):
+        foco = self.tmp / "foco.txt"
+        foco.write_text("com.nu.production")
+        with mock.patch.dict(os.environ, {"FOCO_ARQ": str(foco)}):
+            self._leitor_falso()
+            r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [10, 20]}]})
+        self.assertIn("bloqueados", r["erro"])
+        self.assertNotIn("toque", self.registro.read_text() if self.registro.exists() else "")  # nenhum toque saiu
+
+    def test_leitor_que_nao_sobe_cai_no_caminho_antigo(self):
+        self._leitor_falso(quebrado=True)
+        self.assertTrue(self.m.dump_ui().startswith("<?xml"))  # uiautomator falso do caminho antigo
+        r = self.m.agir({"acao": "tocar", "texto": "bluetooth"})
+        self.assertEqual(r["feito"], "toque em 220,450")
+        self.assertIn("input tap 220 450", self.registro.read_text())
+        self.assertGreater(self.m.AJUDANTE.falhou_em, 0)  # não tenta de novo a toda hora
 
     def test_captura_por_arquivo(self):
         if not shutil.which("ffmpeg"):

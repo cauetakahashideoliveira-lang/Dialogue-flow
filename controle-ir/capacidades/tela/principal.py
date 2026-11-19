@@ -8,6 +8,7 @@ após a leitura: no POCO (Shizuku 13, Android 16) o cano do rish cortava saídas
 (a captura PNG chegava com 28 KB de 317 KB e o `id` voltava vazio).
 """
 import base64
+import hashlib
 import json
 import os
 import re
@@ -15,6 +16,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import unicodedata
 import xml.etree.ElementTree as ET
@@ -38,6 +40,9 @@ BLOQUEADOS_PADRAO = [
     "com.azure.authenticator", "com.google.android.apps.authenticator2", "com.authy", "br.gov.meugovbr",
 ]
 TECLAS = {"voltar": 4, "inicio": 3, "recentes": 187, "enter": 66, "apagar": 67}
+JAVA_FONTE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "java", "controleir", "Tela.java")
+# True quando o módulo roda dentro do serviço do controle-ir: aí o leitor rápido (Java) fica aberto entre as chamadas
+EM_PROCESSO = False
 
 
 # --------------------------------------------------------------------------- funções puras (testadas)
@@ -63,15 +68,48 @@ def elementos(xml_texto, limite=120):
         texto, desc = a.get("text", ""), a.get("content-desc", "")
         clicavel = a.get("clickable") == "true" or a.get("long-clickable") == "true"
         editavel = a.get("class", "").endswith("EditText")
+        rolavel, marcavel = a.get("scrollable") == "true", a.get("checkable") == "true"
         b = ler_bounds(a.get("bounds"))
-        if not b or b[2] <= b[0] or b[3] <= b[1] or not (texto or desc or clicavel or editavel):
+        if not b or b[2] <= b[0] or b[3] <= b[1] or not (texto or desc or clicavel or editavel or rolavel or marcavel):
             continue
         out.append({"texto": texto[:80], "desc": desc[:80], "id": a.get("resource-id", "").split("/")[-1],
                     "classe": a.get("class", "").split(".")[-1], "clicavel": clicavel, "editavel": editavel,
-                    "x": (b[0] + b[2]) // 2, "y": (b[1] + b[3]) // 2, "pacote": a.get("package", "")})
+                    "x": (b[0] + b[2]) // 2, "y": (b[1] + b[3]) // 2, "pacote": a.get("package", ""),
+                    "l": b[2] - b[0], "a": b[3] - b[1],
+                    "marcado": a.get("checked") == "true" if marcavel else None,
+                    "selecionado": a.get("selected") == "true", "rolavel": rolavel,
+                    "focado": a.get("focused") == "true", "desativado": a.get("enabled") == "false"})
         if len(out) >= limite:
             break
     return out
+
+
+def regioes_visuais(xml_texto, fracao=0.15):
+    """Áreas que a acessibilidade não descreve (folha sem texto ocupando ≥ `fracao` da tela: tabuleiro, jogo,
+    mapa, vídeo). Ali só a imagem mostra o conteúdo. Devolve [[x, y, l, a], ...], a maior primeiro."""
+    try:
+        raiz = ET.fromstring(xml_texto)
+    except ET.ParseError:
+        return []
+    caixas, folhas = [], []
+    for n in raiz.iter("node"):
+        b = ler_bounds(n.attrib.get("bounds"))
+        if not b or b[2] <= b[0] or b[3] <= b[1]:
+            continue
+        caixas.append(b)
+        if n.find("node") is None and not (n.attrib.get("text") or n.attrib.get("content-desc")):
+            folhas.append(b)
+    if not caixas:
+        return []
+    tela = max(c[2] for c in caixas) * max(c[3] for c in caixas)
+    out = [[b[0], b[1], b[2] - b[0], b[3] - b[1]] for b in folhas
+           if (b[2] - b[0]) * (b[3] - b[1]) >= fracao * tela and (b[2] - b[0]) * (b[3] - b[1]) < 0.9 * tela]
+    return sorted(out, key=lambda r: -r[2] * r[3])[:2]
+
+
+def dentro(ponto, regiao):
+    x, y = ponto
+    return regiao[0] <= x <= regiao[0] + regiao[2] and regiao[1] <= y <= regiao[1] + regiao[3]
 
 
 def achar(els, texto):
@@ -117,6 +155,145 @@ class SemShizuku(RuntimeError):
     pass
 
 
+# --------------------------------------------------------------------------- leitor rápido (Java pelo Shizuku)
+def _jar():
+    """O leitor compilado (ecj + dx do Termux; compila na 1ª vez e quando o fonte muda). None se não der."""
+    try:
+        with open(JAVA_FONTE, "rb") as f:
+            fonte = f.read()
+    except OSError:
+        return None
+    os.makedirs(TMP, exist_ok=True)
+    jar = os.path.join(TMP, f"controle-tela-{hashlib.sha256(fonte).hexdigest()[:12]}.jar")
+    if os.path.exists(jar):
+        return jar
+    if not (shutil.which("ecj") and shutil.which("dx")) and shutil.which("pkg"):
+        subprocess.run(["pkg", "install", "-y", "ecj", "dx"], capture_output=True, timeout=300, check=False)
+    if not (shutil.which("ecj") and shutil.which("dx")):
+        return None
+    trab = os.path.join(TMP, f"compilar-{os.getpid()}")
+    shutil.rmtree(trab, ignore_errors=True)
+    try:
+        os.makedirs(os.path.join(trab, "src", "controleir"))
+        os.makedirs(os.path.join(trab, "dex", "controleir"))
+        shutil.copy(JAVA_FONTE, os.path.join(trab, "src", "controleir", "Tela.java"))
+        subprocess.run(["ecj", "-d", os.path.join(trab, "cls"), os.path.join(trab, "src", "controleir", "Tela.java")],
+                       capture_output=True, timeout=180, check=False)
+        cls = os.path.join(trab, "cls", "controleir")
+        for c in os.listdir(cls) if os.path.isdir(cls) else []:
+            shutil.copy(os.path.join(cls, c), os.path.join(trab, "dex", "controleir", c))
+        parcial = jar[:-4] + ".parcial.jar"  # o dx escolhe o formato pela extensão: tem de terminar em .jar
+        subprocess.run(["dx", "--dex", f"--output={parcial}", os.path.join(trab, "dex")],
+                       capture_output=True, timeout=180, check=False)
+        if not os.path.exists(parcial):
+            return None
+        for velho in os.listdir(TMP):
+            if velho.startswith("controle-tela-") and velho.endswith(".jar") and velho != os.path.basename(parcial):
+                _apagar(os.path.join(TMP, velho))
+        os.replace(parcial, jar)
+        return jar
+    finally:
+        shutil.rmtree(trab, ignore_errors=True)
+
+
+class Ajudante:
+    """Processo do leitor (app_process como shell) aberto pelo rish e falado pela entrada padrão; respostas em
+    arquivos na pasta de troca. Se não subir, fica de lado por 60 s e tudo segue pelo caminho antigo."""
+
+    def __init__(self):
+        self.proc, self.token, self.n, self.falhou_em = None, None, 0, 0.0
+        self.trava = threading.Lock()
+
+    def _vivo(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def _matar(self):
+        if self.proc is not None:
+            try:
+                self.proc.stdin.close()
+                self.proc.kill()
+                self.proc.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        self.proc = None
+
+    def _iniciar(self):
+        if time.time() - self.falhou_em < 60 or not os.path.exists(RISH):
+            return False
+        jar = _jar()
+        if not jar:
+            self.falhou_em = time.time()
+            return False
+        pasta = _pasta_troca()
+        copia = os.path.join(pasta, os.path.basename(jar))
+        shutil.copy(jar, copia)
+        self.token = f"{os.getpid()}x{time.monotonic_ns() % 10 ** 9}"
+        destino = TMP_SHELL + "/controle-tela.jar"
+        self.proc = subprocess.Popen(["sh", RISH], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL, env=dict(os.environ, RISH_APPLICATION_ID="com.termux"))
+        linha = (f"cp {shlex.quote(copia)} {destino} && export CLASSPATH={destino} && exec app_process /system/bin "
+                 f"controleir.Tela {shlex.quote(pasta)} {self.token}\n")
+        try:
+            self.proc.stdin.write(linha.encode())
+            self.proc.stdin.flush()
+        except OSError:
+            self._matar()
+        pronto = os.path.join(pasta, f"pronto-{self.token}")
+        fim = time.time() + 10
+        while self._vivo() and time.time() < fim:
+            if os.path.exists(pronto):
+                _apagar(pronto, copia)
+                return True
+            time.sleep(0.02)
+        _apagar(copia)
+        self._matar()
+        self.falhou_em = time.time()
+        return False
+
+    def pedir(self, comando, timeout=15.0):
+        with self.trava:
+            if not self._vivo() and not self._iniciar():
+                return None
+            self.n += 1
+            ident = f"{self.token}-{self.n}"
+            arq = os.path.join(_pasta_troca(), ident + ".r")
+            try:
+                self.proc.stdin.write(f"{ident} {comando}\n".encode())
+                self.proc.stdin.flush()
+            except (OSError, ValueError):
+                self._matar()
+                return None
+            fim = time.time() + timeout
+            while time.time() < fim:
+                if os.path.exists(arq):
+                    try:
+                        with open(arq, encoding="utf-8", errors="replace") as f:
+                            return f.read()
+                    finally:
+                        _apagar(arq)
+                if not self._vivo():
+                    break
+                time.sleep(0.005)
+            self._matar()
+            return None
+
+
+AJUDANTE = Ajudante()
+
+
+def _ajudante():
+    return AJUDANTE if EM_PROCESSO else None
+
+
+def _injetar(comando):
+    """Toque/tecla/texto pelo leitor (injeção direta). False: use o caminho antigo (input pelo shell)."""
+    a = _ajudante()
+    if not a:
+        return False
+    r = a.pedir(comando, 15)
+    return r is not None and r.strip() == "ok"
+
+
 def _pasta_troca():
     try:
         os.makedirs(COMPARTILHADA, exist_ok=True)
@@ -145,7 +322,20 @@ def _apagar(*caminhos):
 
 
 def rish(cmd, timeout=20):
-    """Roda `cmd` como usuário shell pelo Shizuku. Devolve (stdout, stderr, código), lidos de arquivos."""
+    """Roda `cmd` como usuário shell pelo Shizuku. Devolve (stdout, stderr, código), lidos de arquivos.
+    Dentro do serviço, vai pelo leitor rápido já aberto (sem abrir outra conexão com o Shizuku: ~0,3 s a menos)."""
+    a = _ajudante()
+    if a:  # saídas em arquivos da área do shell: o HyperOS recusa `input` com saída num cano (provado no POCO)
+        t = shlex.quote(f"{TMP_SHELL}/cir-{os.getpid()}-{time.monotonic_ns()}")
+        embrulho = (f"( {cmd} ) < /dev/null > {t}.out 2> {t}.err; rc=$?; cat {t}.out; cat {t}.err >&2; "
+                    f"rm -f {t}.out {t}.err; exit $rc")
+        r = a.pedir(f"shell {embrulho.encode().hex()} {int(timeout * 1000)}", timeout + 5)
+        if r is not None and "\n" in r:
+            cab, resto = r.split("\n", 1)
+            partes = cab.split(" ")
+            if len(partes) == 2 and partes[0].lstrip("-").isdigit() and partes[1].isdigit():
+                n = int(partes[1])
+                return resto[:n], resto[n:], int(partes[0])
     if not os.path.exists(RISH):
         raise SemShizuku("rish não instalado: exporte os arquivos no app Shizuku (Usar o Shizuku em aplicativos de "
                          "terminal → Exportar) e peça ao Claude para copiá-los")
@@ -190,8 +380,292 @@ def _bloqueio_de_toque(err, cod):
 
 
 def foco():
+    a = _ajudante()
+    if a:
+        r = a.pedir("foco", 6)
+        if r and not r.startswith("ERRO") and r.strip():
+            return r.strip()
     out, _, _ = rish("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'")
     return app_em_foco(out)
+
+
+def estado_rapido():
+    """(app em foco, tela acesa) pelo leitor rápido, sem abrir shell. None se o leitor não respondeu."""
+    a = _ajudante()
+    if a:
+        r = a.pedir("estado", 6)
+        if r and not r.startswith("ERRO") and "\n" in r:
+            app, acesa = r.split("\n", 1)
+            return app.strip() or None, {"1": True, "0": False}.get(acesa.strip())
+    return None
+
+
+def calma(quieto=120, limite=1000):
+    """Espera a tela parar de mudar (nenhum evento de acessibilidade por `quieto` ms, até `limite` ms).
+    Devolve os ms esperados, ou None sem o leitor rápido."""
+    a = _ajudante()
+    if not a:
+        return None
+    r = a.pedir(f"calma {int(quieto)} {int(limite)}", limite / 1000 + 5)
+    try:
+        return int(r.split()[1]) if r and r.split()[0] in ("ok", "tempo") else None
+    except (IndexError, ValueError):
+        return None
+
+
+def eventos():
+    """(janelas novas, mudanças, "pacote|classe|texto" da última janela) contados pelo leitor; None sem ele."""
+    a = _ajudante()
+    if not a:
+        return None
+    r = a.pedir("eventos", 6)
+    try:
+        j, m, t, ultima = r.split(" ", 3)
+        return int(j), int(m), ultima.strip(), int(t)
+    except (AttributeError, ValueError):
+        return None
+
+
+def historico(desde):
+    """Janelas surgidas depois de `desde` (relógio do celular, ms): [(t, "pacote|classe|texto"), ...]."""
+    a = _ajudante()
+    r = a.pedir(f"historico {int(desde)}", 6) if a else None
+    out = []
+    for linha in (r or "").splitlines():
+        t, _, info = linha.partition(" ")
+        if t.isdigit():
+            out.append((int(t), info))
+    return out
+
+
+def _janela_curta(info):
+    pac, cls, txt = (info.split("|") + ["", "", ""])[:3]
+    return f"{pac} {cls.split('.')[-1]}" + (f" «{txt}»" if txt else "")
+
+
+# --------------------------------------------------------------------------- formato curto (menos tokens)
+SINAIS = (("clicavel", "c"), ("editavel", "e"), ("selecionado", "s"), ("rolavel", "r"), ("focado", "f"),
+          ("desativado", "d"))
+LEGENDA = "texto (desc) #id x,y + sinais: c clicável, e editável, s selecionado, r rolável, f focado, d desativado, M/m marcado/não"
+
+
+def curto(e):
+    """Um elemento numa linha: "Texto" (desc) #id x,y sinais."""
+    partes = []
+    if e.get("texto"):
+        partes.append(f'"{e["texto"]}"')
+    if e.get("desc") and e.get("desc") != e.get("texto"):
+        partes.append(f'({e["desc"]})')
+    if e.get("id"):
+        partes.append("#" + e["id"])
+    partes.append(f'{e["x"]},{e["y"]}')
+    sinais = "".join(c for k, c in SINAIS if e.get(k))
+    if e.get("marcado") is not None:
+        sinais += "M" if e["marcado"] else "m"
+    if sinais:
+        partes.append(sinais)
+    return " ".join(partes)
+
+
+def diferenca_curta(dif):
+    linhas = [f"+ {curto(e)}" for e in dif["entrou"]] + [f"- {curto(e)}" for e in dif["saiu"]]
+    for e in dif["mudou"]:
+        antes = e.get("antes", {})
+        agora = {k: v for k, v in e.items() if k != "antes"}
+        if set(antes) == {"texto"}:
+            linhas.append(f'~ {curto(agora)} (era "{antes["texto"]}")')
+        else:
+            linhas.append(f"~ {curto(agora)} (era {', '.join(f'{k}={v}' for k, v in antes.items())})")
+    return linhas
+
+
+TECLADO = re.compile(r"SoftInputWindow|InputMethod", re.I)
+
+
+def janela_nova(antes, depois, app=None):
+    """A janela que surgiu é outra coisa (aviso, anúncio, outro app), e não a mesma tela se anunciando de novo?"""
+    pa, ca = (antes.split("|") + ["", ""])[:2]
+    pd, cd = (depois.split("|") + ["", ""])[:2]
+    if (pd, cd) == (pa, ca) or TECLADO.search(cd):
+        return False
+    if not ca:  # sem referência da janela de antes: só o que claramente é outra coisa
+        return bool(pd != (app or pd) or re.search(r"Dialog|Popup|Alert|Sheet|Window", cd))
+    return True
+
+
+# --------------------------------------------------------------------------- grade de algarismos (lida no celular)
+def teclado_da_grade(els, regiao, n):
+    """Os n botões de algarismo do jogo: n clicáveis lado a lado (mesma altura), abaixo da grade. [(x, y, l, a)]."""
+    abaixo = [e for e in els if e.get("clicavel") and e["y"] > regiao[1] + regiao[3] and 0 < e.get("l", 0) < regiao[2] / n * 1.4]
+    linhas = {}
+    for e in abaixo:
+        linhas.setdefault(round(e["y"] / 20), []).append(e)
+    for grupo in sorted(linhas.values(), key=lambda g: g[0]["y"]):
+        if len(grupo) == n:
+            return [(e["x"], e["y"], e["l"], e["a"]) for e in sorted(grupo, key=lambda e: e["x"])]
+    return None
+
+
+def resolver_sudoku(g):
+    """Grade 9x9 (listas, 0 = vazia) → solução, ou None (leitura errada ou sem solução). Rápido (menos opções primeiro)."""
+    g = [r[:] for r in g]
+    lin = [set(r) - {0} for r in g]
+    col = [{g[r][c] for r in range(9)} - {0} for c in range(9)]
+    cx = [{g[r][c] for r in range(b // 3 * 3, b // 3 * 3 + 3) for c in range(b % 3 * 3, b % 3 * 3 + 3)} - {0}
+          for b in range(9)]
+    if any(len([v for v in r if v]) != len(lin[i]) for i, r in enumerate(g)):
+        return None  # repetido na linha: leitura errada
+    vazias = [(r, c) for r in range(9) for c in range(9) if not g[r][c]]
+
+    def passo():
+        if not vazias:
+            return True
+        k = max(range(len(vazias)), key=lambda i: len(lin[vazias[i][0]] | col[vazias[i][1]]
+                                                     | cx[vazias[i][0] // 3 * 3 + vazias[i][1] // 3]))
+        r, c = vazias.pop(k)
+        b = r // 3 * 3 + c // 3
+        for v in set(range(1, 10)) - lin[r] - col[c] - cx[b]:
+            g[r][c] = v
+            lin[r].add(v); col[c].add(v); cx[b].add(v)
+            if passo():
+                return True
+            lin[r].discard(v); col[c].discard(v); cx[b].discard(v)
+        g[r][c] = 0
+        vazias.insert(k, (r, c))
+        return False
+
+    return g if passo() else None
+
+
+def grade(a):
+    """Lê no celular a grade NxN de algarismos (tabuleiro sem texto na acessibilidade) usando como modelo os botões
+    1..N do próprio jogo. resolver=true (sudoku 9x9): resolve e preenche numa leva só."""
+    aj = _ajudante()
+    if not aj:
+        return {"erro": "precisa do leitor rápido (Shizuku)"}
+    xml = dump_ui()
+    els = elementos(xml, limite=300)
+    n = int(a.get("n", 9))
+    reg = a.get("recorte") or (regioes_visuais(xml) or [None])[0]
+    if not reg:
+        return {"erro": "não achei a grade (área sem texto); informe recorte=[x,y,l,a]"}
+    tec = a.get("teclado") or teclado_da_grade(els, reg, n)
+    if not tec:
+        return {"erro": f"não achei os {n} botões de algarismo abaixo da grade; informe teclado=[[x,y,l,a],...]"}
+    x0 = min(t[0] - t[2] // 2 for t in tec)
+    x1 = max(t[0] + t[2] // 2 for t in tec)
+    t0 = time.time()
+    r = aj.pedir(f"grade {int(reg[0])} {int(reg[1])} {int(reg[2])} {int(reg[3])} {n} {x0} "
+                 f"{tec[0][1] - tec[0][3] // 2} {x1 - x0} {tec[0][3]} {n}", 15)
+    if not r or r.startswith("ERRO"):
+        return {"erro": f"leitura falhou: {(r or 'sem resposta')[:120]}"}
+    linhas = r.strip().split("\n")
+    g = [[int(ch) if ch.isdigit() else 0 for ch in ln] for ln in linhas[:n]]
+    duvidas = linhas[n].replace("duvidas", "").split() if len(linhas) > n else []
+    out = {"grade": ["".join(map(str, ln)) for ln in g], "vazias": sum(ln.count(0) for ln in g),
+           "leitura_s": round(time.time() - t0, 2)}
+    if duvidas:
+        out["duvidas"] = duvidas
+    if not a.get("resolver"):
+        return out
+    if n != 9:
+        return {**out, "erro": "resolver só para sudoku 9x9"}
+    sol = resolver_sudoku(g)
+    if not sol:
+        return {**out, "erro": "a grade lida não tem solução (leitura duvidosa): confira com ver + recorte",
+                "recorte": reg}
+    pontos = []
+    for i in range(9):
+        for j in range(9):
+            if not g[i][j]:
+                pontos += [[int(reg[0] + reg[2] * (j + 0.5) / 9), int(reg[1] + reg[3] * (i + 0.5) / 9)],
+                           [tec[sol[i][j] - 1][0], tec[sol[i][j] - 1][1]]]
+    out["resolvido_s"] = round(time.time() - t0, 2)
+    if not pontos:
+        return {**out, "feito": "nada a preencher"}
+    _ULTIMA["janela"] = (eventos() or (0, 0, None))[2]  # as coordenadas acabaram de ser lidas desta tela
+    r2 = sequencia({"passos": [{"tocar": pontos, "intervalo": float(a.get("intervalo", 0.015))}],
+                    "ver_depois": a.get("ver_depois", "mudancas")})
+    return {**out, **r2}
+
+
+# --------------------------------------------------------------------------- anúncios (resolvidos no celular)
+ANUNCIO = re.compile(r"AppLovinFullscreen|TTFullScreen|TTRewardVideo|TTLandingPage|\.AdActivity|FullScreenWebViewDisplay|"
+                     r"MBRewardVideo|MBInterstitial|MBCommonActivity|Inneractive|Vungle|AdColony|AudienceNetworkActivity|"
+                     r"AdUnitActivity|InterstitialActivity|RewardedVideoActivity|MaxFullscreen|BigoAd|PAGInterstitial|"
+                     r"PAGReward|UnityAds|IronSource|AdsActivity", re.I)
+IGNORAR_APP = re.compile(r"systemui|securitycenter|inputmethod|permissioncontroller|^android$", re.I)
+FECHAR = ("fechar", "close", "pular", "skip", "dispensar", "anuncio fechado", "fechar anuncio")
+NAO_TOCAR = ("instalar", "install", "baixar", "baixe", "download", "obter", "peca agora", "saiba mais", "learn more",
+             "abrir", "open", "get now", "jogar agora", "play now", "comprar")
+
+
+def classe_janela(info):
+    return (info.split("|") + ["", ""])[1]
+
+
+def em_anuncio():
+    ev = eventos()
+    return bool(ev and ANUNCIO.search(classe_janela(ev[2])))
+
+
+def botao_fechar(els):
+    """O botão de fechar/pular do anúncio: pelo nome; senão um elemento pequeno e ativo no canto superior direito.
+    Nunca o que leva para fora (instalar, baixar, peça agora…)."""
+    if not els:
+        return None
+    larg = max(e["x"] + e.get("l", 0) // 2 for e in els)
+    alt = max(e["y"] + e.get("a", 0) // 2 for e in els)
+    for e in els:
+        t = normalizar(e.get("texto") or e.get("desc"))
+        if e.get("desativado") or any(n in t for n in NAO_TOCAR):
+            continue
+        if t in ("x", "×", "✕", "»", ">>") or any(f in t for f in FECHAR):
+            return e
+    for e in els:
+        t = normalizar(e.get("texto") or e.get("desc"))
+        if (not e.get("desativado") and not re.search(r"\d+\s*s$", t) and e["y"] < 0.12 * alt and e["x"] > 0.82 * larg
+                and 0 < e.get("l", 999) < 0.15 * larg and 0 < e.get("a", 999) < 0.08 * alt):
+            return e
+    return None
+
+
+def _abrir(pac):
+    rish(f"monkey -p {pac} -c android.intent.category.LAUNCHER 1")
+
+
+def fechar_anuncio(pacote, limite=45):
+    """Fica no anúncio até fechá-lo: toca o botão de fechar/pular quando aparece (pelo nome ou no canto, nunca no
+    anúncio), volta ao app se um toque abrir outro (loja, WhatsApp) e, passado o limite, encerra e reabre o app."""
+    t0, feitos, tocados = time.time(), [], {}
+    while time.time() - t0 < limite:
+        app = foco()
+        if app and pacote and app != pacote and not IGNORAR_APP.search(app):
+            feitos.append(f"saiu para {app}: voltou")
+            _abrir(pacote)
+            calma(150, 2500)
+            continue
+        if not em_anuncio():
+            return {"anuncio": "fechado", "segundos": round(time.time() - t0, 1), "passos": feitos}
+        b = botao_fechar(elementos(dump_ui()))
+        chave = (b["x"], b["y"]) if b else None
+        if b and time.time() - tocados.get(chave, 0) > 2:
+            tocados[chave] = time.time()
+            _injetar(f"tocar {b['x']} {b['y']}")
+            feitos.append(f"tocou fechar {b['x']},{b['y']}")
+            calma(150, 1500)
+            continue
+        time.sleep(0.5)
+    if pacote:
+        rish(f"am force-stop {pacote}")
+        _abrir(pacote)
+        calma(200, 4000)
+        e = achar(elementos(dump_ui()), "Continuar")
+        if e:
+            _injetar(f"tocar {e['x']} {e['y']}")
+            calma(150, 3000)
+        feitos.append("anúncio preso: encerrou e reabriu o app" + (" e tocou Continuar" if e else ""))
+    return {"anuncio": "encerrado", "segundos": round(time.time() - t0, 1), "passos": feitos}
 
 
 def tela_acesa():
@@ -208,6 +682,11 @@ def bloqueados():
 
 
 def dump_ui():
+    a = _ajudante()
+    if a:  # leitura direta da acessibilidade: ~0,05 s, sem esperar a tela parar
+        x = a.pedir("dump", 10)
+        if x and x.startswith("<?xml") and "<node" in x:
+            return x
     arq = os.path.join(_pasta_troca(), f"ui-{os.getpid()}.xml")
     for _ in range(2):
         try:
@@ -221,57 +700,834 @@ def dump_ui():
     return ""
 
 
-def captura(largura):
-    """screencap grava o PNG na pasta de troca; o ffmpeg reduz para JPEG (≤110 KB). Sem imagem: (None, None)."""
-    png = os.path.join(_pasta_troca(), f"tela-{os.getpid()}.png")
+def _jpeg(png, largura, recorte=None):
+    """PNG da captura → JPEG em base64 (≤110 KB), com recorte opcional [x, y, l, a] em pixels reais."""
     os.makedirs(TMP, exist_ok=True)
-    jpg = os.path.join(TMP, "tela.jpg")
-    try:
-        rish(f"screencap -p {shlex.quote(png)}", timeout=20)
+    jpg = os.path.join(TMP, f"tela-{os.getpid()}-{time.monotonic_ns()}.jpg")  # nome único: a transmissão ao
+    try:                                                                          # vivo captura ao mesmo tempo
         try:
             with open(png, "rb") as f:
                 if not f.read(8).startswith(b"\x89PNG"):
-                    return None, None
+                    return None
         except OSError:
-            return None, None
+            return None
+        filtro = f"scale='min({largura},iw)':-2"
+        if recorte:
+            x, y, l, a = (max(0, int(v)) for v in recorte)
+            filtro = f"crop={l}:{a}:{x}:{y}," + filtro
         for q in (6, 10, 16):
-            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", png, "-vf", f"scale='min({largura},iw)':-2",
-                            "-q:v", str(q), jpg], capture_output=True, timeout=30, check=False)
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", png, "-vf", filtro, "-q:v", str(q), jpg],
+                           capture_output=True, timeout=30, check=False)
             if os.path.exists(jpg) and os.path.getsize(jpg) <= 110_000:
                 break
         if not os.path.exists(jpg):
-            return None, None
+            return None
         with open(jpg, "rb") as f:
-            return base64.b64encode(f.read()).decode(), largura
+            return base64.b64encode(f.read()).decode()
     finally:
-        _apagar(png, jpg)
+        _apagar(jpg)
 
 
-def ver(imagem=True, largura=720):
-    out = {"app": foco(), "tela_acesa": tela_acesa()}
-    tam, _, _ = rish("wm size")
-    m = re.search(r"(\d+)x(\d+)", tam.splitlines()[-1] if tam else "")
-    out["resolucao"] = f"{m.group(1)}x{m.group(2)}" if m else None
-    els = elementos(dump_ui())
-    out["elementos"] = els
-    out["nota"] = "coordenadas x,y em pixels da tela real (use-as em tocar); a imagem é reduzida"
-    if imagem:
-        b64, w = captura(largura)
-        if b64:
-            out["_imagem"] = {"mime": "image/jpeg", "base64": b64}
-            out["largura_imagem"] = w
-        else:
-            out["imagem_erro"] = ("screencap não devolveu imagem (app com proteção de tela mostra preto, ou o "
-                                  "Termux sem acesso ao armazenamento: rode termux-setup-storage)")
+def foto_rapida(largura, recorte=None):
+    """JPEG direto do leitor rápido (sem PNG nem ffmpeg). Devolve (base64, "LxA") ou (None, None)."""
+    a = _ajudante()
+    if not a:
+        return None, None
+    arq = os.path.join(_pasta_troca(), f"foto-{os.getpid()}-{time.monotonic_ns()}.jpg")
+    rec = " " + " ".join(str(max(0, int(v))) for v in recorte) if recorte else ""
+    try:
+        r = a.pedir(f"foto {int(largura)} 110000 {arq}{rec}", 15)
+        if not r or r.startswith("ERRO") or not os.path.exists(arq):
+            return None, None
+        with open(arq, "rb") as f:
+            dados = f.read()
+        lw, lh = r.split()[:2]
+        return base64.b64encode(dados).decode(), f"{lw}x{lh}"
+    except (OSError, ValueError):
+        return None, None
+    finally:
+        _apagar(arq)
+
+
+def captura(largura):
+    """Só a imagem (usada pela transmissão ao vivo da Central). Sem imagem: (None, None)."""
+    b64, _ = foto_rapida(largura)
+    if b64:
+        return b64, largura
+    png = os.path.join(_pasta_troca(), f"tela-{os.getpid()}-{time.monotonic_ns()}.png")
+    try:
+        rish(f"screencap -p {shlex.quote(png)}", timeout=20)
+        b64 = _jpeg(png, largura)
+        return (b64, largura) if b64 else (None, None)
+    finally:
+        _apagar(png)
+
+
+def resolucao_png(png):
+    try:
+        with open(png, "rb") as f:
+            cab = f.read(24)
+        return f"{int.from_bytes(cab[16:20], 'big')}x{int.from_bytes(cab[20:24], 'big')}" if cab[:4] == b"\x89PNG" else None
+    except OSError:
+        return None
+
+
+def compactos(els):
+    """Elementos sem campos vazios (menos texto na resposta)."""
+    out = []
+    for e in els:
+        d = {k: e[k] for k in ("texto", "desc", "id") if e.get(k)}
+        if e.get("clicavel"):
+            d["clicavel"] = True
+        for k in ("editavel", "selecionado", "rolavel", "focado", "desativado"):
+            if e.get(k):
+                d[k] = True
+        if e.get("marcado") is not None:
+            d["marcado"] = e["marcado"]
+        d["x"], d["y"] = e["x"], e["y"]
+        out.append(d)
     return out
+
+
+def observar(com_elementos=True, com_imagem=True):
+    """Dump da interface, captura PNG (se pedida), app em foco e tela acesa.
+    Com o leitor rápido: dump e estado direto da acessibilidade, sem shell (o PNG só se a foto rápida falhou).
+    Sem ele: UMA chamada ao Shizuku com tudo em paralelo. Devolve (xml, caminho_png, app, acesa); quem chama apaga o PNG."""
+    pasta = _pasta_troca()
+    nome = f"obs-{os.getpid()}-{time.monotonic_ns()}"
+    xml, png = os.path.join(pasta, nome + ".xml"), os.path.join(pasta, nome + ".png")
+    if _ajudante():
+        texto = dump_ui() if com_elementos else ""
+        est = estado_rapido()
+        partes = [f"screencap -p {shlex.quote(png)}"] if com_imagem else []
+        if est is None:
+            partes += ["dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'", "dumpsys power | grep -m1 mWakefulness="]
+        info = rish("\n".join(partes), timeout=30)[0] if partes else ""
+        app, acesa = est if est else (app_em_foco(info), "Awake" in (info or ""))
+        return texto, (png if com_imagem else None), app, acesa
+    partes = []
+    if com_elementos:
+        partes.append(f"(uiautomator dump {shlex.quote(xml)} > /dev/null 2>&1) &")
+    if com_imagem:
+        partes.append(f"screencap -p {shlex.quote(png)}")
+    partes += ["dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'", "dumpsys power | grep -m1 mWakefulness=", "wait"]
+    try:
+        info, _, _ = rish("\n".join(partes), timeout=30)
+        texto = _ler(xml) or "" if com_elementos else ""
+    finally:
+        _apagar(xml)
+    if com_elementos and not texto.strip().startswith("<?xml"):
+        texto = dump_ui()  # o dump às vezes falha na primeira (tela em animação)
+    return texto, (png if com_imagem else None), app_em_foco(info), "Awake" in (info or "")
+
+
+# última tela vista (para responder só o que mudou); vive enquanto o módulo fica aberto no serviço
+_ULTIMA = {"app": None, "els": None}
+
+
+def _chave(e):
+    return e.get("id", ""), e["x"], e["y"]
+
+
+def diferenca(antes, depois, app_antes=None, app=None):
+    """O que mudou entre duas listas compactas: entrou, saiu e mudou (com o valor anterior). None = tela nova
+    (outro app, primeira olhada ou mudança grande demais: aí vale mandar a lista inteira)."""
+    if antes is None or app != app_antes:
+        return None
+    a = {_chave(e): e for e in antes}
+    d = {_chave(e): e for e in depois}
+    entrou = [e for k, e in d.items() if k not in a]
+    saiu = [{c: e[c] for c in ("texto", "desc", "id", "x", "y") if e.get(c) not in (None, "")}
+            for k, e in a.items() if k not in d]
+    mudou = []
+    for k, e in d.items():
+        if k in a and e != a[k]:
+            v = a[k]
+            mudou.append(dict(e, antes={c: v.get(c) for c in set(e) | set(v) if e.get(c) != v.get(c)}))
+    if len(entrou) + len(saiu) + len(mudou) > max(25, int(0.6 * len(depois))):
+        return None
+    return {"entrou": entrou, "saiu": saiu, "mudou": mudou}
+
+
+def _linha_do_tempo():
+    """O que surgiu (janelas) desde a última olhada, para nada passar enquanto o Claude pensava."""
+    ev = eventos()
+    if ev is None:
+        return []
+    agora, desde = ev[3], _ULTIMA.get("t")
+    _ULTIMA["t"], _ULTIMA["janela"] = agora, ev[2]  # a janela que o Claude viu: referência das coordenadas
+    if desde is None:
+        return []
+    linhas, anterior = [], None
+    for t, info in historico(desde):
+        if info != anterior:
+            linhas.append(f"-{(agora - t) / 1000:.1f}s {_janela_curta(info)}")
+        anterior = info
+    return linhas[-8:]
+
+
+def ver(imagem=True, largura=720, com_elementos=True, recorte=None, so_mudancas=False, formato="curto"):
+    rapida = foto_rapida(largura, recorte) if imagem and _ajudante() else (None, None)
+    xml, png, app, acesa = observar(com_elementos, imagem and not rapida[0])
+    out = {"app": app, "tela_acesa": acesa}
+    tempo = _linha_do_tempo()
+    if tempo:
+        out["surgiu"] = tempo
+    json_ = formato == "json"
+    try:
+        if rapida[0]:
+            out["resolucao"] = rapida[1]
+            out["_imagem"] = {"mime": "image/jpeg", "base64": rapida[0]}
+            out["largura_imagem"] = largura
+            if recorte:
+                out["recorte"] = list(recorte)
+        if png:
+            out["resolucao"] = resolucao_png(png)
+        if com_elementos:
+            els = compactos(elementos(xml))
+            dif = diferenca(_ULTIMA["els"], els, _ULTIMA["app"], app) if so_mudancas else None
+            if dif is None:
+                out["elementos"] = els if json_ else [curto(e) for e in els]
+                out["nota"] = "x,y em pixels reais (use em tocar)" + ("" if json_ else "; " + LEGENDA)
+            elif any(dif.values()):
+                out["mudancas"] = {k: v for k, v in dif.items() if v} if json_ else diferenca_curta(dif)
+                out["sem_mudar"] = len(els) - len(dif["entrou"]) - len(dif["mudou"])
+            else:
+                out["mudancas"] = "nenhuma"
+            _ULTIMA.update(app=app, els=els, regioes=regioes_visuais(xml))
+        if imagem and not rapida[0]:
+            b64 = _jpeg(png, largura, recorte)
+            if b64:
+                out["_imagem"] = {"mime": "image/jpeg", "base64": b64}
+                out["largura_imagem"] = largura
+                if recorte:
+                    out["recorte"] = list(recorte)
+            else:
+                out["imagem_erro"] = ("screencap não devolveu imagem (app com proteção de tela mostra preto, ou o "
+                                      "Termux sem acesso ao armazenamento: rode termux-setup-storage)")
+    finally:
+        if png:
+            _apagar(png)
+    return out
+
+
+def _ver_depois(a, padrao=None, tocados=()):
+    """Depois de agir, espera a tela assentar (leitor rápido) e olha. 'auto' (padrão com o leitor): só o que mudou e,
+    se a tela tem área visual sem texto (tabuleiro, jogo), a imagem SÓ desse recorte quando a tela é nova ou a ação
+    tocou nela. 'mudancas' (sem imagem), 'elementos' (lista inteira), 'imagem' (lista + captura) ou 'nada'."""
+    if padrao is None:
+        padrao = "auto" if _ajudante() else "nada"
+    fechado = None
+    if _ajudante() and a.get("anuncios", True) is not False and (a.get("ver_depois") or padrao) != "nada" and em_anuncio():
+        fechado = fechar_anuncio(foco())
+    if (a.get("ver_depois") or padrao) == "auto":
+        esperou = calma(int(a.get("calma_ms", 120)), int(a.get("calma_ate", 1000))) if a.get("calma", True) else None
+        tela = ver(False, 480, True, None, so_mudancas=True, formato=a.get("formato", "curto"))
+        reg = (_ULTIMA.get("regioes") or [None])[0]
+        if reg and ("elementos" in tela or any(dentro(p, reg) for p in tocados)):
+            b64, res = foto_rapida(min(720, max(320, int(a.get("largura", 480)))), reg)
+            if b64:
+                tela["_imagem"] = {"mime": "image/jpeg", "base64": b64}
+                tela["recorte"] = reg
+        return {"tela": tela, **({"calma_ms": esperou} if esperou is not None else {}),
+                **({"anuncio_fechado": fechado} if fechado else {})}
+    modo = a.get("ver_depois") or ("imagem" if a.get("imagem") else padrao)
+    esperou = None
+    if modo != "nada" and a.get("calma", True) is not False:
+        esperou = calma(int(a.get("calma_ms", 120)), int(a.get("calma_ate", 1000)))
+    extra = {"calma_ms": esperou} if esperou is not None else {}
+    if modo == "nada":
+        return {"app": foco()}
+    largura = max(320, min(int(a.get("largura", 720)), 1080))
+    return {"tela": ver(modo == "imagem", largura, True, a.get("recorte"), so_mudancas=(modo == "mudancas"),
+                        formato=a.get("formato", "curto")), **extra}
+
+
+# --------------------------------------------------------------------------- sequência (vários passos, 1 viagem)
+MAX_PASSOS = 300  # passos na lista (contando os aninhados)
+MAX_EXECUTADOS = 3000  # passos executados (laços incluídos)
+PRAZO_SEQUENCIA = 140  # s (o tempo_limite da capacidade é 150)
+
+
+def _regex_bloqueados(lista):
+    alt = "|".join(re.escape(b) for b in lista if re.match(r"^[\w.]+$", b))
+    return f"[ {{/]({alt})[A-Za-z0-9_.]*/" if alt else None
+
+
+def _linhas_do_passo(p):
+    """Linhas de shell de um passo que não depende de ler a tela (caminho sem o leitor rápido).
+    None = passo que precisa da tela ou do leitor (texto, condição, laço)."""
+    if "tocar" in p:
+        alvo = p["tocar"]
+        if isinstance(alvo, str):
+            return None
+        pontos = alvo if alvo and isinstance(alvo[0], (list, tuple)) else [alvo]
+        pausa = float(p.get("intervalo", 0.05))
+        linhas = []
+        for x, y in pontos:
+            if p.get("segurar"):
+                ms = int(p["segurar"])
+                linhas.append(f"input swipe {int(x)} {int(y)} {int(x)} {int(y)} {ms} || exit 3")
+            else:
+                linhas.append(f"input tap {int(x)} {int(y)} || exit 3")
+            if pausa > 0:
+                linhas.append(f"sleep {min(pausa, 5):.2f}")
+        return linhas
+    if "deslizar" in p:
+        v = [int(n) for n in p["deslizar"]]
+        return [f"input swipe {v[0]} {v[1]} {v[2]} {v[3]} {v[4] if len(v) > 4 else 300} || exit 3"]
+    if "digitar" in p:
+        if _ajudante():
+            return None  # pelo leitor: vai no campo em foco, com acentos
+        texto, _ = escapar_input_text(str(p["digitar"]))
+        return [f"input text {shlex.quote(texto)} || exit 3"] if texto else []
+    if "tecla" in p:
+        cod = TECLAS.get(normalizar(p["tecla"]))
+        if cod is None:
+            raise ValueError(f"tecla deve ser uma de: {', '.join(TECLAS)}")
+        return [f"input keyevent {cod} || exit 3"]
+    if "esperar" in p:
+        return [f"sleep {min(float(p['esperar']), 10):.2f}"]
+    if "abrir" in p:
+        pac = str(p["abrir"])
+        if not re.match(r"^[A-Za-z][\w.]{2,120}$", pac):
+            raise ValueError("pacote inválido")
+        return [f"monkey -p {pac} -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1 || exit 4", "sleep 1"]
+    if any(k in p for k in ("esperar_texto", "esperar_sumir", "se", "se_nao", "repetir", "calma", "esperar_mudanca")):
+        return None
+    raise ValueError(f"passo desconhecido: {json.dumps(p, ensure_ascii=False)[:80]}")
+
+
+def _rodar_bloco(linhas, rx):
+    """Roda um bloco de passos numa só chamada ao Shizuku, conferindo antes se o app em foco é bloqueado."""
+    if not linhas:
+        return None
+    cab = []
+    if rx:
+        cab = ["f=$(dumpsys window | grep -m1 mCurrentFocus)",
+               f"if echo \"$f\" | grep -qiE {shlex.quote(rx)}; then echo \"BLOQUEADO $f\"; exit 9; fi"]
+    out, err, cod = rish("\n".join(cab + linhas), timeout=120)
+    if cod == 9:
+        return {"erro": "recusado: o app em foco está na lista de bloqueados (banco/pagamento/senha)",
+                "foco": app_em_foco(out)}
+    if _bloqueio_de_toque(out + err, cod):
+        return {"erro": _bloqueio_de_toque(out + err, cod)}
+    return None
+
+
+# --------------------------------------------------------------------------- reflexos guardados no celular
+REFLEXOS_ARQ = os.path.join(BASE, "tela_reflexos.json")
+MAX_REFLEXOS = 20
+
+
+def _regras():
+    try:
+        with open(REFLEXOS_ARQ) as f:
+            r = json.load(f)
+        return r if isinstance(r, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def reflexos(regras=None):
+    """Lista (sem regras) ou troca as regras. Cada uma: {se:'texto' | janela:'trecho de pacote/classe/texto',
+    tocar:[x,y]|'texto' | tecla:'voltar'}. Valem dentro das sequências: no lugar de parar, o celular resolve e segue."""
+    if regras is None:
+        return {"regras": _regras()}
+    if not isinstance(regras, list) or len(regras) > MAX_REFLEXOS:
+        return {"erro": f"regras deve ser uma lista (até {MAX_REFLEXOS})"}
+    for k, r in enumerate(regras):
+        if not isinstance(r, dict) or not (r.get("se") or r.get("janela")) or not (r.get("tocar") or r.get("tecla")):
+            return {"erro": f"regra {k + 1}: precisa de se/janela e de tocar/tecla"}
+        if r.get("tecla") and normalizar(r["tecla"]) not in TECLAS:
+            return {"erro": f"regra {k + 1}: tecla deve ser uma de: {', '.join(TECLAS)}"}
+    os.makedirs(BASE, exist_ok=True)
+    tmp = REFLEXOS_ARQ + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(regras, f, ensure_ascii=False)
+    os.replace(tmp, REFLEXOS_ARQ)
+    return {"regras": regras, "feito": f"{len(regras)} reflexo(s) guardado(s)"}
+
+
+class _Falha(Exception):
+    def __init__(self, info):
+        super().__init__(info.get("erro"))
+        self.info = info
+
+
+class _Interrompido(Exception):
+    """O reflexo parou a sequência: apareceu algo na tela. Não é erro: é a hora de olhar e decidir de novo."""
+
+    def __init__(self, motivo, elemento):
+        super().__init__(motivo)
+        self.motivo, self.elemento = motivo, elemento
+
+
+RECUSA = "recusado: o app em foco está na lista de bloqueados (banco/pagamento/senha)"
+
+
+def _contar(passos, nivel=0):
+    if nivel > 4:
+        raise ValueError("passos aninhados demais (até 4 níveis)")
+    n = 0
+    for p in passos:
+        n += 1
+        if isinstance(p, dict):
+            for k in ("entao", "senao", "repetir"):
+                if isinstance(p.get(k), list):
+                    n += _contar(p[k], nivel + 1)
+    return n
+
+
+class _Executor:
+    """Roda os passos. Com o leitor rápido, cada toque/tecla/deslize é injetado na hora (ms) e as condições leem a
+    tela direto da acessibilidade; sem ele, os passos que não leem a tela vão juntos num script de shell."""
+
+    def __init__(self):
+        self.lista = bloqueados()
+        self.rx = _regex_bloqueados(self.lista)
+        self.rapido = _ajudante() is not None
+        self.bloco, self.feitos, self.n = [], 0, 0
+        self.t0 = time.time()
+        self.prazo = self.t0 + PRAZO_SEQUENCIA
+        self.app, self.app_em = None, 0.0
+        self.t_esperas = 0.0
+        self.parar_se = []
+        self.parar_em_janela = None  # None: só no meio de levas de toques; True: também entre passos; False: nunca
+        self.janela = None  # "pacote|classe|texto" da janela no começo (referência do reflexo)
+        self.regras = _regras()
+        self.usados = []  # reflexos que agiram nesta sequência
+        self.base = None  # janela em que as coordenadas foram lidas (a última vista pelo Claude)
+        self.rolou = False  # depois de um deslize, as coordenadas antigas não valem
+        self.tocados = []
+        self.anuncios = []  # anúncios que o celular fechou sozinho
+        self.com_anuncios = True
+        self.app_inicial = None  # trava de app inesperado
+
+    # --- utilidades
+    def descarregar(self):
+        erro = _rodar_bloco(self.bloco, self.rx)
+        self.bloco = []
+        if erro:
+            raise _Falha(erro)
+
+    def conferir_app(self):
+        """O app em foco não pode ser bloqueado (lido no máximo a cada 0,3 s: troca de app leva mais que isso)."""
+        if time.time() - self.app_em > 0.3:
+            self.app, self.app_em = foco(), time.time()
+        if bloqueado(self.app, self.lista):
+            raise _Falha({"erro": RECUSA, "foco": self.app})
+
+    def ver_elementos(self):
+        self.descarregar()  # o que estava na fila sai antes de olhar
+        return elementos(dump_ui())
+
+    def presente(self, texto):
+        return achar(self.ver_elementos(), texto) is not None
+
+    def aplicar_reflexo(self, info=""):
+        """Alguma regra guardada resolve o que surgiu? Age (tocar/tecla), espera assentar e diz True."""
+        if not self.regras or len(self.usados) >= 10:
+            return False
+        els = None
+        for r in self.regras:
+            if r.get("janela"):
+                if normalizar(r["janela"]) not in normalizar(info):
+                    continue
+            else:
+                els = els if els is not None else self.ver_elementos()
+                if not achar(els, r["se"]):
+                    continue
+            if r.get("tecla"):
+                cod = TECLAS[normalizar(r["tecla"])]
+                self.injetar(f"tecla {cod}", [f"input keyevent {cod} || exit 3"])
+            else:
+                alvo = r["tocar"]
+                if isinstance(alvo, str):
+                    els = els if els is not None else self.ver_elementos()
+                    e = achar(els, alvo)
+                    if not e:
+                        continue
+                    alvo = [e["x"], e["y"]]
+                x, y = int(alvo[0]), int(alvo[1])
+                self.app_em = 0.0
+                self.injetar(f"tocar {x} {y}", [f"input tap {x} {y} || exit 3"])
+            self.usados.append(r.get("se") or r.get("janela"))
+            calma(120, 1500)
+            ev = eventos()
+            if ev:
+                self.janela = ev[2]
+            return True
+        return False
+
+    def checar_texto(self, onde):
+        """Reflexo: algum dos textos de parar_se apareceu? Interrompe e devolve o que surgiu."""
+        if not self.parar_se:
+            return
+        els = self.ver_elementos()
+        for t in self.parar_se:
+            e = achar(els, t)
+            if e:
+                if self.aplicar_reflexo():
+                    return
+                raise _Interrompido(f"apareceu “{e.get('texto') or e.get('desc') or t}” ({onde})", compactos([e])[0])
+
+    def checar_janela(self, info, onde):
+        """Surgiu outra janela? Um reflexo guardado resolve (True) ou interrompe; a mesma tela: False."""
+        if self.janela is not None and janela_nova(self.janela, info, self.app):
+            if self.lidar_anuncio(info):
+                return True
+            if self.aplicar_reflexo(info):
+                return True
+            raise _Interrompido(f"surgiu uma janela nova ({onde}): {_janela_curta(info)}", None)
+        return False
+
+    def lidar_anuncio(self, info=None):
+        """Surgiu anúncio? Fecha no próprio celular e devolve True (a sequência segue de onde estava)."""
+        if not (self.rapido and self.com_anuncios):
+            return False
+        if info is None:
+            ev = eventos()
+            info = ev[2] if ev else ""
+        if not ANUNCIO.search(classe_janela(info)):
+            return False
+        r = fechar_anuncio(self.app_inicial or self.app)
+        self.anuncios.append(r)
+        ev = eventos()
+        if ev:
+            self.janela = ev[2]
+            if not ANUNCIO.search(classe_janela(ev[2])):
+                self.base = self.base if r["anuncio"] == "fechado" else ev[2]
+        self.app_em = 0.0
+        return True
+
+    def conferir_outro_app(self, onde):
+        """Trava de app inesperado: a tela caiu em outro app (clique em anúncio, link) → para na hora."""
+        if not self.rapido or not self.app_inicial:
+            return
+        ev = eventos()
+        pac = (ev[2].split("|")[0] if ev else "") or ""
+        if pac and pac != self.app_inicial and not IGNORAR_APP.search(pac):
+            atual = foco()
+            if atual and atual != self.app_inicial and not IGNORAR_APP.search(atual):
+                raise _Interrompido(f"a tela foi para outro app ({atual}) depois do {onde}: parei", None)
+
+    def ancorar(self):
+        """Passo informado (leu a tela, esperou um texto, abriu algo): a referência passa a ser a janela atual."""
+        if self.rapido:
+            ev = eventos()
+            if ev:
+                self.base = self.janela = ev[2]
+        self.rolou = False
+
+    def conferir_coordenadas(self, p, onde, rolagem=True):
+        """Toque às cegas (por coordenada) só na tela em que ela foi lida; senão para e manda olhar de novo."""
+        if not self.rapido or p.get("confiar") or self.base is None:
+            return
+        if self.rolou and rolagem:
+            raise _Interrompido(f"a tela rolou antes do {onde}: as coordenadas antigas não valem (olhe de novo)", None)
+        ev = eventos()
+        if ev and janela_nova(self.base, ev[2], self.app):
+            if self.lidar_anuncio(ev[2]) or self.aplicar_reflexo(ev[2]):
+                return
+            raise _Interrompido(f"a tela mudou antes do {onde} ({_janela_curta(ev[2])}): as coordenadas eram de "
+                                "outra tela (olhe de novo)", None)
+
+    def tocar_vigiando(self, pontos, pausa, onde):
+        """Toques em leva que param na hora se surgir outra janela (aviso, anúncio, fim de jogo) ou um texto de
+        parar_se. Com parar_se, a leva vai em pedaços de 2 toques e a tela só é lida se algo mudou."""
+        self.conferir_app()
+        pedaco = 2 if self.parar_se else len(pontos)
+        k, reanuncios = 0, 0
+        while k < len(pontos):
+            ev = eventos() if self.parar_se else None
+            parte = pontos[k:k + pedaco]
+            # a mesma tela se anunciando sem parar (animação): o resto da leva vai sem o reflexo de janela
+            cmd = "toquesv" if self.parar_em_janela is not False and reanuncios < 20 else "toques"
+            r = (self.injetar_cru(f"{cmd} {int(pausa * 1000)} " + " ".join(f"{x} {y}" for x, y in parte)))
+            if r is None:  # leitor caiu: o resto pelo shell, sem reflexo
+                linhas = []
+                for x, y in pontos[k:]:
+                    linhas += [f"input tap {x} {y} || exit 3"] + ([f"sleep {pausa:.2f}"] if pausa else [])
+                self.bloco += linhas
+                self.descarregar()
+                return
+            if r.startswith("parou"):
+                _, n, info = (r.split(" ", 2) + ["", ""])[:3]
+                k += int(n)
+                if not self.checar_janela(info, f"{onde}, depois de {k} de {len(pontos)} toques"):
+                    self.janela = info  # a mesma tela se anunciando de novo: segue
+                reanuncios += 1
+                if time.time() > self.prazo:
+                    raise _Falha({"erro": f"a sequência passou de {PRAZO_SEQUENCIA} s"})
+                continue
+            k += len(parte)
+            if self.parar_se and ev is not None:
+                depois = eventos()
+                if depois is None or depois[1] != ev[1]:
+                    self.checar_texto(f"{onde}, depois de {k} de {len(pontos)} toques")
+
+    def injetar_cru(self, comando):
+        a = _ajudante()
+        return a.pedir(comando, 60) if a else None
+
+    def injetar(self, comando, linhas):
+        """Pelo leitor (conferindo o app antes); se ele não responder, pelo shell (que confere o app no script).
+        Sem o leitor, as linhas entram na fila do shell e saem juntas antes da próxima leitura da tela."""
+        if self.rapido:
+            self.conferir_app()
+            if _injetar(comando):
+                return
+            self.bloco += linhas
+            self.descarregar()
+            return
+        self.bloco += linhas
+
+    def esperar_mudanca(self, segundos, ignorar):
+        """Fica olhando até a tela mudar de verdade (fora do que estiver em `ignorar`: ids ou textos, ex. um relógio)."""
+        t0 = time.time()
+        fim = t0 + segundos
+        ign = [normalizar(i) for i in ignorar]
+
+        def relevantes():
+            return [e for e in compactos(self.ver_elementos())
+                    if not any(i and (i == normalizar(e.get("id")) or i in normalizar(e.get("texto"))) for i in ign)]
+
+        base = relevantes()
+        while time.time() < fim:
+            ev = eventos()
+            if ev is not None:
+                self.injetar_cru(f"aguardar {ev[1]} {int(max(0.05, min(0.7, fim - time.time())) * 1000)}")
+            else:
+                time.sleep(0.4)
+            agora = relevantes()
+            if agora != base:
+                break
+        self.t_esperas += time.time() - t0
+
+    # --- passos
+    def rodar(self, passos, rotulo=""):
+        for i, p in enumerate(passos):
+            self.n += 1
+            if self.n > MAX_EXECUTADOS:
+                raise _Falha({"erro": f"mais de {MAX_EXECUTADOS} passos executados (laço sem fim?)"})
+            if time.time() > self.prazo:
+                raise _Falha({"erro": f"a sequência passou de {PRAZO_SEQUENCIA} s"})
+            onde = f"passo {rotulo}{i + 1}"
+            if not isinstance(p, dict):
+                raise _Falha({"erro": f"{onde} inválido"})
+            try:
+                self.passo(p, onde)
+            except (ValueError, TypeError, IndexError, KeyError) as e:
+                raise _Falha({"erro": f"{onde}: {e}"}) from e
+            self.feitos += 1
+            if isinstance(p.get("tocar"), str) or any(k in p for k in ("esperar_texto", "esperar_sumir", "abrir",
+                                                                       "esperar_mudanca", "se", "se_nao", "repetir")):
+                self.ancorar()
+            if self.parar_se and "se" not in p and "se_nao" not in p and "repetir" not in p:
+                self.checar_texto(f"depois do {onde}")
+            if self.parar_em_janela and self.rapido:
+                ev = eventos()
+                if ev and not self.checar_janela(ev[2], f"depois do {onde}"):
+                    self.janela = ev[2]
+            if "abrir" in p:
+                self.app_inicial = str(p["abrir"])
+            elif normalizar(p.get("tecla")) in ("inicio", "recentes"):
+                self.app_inicial = None  # saiu do app de propósito
+            elif self.rapido:
+                self.lidar_anuncio()
+                self.conferir_outro_app(onde)
+
+    def passo(self, p, onde):
+        if not self.rapido:
+            linhas = _linhas_do_passo(p)
+            if linhas is not None:
+                self.bloco += linhas
+                return
+            self.descarregar()  # passo que depende da tela: roda o que acumulou e olha
+        if "tocar" in p:
+            alvo = p["tocar"]
+            if isinstance(alvo, str):
+                e = achar(self.ver_elementos(), alvo)
+                if not e:
+                    raise _Falha({"erro": f"{onde}: nenhum elemento com “{alvo}” na tela", "app": foco()})
+                pontos = [[e["x"], e["y"]]]
+            else:
+                pontos = alvo if alvo and isinstance(alvo[0], (list, tuple)) else [alvo]
+                self.conferir_coordenadas(p, onde)
+            pontos = [[int(x), int(y)] for x, y in pontos]
+            self.tocados += pontos
+            pausa = max(0.0, min(float(p.get("intervalo", 0.05)), 5.0))
+            if p.get("segurar"):
+                ms = max(50, min(int(p["segurar"]), 5000))
+                for k, (x, y) in enumerate(pontos):
+                    if k and pausa:
+                        time.sleep(pausa)
+                    self.injetar(f"tocar {x} {y} {ms}", [f"input swipe {x} {y} {x} {y} {ms} || exit 3"])
+                return
+            if self.rapido and (len(pontos) > 1 or self.parar_se) and self.parar_em_janela is not False:
+                self.tocar_vigiando(pontos, pausa, onde)
+                return
+            cmd = f"toques {int(pausa * 1000)} " + " ".join(f"{x} {y}" for x, y in pontos)
+            linhas = []
+            for x, y in pontos:
+                linhas += [f"input tap {x} {y} || exit 3"] + ([f"sleep {pausa:.2f}"] if pausa else [])
+            self.injetar(cmd, linhas)
+        elif "deslizar" in p:
+            self.conferir_coordenadas(p, onde, rolagem=False)  # rolar de novo é normal; só a janela importa
+            self.rolou = True
+            v = [int(n) for n in p["deslizar"]]
+            ms = v[4] if len(v) > 4 else 300
+            self.injetar(f"deslizar {v[0]} {v[1]} {v[2]} {v[3]} {ms}",
+                         [f"input swipe {v[0]} {v[1]} {v[2]} {v[3]} {ms} || exit 3"])
+        elif "tecla" in p:
+            cod = TECLAS.get(normalizar(p["tecla"]))
+            if cod is None:
+                raise ValueError(f"tecla deve ser uma de: {', '.join(TECLAS)}")
+            self.injetar(f"tecla {cod}", [f"input keyevent {cod} || exit 3"])
+            self.app_em = 0.0  # voltar/início podem trocar de app
+        elif "digitar" in p:
+            self.app_em = 0.0
+            self.conferir_app()
+            if not _injetar("texto " + str(p["digitar"]).encode().hex()):
+                texto, _ = escapar_input_text(str(p["digitar"]))
+                if texto:
+                    self.bloco = [f"input text {shlex.quote(texto)} || exit 3"]
+                    self.descarregar()
+        elif "esperar" in p:
+            t = min(float(p["esperar"]), 10)
+            self.t_esperas += t
+            time.sleep(t)
+        elif "calma" in p:
+            v = p["calma"]
+            limite = 1000 if v is True else int(max(0.1, min(float(v), 10)) * 1000)  # segundos, no máximo 10
+            t = time.time()
+            calma(int(p.get("quieto_ms", 120)), limite)
+            self.t_esperas += time.time() - t
+        elif "abrir" in p:
+            pac = str(p["abrir"])
+            if not re.match(r"^[A-Za-z][\w.]{2,120}$", pac):
+                raise ValueError("pacote inválido")
+            _, erro, cod = rish(f"monkey -p {pac} -c android.intent.category.LAUNCHER 1")
+            if cod != 0 or "No activities found" in erro:
+                raise _Falha({"erro": f"{onde}: não consegui abrir {pac}: {erro.strip()[:200]}"})
+            self.app_em = 0.0
+            if self.rapido:
+                calma(150, 2500)
+            else:
+                time.sleep(1)
+        elif "esperar_texto" in p or "esperar_sumir" in p:
+            texto = p.get("esperar_texto") or p.get("esperar_sumir")
+            quer = "esperar_texto" in p
+            limite = time.time() + min(float(p.get("ate", 10)), 30)
+            t = time.time()
+            while self.presente(texto) != quer:
+                if self.lidar_anuncio():
+                    limite = max(limite, time.time() + 5)  # o tempo do anúncio não conta
+                    continue
+                if time.time() > limite:
+                    raise _Falha({"erro": f"{onde}: “{texto}” {'não apareceu' if quer else 'não sumiu'} a tempo",
+                                  "app": foco()})
+                time.sleep(0.08 if self.rapido else 0.4)
+            self.t_esperas += time.time() - t
+        elif "esperar_mudanca" in p:
+            self.esperar_mudanca(min(float(p["esperar_mudanca"]), 30), p.get("ignorar") or [])
+        elif "se" in p or "se_nao" in p:
+            texto = p.get("se") if "se" in p else p.get("se_nao")
+            verdade = self.presente(texto) == ("se" in p)
+            ramo = p.get("entao" if verdade else "senao") or []
+            if not isinstance(ramo, list):
+                raise ValueError("entao/senao devem ser listas de passos")
+            self.rodar(ramo, f"{onde.split()[-1]}.{'entao' if verdade else 'senao'}.")
+        elif "repetir" in p:
+            corpo = p["repetir"]
+            if not isinstance(corpo, list) or not corpo:
+                raise ValueError("repetir deve ser uma lista de passos")
+            vezes = max(1, min(int(p.get("vezes", 50)), 500))
+            ate = p.get("ate_texto") or p.get("ate_sumir")
+            for k in range(vezes):
+                self.rodar(corpo, f"{onde.split()[-1]}.{k + 1}.")
+                if ate is not None and self.presente(ate) == ("ate_texto" in p):
+                    return
+            if ate is not None:
+                raise _Falha({"erro": f"{onde}: repetiu {vezes} vezes e “{ate}” "
+                                      f"{'não apareceu' if 'ate_texto' in p else 'não sumiu'}"})
+        else:
+            raise ValueError(f"passo desconhecido: {json.dumps(p, ensure_ascii=False)[:80]}")
+
+
+def sequencia(a):
+    passos = a.get("passos") or []
+    if not isinstance(passos, list) or not passos:
+        return {"erro": "informe passos: lista de {tocar:[x,y] | tocar:'texto' | tocar:[[x,y],...] | digitar | tecla | "
+                        "deslizar:[x,y,x2,y2] | esperar:s | calma:true | esperar_texto:'...' | esperar_sumir:'...' | "
+                        "abrir:'pacote' | se:'texto',entao:[...],senao:[...] | repetir:[...],vezes,ate_texto}"}
+    try:
+        if _contar(passos) > MAX_PASSOS:
+            return {"erro": f"no máximo {MAX_PASSOS} passos por sequência"}
+    except ValueError as e:
+        return {"erro": str(e)}
+    ex = _Executor()
+    ps = a.get("parar_se") or []
+    ex.parar_se = [ps] if isinstance(ps, str) else [str(t) for t in ps][:20]
+    if a.get("parar_em_janela") is not None:
+        ex.parar_em_janela = bool(a["parar_em_janela"])
+    if ex.rapido:
+        ev = eventos()
+        ex.janela = ev[2] if ev else None
+        ex.base = _ULTIMA.get("janela") or ex.janela  # o Claude planejou em cima da última tela que viu
+        ex.app, ex.app_em = foco(), time.time()
+        ex.app_inicial = ex.app if ex.app and not IGNORAR_APP.search(ex.app) else None
+    ex.com_anuncios = a.get("anuncios", True) is not False
+    interrompido = None
+    try:
+        ex.rodar(passos)
+        ex.descarregar()
+    except _Falha as f:
+        tela = {}
+        try:  # o erro já volta com a tela atual (sem chamada extra), mas só se ainda é o app da sequência:
+            atual = foco()  # outro app (ex.: o dono abriu uma conversa) não é lido — privacidade
+            if atual and atual in (ex.app_inicial, ex.app):
+                tela = _ver_depois(dict(a, ver_depois=a.get("ver_depois") if a.get("ver_depois") != "nada" else "auto"))
+            elif atual:
+                tela = {"app_em_foco": atual, "nota": "outro app em uso: a tela não foi lida"}
+        except Exception:  # noqa: BLE001
+            pass
+        return {**f.info, "feitos": ex.feitos, **({"anuncios": ex.anuncios} if ex.anuncios else {}), **tela}
+    except _Interrompido as i:
+        interrompido = {"interrompido": i.motivo, **({"elemento": curto(i.elemento)} if i.elemento else {})}
+    if ex.usados:
+        interrompido = {**(interrompido or {}), "reflexos": ex.usados}
+    if ex.anuncios:
+        interrompido = {**(interrompido or {}), "anuncios": ex.anuncios}
+    gasto = time.time() - ex.t0
+    tempos = {"acoes": round(gasto - ex.t_esperas, 2)}
+    if ex.t_esperas:
+        tempos["esperas"] = round(ex.t_esperas, 2)
+    t = time.time()
+    atual = foco() if ex.rapido and ex.app_inicial else None
+    if atual and atual != ex.app_inicial and not IGNORAR_APP.search(atual) and not any("abrir" in p for p in passos
+                                                                                      if isinstance(p, dict)):
+        depois = {"app_em_foco": atual, "nota": "outro app em primeiro plano: a tela não foi lida"}  # privacidade
+    else:
+        depois = _ver_depois(a, tocados=ex.tocados)
+    tempos["olhar"] = round(time.time() - t, 2)
+    return {**(interrompido or {}), "feito": f"{ex.feitos} passos em {gasto:.1f} s", "tempos": tempos, **depois}
 
 
 def agir(a):
     acao = a["acao"]
+    if acao == "sequencia":
+        return sequencia(a)
     app = foco()
     if acao in ("tocar", "digitar", "deslizar") and bloqueado(app, bloqueados()):
         return {"erro": f"recusado: o app em foco ({app}) está na lista de bloqueados (banco/pagamento/senha). "
                         "Edite ~/.controle-ir/tela_bloqueados.json no celular se quiser mudar isso."}
+    if acao in ("tocar", "deslizar") and a.get("texto") is None and not a.get("confiar") and _ULTIMA.get("janela"):
+        ev = eventos()  # coordenada lida numa tela que já não está aí: não toca, mostra a atual
+        if ev and janela_nova(_ULTIMA["janela"], ev[2], app):
+            return {"interrompido": f"a tela mudou desde a última olhada ({_janela_curta(ev[2])}): as coordenadas "
+                                    "eram de outra tela (olhe de novo)", **_ver_depois(a, "auto")}
     if acao == "tocar":
         x, y, alvo = a.get("x"), a.get("y"), None
         if a.get("texto"):
@@ -281,32 +1537,38 @@ def agir(a):
             x, y = alvo["x"], alvo["y"]
         if x is None or y is None:
             return {"erro": "informe x e y, ou texto"}
-        out, err, cod = rish(f"input tap {int(x)} {int(y)}")
-        if _bloqueio_de_toque(out + err, cod):
-            return {"erro": _bloqueio_de_toque(out + err, cod)}
-        res = {"feito": f"toque em {int(x)},{int(y)}", "elemento": alvo}
+        if not _injetar(f"tocar {int(x)} {int(y)}"):
+            out, err, cod = rish(f"input tap {int(x)} {int(y)}")
+            if _bloqueio_de_toque(out + err, cod):
+                return {"erro": _bloqueio_de_toque(out + err, cod)}
+        res = {"feito": f"toque em {int(x)},{int(y)}", "elemento": compactos([alvo])[0] if alvo else None}
     elif acao == "digitar":
-        texto, aviso = escapar_input_text(a.get("texto", ""))
-        if not texto:
-            return {"erro": "nada para digitar"}
-        out, err, cod = rish("input text " + shlex.quote(texto))
-        if _bloqueio_de_toque(out + err, cod):
-            return {"erro": _bloqueio_de_toque(out + err, cod)}
-        res = {"feito": f"digitado ({len(a.get('texto', ''))} caracteres)", "aviso": aviso}
+        if _injetar("texto " + str(a.get("texto", "")).encode().hex()):  # com acentos, no campo em foco
+            res = {"feito": f"digitado ({len(a.get('texto', ''))} caracteres)"}
+        else:
+            texto, aviso = escapar_input_text(a.get("texto", ""))
+            if not texto:
+                return {"erro": "nada para digitar"}
+            out, err, cod = rish("input text " + shlex.quote(texto))
+            if _bloqueio_de_toque(out + err, cod):
+                return {"erro": _bloqueio_de_toque(out + err, cod)}
+            res = {"feito": f"digitado ({len(a.get('texto', ''))} caracteres)", "aviso": aviso}
     elif acao == "tecla":
         cod = TECLAS.get(normalizar(a.get("tecla")))
         if cod is None:
             return {"erro": f"tecla deve ser uma de: {', '.join(TECLAS)}"}
-        out, err, rc = rish(f"input keyevent {cod}")
-        if _bloqueio_de_toque(out + err, rc):
-            return {"erro": _bloqueio_de_toque(out + err, rc)}
+        if not _injetar(f"tecla {cod}"):
+            out, err, rc = rish(f"input keyevent {cod}")
+            if _bloqueio_de_toque(out + err, rc):
+                return {"erro": _bloqueio_de_toque(out + err, rc)}
         res = {"feito": f"tecla {a['tecla']}"}
     elif acao == "deslizar":
         if None in (a.get("x"), a.get("y"), a.get("x2"), a.get("y2")):
             return {"erro": "informe x, y, x2, y2"}
-        out, err, cod = rish(f"input swipe {int(a['x'])} {int(a['y'])} {int(a['x2'])} {int(a['y2'])} 350")
-        if _bloqueio_de_toque(out + err, cod):
-            return {"erro": _bloqueio_de_toque(out + err, cod)}
+        if not _injetar(f"deslizar {int(a['x'])} {int(a['y'])} {int(a['x2'])} {int(a['y2'])} 350"):
+            out, err, cod = rish(f"input swipe {int(a['x'])} {int(a['y'])} {int(a['x2'])} {int(a['y2'])} 350")
+            if _bloqueio_de_toque(out + err, cod):
+                return {"erro": _bloqueio_de_toque(out + err, cod)}
         res = {"feito": "deslizou"}
     elif acao == "abrir":
         pac = a.get("pacote") or ""
@@ -317,34 +1579,46 @@ def agir(a):
             return {"erro": f"não consegui abrir {pac}: {erro.strip()[:200]}"}
         res = {"feito": f"abriu {pac}"}
     else:
-        return {"erro": "acao deve ser ver, tocar, digitar, tecla, deslizar, abrir ou estado"}
+        return {"erro": "acao deve ser ver, tocar, digitar, tecla, deslizar, abrir, sequencia ou estado"}
     espera = float(a.get("esperar") or 0)
     if espera > 0:
         time.sleep(min(espera, 10))
-        res["tela"] = ver(bool(a.get("imagem", True)), int(a.get("largura", 720)))
-    else:
-        res["app"] = foco()
+    # depois de agir: com o leitor rápido, espera a tela assentar e diz só o que mudou; sem ele, só o app em foco
+    ponto = [[int(a["x"]), int(a["y"])]] if acao == "tocar" and a.get("x") is not None else []
+    res.update(_ver_depois(a, "elementos" if espera > 0 and not _ajudante() else None, tocados=ponto))
     return res
 
 
-def main():
-    a = json.loads(sys.stdin.read() or "{}")
+def executar(a):
+    """Ponto de entrada: o serviço chama direto (EM_PROCESSO) e o modo antigo passa por main()."""
     acao = a.get("acao")
     try:
         if acao == "estado":
-            out, _, _ = rish("id")
+            out, _, _ = rish("id; dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'; "
+                             "dumpsys power | grep -m1 mWakefulness=")
             r = {"rish": "ok" if "uid=2000" in out or "uid=0" in out else out.strip()[:120],
-                 "app": foco(), "tela_acesa": tela_acesa(), "ffmpeg": bool(shutil.which("ffmpeg"))}
+                 "app": app_em_foco(out), "tela_acesa": "Awake" in out, "ffmpeg": bool(shutil.which("ffmpeg"))}
         elif acao == "ver":
             largura = max(320, min(int(a.get("largura", 720)), 1080))
-            r = ver(bool(a.get("imagem", True)), largura)
+            r = ver(bool(a.get("imagem", True)), largura, bool(a.get("elementos", True)), a.get("recorte"),
+                    so_mudancas=bool(a.get("so_mudancas")), formato=a.get("formato", "curto"))
+        elif acao == "grade":
+            r = grade(a)
+        elif acao == "fechar_anuncio":
+            r = fechar_anuncio(foco(), min(float(a.get("limite", 45)), 120)) if em_anuncio() else {"anuncio": "nenhum"}
+        elif acao == "reflexos":
+            r = reflexos(a.get("regras"))
         else:
             r = agir(a)
     except SemShizuku as e:
         r = {"erro": str(e), "precisa": "shizuku"}
     except subprocess.TimeoutExpired:
         r = {"erro": "o comando na tela demorou demais (o celular pode estar travado ou com a tela apagada)"}
-    print(json.dumps(r, ensure_ascii=False))
+    return r
+
+
+def main():
+    print(json.dumps(executar(json.loads(sys.stdin.read() or "{}")), ensure_ascii=False))
 
 
 if __name__ == "__main__":

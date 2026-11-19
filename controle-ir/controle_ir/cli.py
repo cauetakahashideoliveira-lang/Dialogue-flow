@@ -898,7 +898,9 @@ def _iniciar(args, trava):
             n = servico.exec.parar_todas()
             servico.exec.auditar({"evento": "reduzido_pelo_painel", "motivo": motivo, "tarefas_encerradas": n})
             _aviso(f"Controle IR: {motivo}")
-        painel_mod.Sincronizador(PASTA, __version__, reduzir).iniciar()
+        painel_mod.Sincronizador(PASTA, __version__, reduzir,
+                                 url_mcp=lambda: f"{servico.url_publica}/mcp/{c['segredo']}"
+                                 if servico.url_publica else None).iniciar()
     inicio = time.time()
 
     def gravar_estado(url=None):

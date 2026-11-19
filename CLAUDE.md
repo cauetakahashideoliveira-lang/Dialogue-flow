@@ -27,7 +27,10 @@
   os dados (`widgets`, `memoria`, `eventos`) ficam no banco do artefato (ferramenta ArtifactData).
 - **Segurança** (`docs/seguranca.md`): desde a 1.0.23 o sistema fica DESARMADO por padrão (pelo conector só
   infravermelho, consulta e travar); o dono arma no celular (widget “Armar Controle IR”). Não há como armar,
-  destravar ou aprovar pelo conector (autorizar só com o código do autenticador). Etapa 1: painel com passkey.
+  destravar ou aprovar pelo conector (autorizar só com o código do autenticador). **Painel da Casa** (`painel/`,
+  Cloudflare Worker): pareado (1.0.24+), só ele arma, com a digital; desde a 1.0.26 o conector pode entrar por ele
+  (`https://<painel>/mcp`, OAuth com a digital, bloqueio na borda). Mudança no painel = PR que o dono aprova (merge);
+  teste local: `painel/testes/e2e.cjs` com `wrangler dev` sem as variáveis de proxy.
 - Pedidos de aprovação do conector vêm da regra da organização no claude.ai (`org_ask_ceiling`); não tente
   contornar. Ferramentas novas do conector só aparecem em conversas novas (lista fixa por conversa).
 - **`/god-mode`** (`.claude/skills/god-mode/`, adaptação AGPL do G0DM0D3): AutoTune, notas, STM, `perguntar` e

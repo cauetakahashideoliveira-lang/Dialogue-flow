@@ -62,6 +62,21 @@ function render() {
     rv.onclick = () => acao(() => comDigital(() => api('revogar', { tipo: 'aparelho', id: a.id })), 'Celular revogado');
     cel.append(rv);
   }
+  $('enderecoConector').textContent = dados.conector || '';
+  const cel0 = ativos[0];
+  $('celularMcp').textContent = !cel0 ? '' : cel0.estado.tem_mcp
+    ? `✓ o celular informou o endereço dele ${ha(cel0.estado.mcp_url_em)}: o painel repassa as chamadas, assinadas`
+    : '… aguardando o celular informar o endereço (precisa da versão 1.0.26 ou mais nova)';
+  $('soPainel').checked = !!(cel0 && cel0.estado.so_pelo_painel);
+  $('soPainel').disabled = !cel0;
+  const ac = $('acessos'); ac.replaceChildren();
+  if (!dados.acessos.length) ac.append(el('li', 'Nenhum acesso autorizado ainda.', 'suave'));
+  for (const g of dados.acessos) {
+    const li = el('li', `${g.cliente} → ${g.destino || '?'} · autorizado ${ha(g.criado)}`);
+    const b = el('button', 'Revogar acesso', 'sec');
+    b.onclick = () => acao(() => api('acesso/revogar', { id: g.id }), 'Acesso revogado');
+    li.append(b); ac.append(li);
+  }
   const pk = $('passkeys'); pk.replaceChildren();
   for (const p of dados.passkeys.filter(p => !p.revogada)) {
     const li = el('li', `${p.nome}${p.sua ? ' (esta sessão)' : ''} · último uso ${ha(p.ultimo_uso)}`);
@@ -120,6 +135,8 @@ $('btArmarDia').onclick = () => acao(() => comDigital(() => api('armar', { ate: 
 $('btArmar2').onclick = () => acao(() => comDigital(() => api('armar', { horas: 2 })), 'Armado por 2 h');
 $('btDesarmar').onclick = () => acao(() => api('desarmar'), 'Desarmado');
 $('btEmergencia').onclick = () => { if (confirm('Cortar todo o acesso agora? Só volta armando de novo com a digital.')) acao(() => api('emergencia'), 'EMERGÊNCIA aplicada'); };
+$('soPainel').onchange = e => acao(() => e.target.checked ? api('so_pelo_painel', { valor: 1 })
+  : comDigital(() => api('so_pelo_painel', { valor: 0 })), e.target.checked ? 'Agora o Claude só entra pelo painel' : 'Conector direto aceito de novo');
 $('permite').onchange = e => acao(() => comDigital(() => api('desarmado_permite', { valor: e.target.value })), 'Atualizado');
 $('btParear').onclick = () => acao(() => comDigital(async () => {
   const { codigo, expira_em_min } = await api('celular/codigo');

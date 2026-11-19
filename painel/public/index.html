@@ -24,7 +24,7 @@
   .estado { font-size:1.15rem; font-weight:700; } .ok { color:var(--ok); } .alerta { color:var(--alerta); } .perigo-t { color:var(--perigo); }
   .suave { color:var(--suave); font-size:.9rem; } code { background:var(--fundo); padding:2px 6px; border-radius:6px; word-break:break-all; }
   ul { list-style:none; padding:0; margin:0; } li { padding:8px 0; border-bottom:1px solid var(--linha); }
-  li:last-child { border:0; } #msg { min-height:1.4em; } .escondido { display:none; }
+  li:last-child { border:0; } .linha-check { display:flex; gap:10px; align-items:flex-start; } .linha-check input { width:auto; margin-top:4px; } #msg { min-height:1.4em; } .escondido { display:none; }
 </style>
 </head>
 <body>
@@ -57,6 +57,16 @@
       <label class="suave">Desarmado, pelo conector passa:
         <select id="permite"><option value="ir">infravermelho e consulta</option><option value="nada">só consulta</option></select></label>
       <button id="btEmergencia" class="perigo">EMERGÊNCIA: cortar todo o acesso</button>
+    </section>
+    <section>
+      <h2>Conector do Claude</h2>
+      <p class="suave">No claude.ai: Configurações → Conectores → Adicionar conector personalizado → cole o endereço abaixo.
+        O login pede a sua digital aqui no painel.</p>
+      <p><code id="enderecoConector"></code></p>
+      <p id="celularMcp" class="suave"></p>
+      <label class="linha-check"><input type="checkbox" id="soPainel"> Aceitar o Claude só pelo painel
+        (ligue depois de testar o conector novo; o endereço antigo do ngrok para de funcionar)</label>
+      <ul id="acessos"></ul>
     </section>
     <section>
       <h2>Aparelhos e passkeys</h2>

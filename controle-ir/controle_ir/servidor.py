@@ -22,6 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from . import painel as painel_mod
 from .mcp import ServidorMCP
 from .servico import ErroUso, Servico
 
@@ -259,6 +260,7 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
             if n > LIMITE_CORPO:
                 raise ValueError("corpo grande demais")
             dados = self.rfile.read(n) if n else b""
+            self._bruto = dados
             return json.loads(dados.decode() or "null") if dados else None
 
         def _rota(self):
@@ -320,8 +322,17 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
                     time.sleep(0.5)
                     return self._json(401, {"erro": "segredo inválido"},
                                       {"WWW-Authenticate": 'Bearer realm="controle-ir"'})
-                if not origens.verificar(self.headers.get("X-Forwarded-For")):
-                    return self._json(403, {"erro": "origem não permitida"})
+                ass = self.headers.get("X-Painel-Assinatura")
+                if ass is not None:  # repassada pelo Painel da Casa (OAuth na borda): só vale assinada por ele
+                    if not painel_mod.verificar_requisicao(servico.pasta, ass, getattr(self, "_bruto", b"")):
+                        servico.exec.auditar({"evento": "assinatura_do_painel_recusada"})
+                        return self._json(401, {"erro": "assinatura do painel inválida ou repetida"})
+                else:
+                    if servico.exec.politica.efetiva().get("so_pelo_painel"):
+                        servico.exec.auditar({"evento": "chamada_direta_recusada"})
+                        return self._json(403, {"erro": "este celular só aceita o Claude pelo Painel da Casa"})
+                    if not origens.verificar(self.headers.get("X-Forwarded-For")):
+                        return self._json(403, {"erro": "origem não permitida"})
                 servico.ultima_requisicao_claude = time.time()
                 status, resp = mcp.tratar(corpo)
                 return self._json(status, resp)

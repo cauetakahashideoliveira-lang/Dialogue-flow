@@ -138,6 +138,8 @@ class Politica:
             p["travado"] = bool(p["travado"] or (e and e.get("travado")))
             p["desarmado_permite"] = e.get("desarmado_permite", "ir") if e else "ir"
             p["painel_seq"] = e["seq"] if e else None
+            cfg = painel.ler(self.arq.parent) or {}
+            p["so_pelo_painel"] = bool(cfg.get("so_pelo_painel"))  # último valor assinado (fica mesmo sem rede)
         return p
 
     def decidir(self, classe: str) -> str:
@@ -161,8 +163,12 @@ class Politica:
                 "armado_ate": time.strftime("%d/%m %H:%M", time.localtime(float(p["armado_ate"])))
                 if armado(p) else None,
                 "desarmado_permite": p["desarmado_permite"],
-                "painel": {"pareado": True, "seq": p.get("painel_seq")} if p.get("modo_painel") else None,
-                "como_mudar": "só no celular: controle-ir armar [horas] · controle-ir desarmar · "
+                "painel": {"pareado": True, "seq": p.get("painel_seq"), "so_pelo_painel": p.get("so_pelo_painel")}
+                if p.get("modo_painel") else None,
+                "como_mudar": ("pelo Painel da Casa (armar com a digital, desarmar, EMERGÊNCIA); no celular: "
+                               "controle-ir desarmar · controle-ir exec travar. Pelo conector: travar.")
+                if p.get("modo_painel") else
+                              "só no celular: controle-ir armar [horas] · controle-ir desarmar · "
                               "controle-ir exec classe <classe> permitir|perguntar|negar · controle-ir exec "
                               "travar|destravar · controle-ir exec remoto codigo|desligada. Pelo conector: travar "
                               "(e autorizar só com o código do autenticador)."}

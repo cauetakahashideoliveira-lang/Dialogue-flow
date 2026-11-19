@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "mcp__Controle_master",
-      "mcp__Controle_master__*"
+      "mcp__Controle_master__*",
+      "mcp__96238baf-d75f-494e-8948-efdbfa7d7344",
+      "mcp__96238baf-d75f-494e-8948-efdbfa7d7344__*"
     ]
   },
   "hooks": {

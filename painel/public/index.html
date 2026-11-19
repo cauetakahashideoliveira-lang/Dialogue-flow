@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<title>Painel da Casa</title>
+<style>
+  :root { --fundo:#f6f7f9; --cartao:#fff; --texto:#15181d; --suave:#5d6571; --linha:#dfe3e8; --ok:#1d7f46;
+    --alerta:#b45309; --perigo:#c0262d; --botao:#1f4fd8; --botao-texto:#fff; }
+  @media (prefers-color-scheme: dark) { :root { --fundo:#0f1115; --cartao:#181b21; --texto:#eceff3; --suave:#9aa3ae;
+    --linha:#2a2f37; --ok:#3fbf73; --alerta:#f0a23b; --perigo:#ff5a5f; --botao:#4b74f0; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--fundo); color:var(--texto); font:16px/1.45 system-ui,-apple-system,sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.35rem; margin:8px 0 16px; } h2 { font-size:1.05rem; margin:0 0 10px; }
+  section { background:var(--cartao); border:1px solid var(--linha); border-radius:14px; padding:16px; margin-bottom:14px; }
+  button { font:inherit; border:0; border-radius:10px; padding:12px 14px; background:var(--botao); color:var(--botao-texto);
+    width:100%; margin:6px 0; cursor:pointer; } button.sec { background:transparent; color:var(--texto); border:1px solid var(--linha); }
+  button.perigo { background:var(--perigo); font-weight:700; padding:16px; } button:disabled { opacity:.5; }
+  input, select { font:inherit; width:100%; padding:10px; border-radius:10px; border:1px solid var(--linha);
+    background:var(--fundo); color:var(--texto); margin:4px 0 8px; }
+  .linha { display:flex; gap:8px; } .linha > * { flex:1; }
+  .estado { font-size:1.15rem; font-weight:700; } .ok { color:var(--ok); } .alerta { color:var(--alerta); } .perigo-t { color:var(--perigo); }
+  .suave { color:var(--suave); font-size:.9rem; } code { background:var(--fundo); padding:2px 6px; border-radius:6px; word-break:break-all; }
+  ul { list-style:none; padding:0; margin:0; } li { padding:8px 0; border-bottom:1px solid var(--linha); }
+  li:last-child { border:0; } #msg { min-height:1.4em; } .escondido { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Painel da Casa</h1>
+  <p id="msg" class="suave" role="status"></p>
+
+  <section id="entrar">
+    <h2>Entrar</h2>
+    <button id="btEntrar">Entrar com a digital</button>
+    <details>
+      <summary class="suave">Primeiro acesso</summary>
+      <label>Código inicial (definido na Cloudflare)<input id="codigoInicial" autocomplete="off"></label>
+      <label>Nome deste aparelho<input id="nomePasskey" placeholder="ex.: iPad"></label>
+      <button id="btPrimeiro" class="sec">Cadastrar a primeira passkey</button>
+    </details>
+    <div id="aceitarConvite" class="escondido">
+      <p>Você abriu um convite para cadastrar a digital deste aparelho.</p>
+      <label>Nome deste aparelho<input id="nomeConvite" placeholder="ex.: iPad"></label>
+      <button id="btAceitar">Cadastrar a digital deste aparelho</button>
+    </div>
+  </section>
+
+  <div id="logado" class="escondido">
+    <section>
+      <h2>Celular</h2>
+      <div id="celulares"></div>
+      <div class="linha"><button id="btArmarDia">Armar até a meia-noite</button><button id="btArmar2">Armar 2 h</button></div>
+      <button id="btDesarmar" class="sec">Desarmar</button>
+      <label class="suave">Desarmado, pelo conector passa:
+        <select id="permite"><option value="ir">infravermelho e consulta</option><option value="nada">só consulta</option></select></label>
+      <button id="btEmergencia" class="perigo">EMERGÊNCIA: cortar todo o acesso</button>
+    </section>
+    <section>
+      <h2>Aparelhos e passkeys</h2>
+      <ul id="passkeys"></ul>
+      <button id="btConvite" class="sec">Convidar outro aparelho (ex.: iPad)</button>
+      <p id="convite" class="suave"></p>
+      <button id="btNovaPasskey" class="sec">Cadastrar outra passkey neste aparelho</button>
+      <button id="btParear" class="sec">Cadastrar um celular (controle-ir)</button>
+      <p id="pareamento" class="suave"></p>
+    </section>
+    <section>
+      <h2>Histórico</h2>
+      <button id="btIntegridade" class="sec">Conferir integridade do histórico</button>
+      <ul id="eventos"></ul>
+    </section>
+    <button id="btSair" class="sec">Sair</button>
+  </div>
+</main>
+<script src="/webauthn.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

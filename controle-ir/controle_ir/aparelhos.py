@@ -192,7 +192,7 @@ class Aparelhos:
 
 def resumo_aparelho(a: dict) -> dict:
     cap = capacidades(a["perfil"], a.get("faixas"))
-    return {
+    out = {
         "nome": a["nome"], "categoria": a.get("categoria"),
         "perfil": a["perfil"].get("nome"), "tipo_controle": cap["tipo_controle"],
         "comandos": len(a["perfil"].get("comandos", [])),
@@ -200,3 +200,125 @@ def resumo_aparelho(a: dict) -> dict:
                                                    if "estado_completo" in cap else []),
         "macros": sorted(a.get("macros", {})),
     }
+    if a.get("observacao"):
+        out["observacao"] = a["observacao"]
+    return out
+
+
+# ------------------------------------------------------------- resumo para o Claude
+LIMITE_TECLAS_RESUMO = 60
+LIMITE_RESUMO = 9000
+
+
+def _curto(texto, n: int) -> str:
+    t = " ".join(str(texto or "").split())
+    return t if len(t) <= n else t[: n - 1].rstrip() + "…"
+
+
+def _faixa_txt(f) -> str:
+    if isinstance(f, dict):
+        if "min" in f and "max" in f:
+            return f"{f['min']}–{f['max']}" + (f" (passo {f['passo']})" if f.get("passo") not in (None, 1) else "")
+        if f.get("valores"):
+            return "|".join(str(v) for v in f["valores"])
+    if isinstance(f, (list, tuple)):
+        return "|".join(str(v) for v in f)
+    return str(f)
+
+
+def _linhas_aparelho(a: dict, mesmos_codigos: list[str], limite_teclas: int) -> list[str]:
+    cap = capacidades(a["perfil"], a.get("faixas"))
+    cat = a.get("categoria")
+    cat_txt = vocabulario.CATEGORIAS.get(cat, (cat or "sem categoria",))[0]
+    tipo = {"estado_completo": "estado completo", "misto": "estado completo + teclas",
+            "teclas": "teclas"}.get(cap["tipo_controle"], cap["tipo_controle"])
+    linhas = [f"- \"{a['nome']}\" — {cat_txt}; perfil {a['perfil'].get('nome') or '?'}; {tipo}"]
+    ec = cap.get("estado_completo")
+    if ec:
+        partes = [f"{par} {_faixa_txt(v)}" for par, v in ec["parametros"].items()]
+        if ec.get("desligar") and "energia" not in cap["parametros"]:
+            partes.append("desligar direto")
+        linhas.append("  config. completa (definir={...}, um envio): " + "; ".join(partes))
+    extras = [c for c in a["perfil"].get("comandos", []) if c.get("adicionado_pelo_usuario") and not c.get("risco")]
+    partes = []
+    for par, d in cap["parametros"].items():
+        if ec and par in ec["parametros"] and "direto" not in d:
+            continue
+        modos = []
+        if d.get("valores"):
+            modos.append("|".join(d["valores"]))
+        if "alternar" in d:
+            modos.append("alterna (precisa do estado)")
+        if "mais" in d or "menos" in d:
+            modos.append("+/−" + (f" {_faixa_txt(d['faixa'])}" if d.get("faixa") else ""))
+        if "ciclo" in d:
+            modos.append("próximo")
+        if d.get("digitos"):
+            modos.append("número 0–9")
+        partes.append(f"{par}: {', '.join(modos) or '?'}")
+    if partes:
+        linhas.append("  parâmetros: " + " · ".join(partes))
+    if extras:
+        linhas.append("  botões criados pelo usuário (teclas=[chave]): " + "; ".join(
+            f"{c['chave']} ({_curto(c.get('rotulo'), 90)})" for c in extras))
+    ja = {c["chave"] for c in extras}
+    if (cap["parametros"].get("canal") or {}).get("digitos"):
+        ja |= {f"numero_{i}" for i in range(10)}  # já descritas como "número 0–9"
+    teclas = []
+    for t in cap["teclas"]:
+        if t["chave"] in ja:
+            continue
+        rot = t.get("rotulo") or ""
+        mesma = normalizar(rot) == normalizar(t["chave"].replace("_", " "))
+        teclas.append(t["chave"] if not rot or mesma else f"{t['chave']} ({_curto(rot, 60)})")
+    if teclas:
+        extra = len(teclas) - limite_teclas
+        txt = ", ".join(teclas[:limite_teclas])
+        if extra > 0:
+            txt += f", … (+{extra}: veja opcoes)"
+        linhas.append("  teclas=[chave]: " + txt)
+    macros = a.get("macros") or {}
+    if macros:
+        linhas.append("  macros: " + "; ".join(
+            f"{k}" + (f" ({_curto(m.get('descricao'), 90)})" if m.get("descricao") else "") for k, m in macros.items()))
+    if mesmos_codigos:
+        linhas.append(f"  mesmos códigos de: {', '.join(mesmos_codigos)} — um envio pode acionar os dois se "
+                      "estiverem ao alcance")
+    if a.get("observacao"):
+        linhas.append(f"  observação: {_curto(a['observacao'], 400)}")
+    return linhas
+
+
+def resumo_para_instrucoes(aparelhos: list[dict], limite_teclas: int = LIMITE_TECLAS_RESUMO,
+                           limite: int = LIMITE_RESUMO) -> str:
+    """Texto compacto com os aparelhos salvos, para as instruções do servidor MCP.
+
+    Lista, por aparelho, o nome exato, os valores aceitos (configuração completa
+    e parâmetros), as teclas avulsas, as macros, os aparelhos que compartilham
+    os mesmos códigos e a observação do usuário. Não inclui o último estado,
+    que muda a cada envio e ficaria velho durante a conversa."""
+    if not aparelhos:
+        return ("Aparelhos salvos: nenhum ainda. Para cadastrar, use buscar (descoberta por testes) e "
+                "salvar_aparelho.")
+    por_perfil: dict[str, list[str]] = {}
+    for a in aparelhos:
+        chave = (a.get("perfil") or {}).get("chave")
+        if chave and not str(chave).startswith("usuario:"):
+            por_perfil.setdefault(chave, []).append(a["nome"])
+    blocos = []
+    for a in sorted(aparelhos, key=lambda x: normalizar(x["nome"])):
+        chave = (a.get("perfil") or {}).get("chave")
+        mesmos = [n for n in por_perfil.get(chave, []) if n != a["nome"]]
+        try:
+            blocos.append("\n".join(_linhas_aparelho(a, mesmos, limite_teclas)))
+        except (KeyError, TypeError, ValueError, AttributeError):
+            blocos.append(f"- \"{a.get('nome')}\" — use opcoes para ver as capacidades")
+    cab = (f"Aparelhos salvos ({len(aparelhos)}; resumo gerado ao conectar — use o nome exato entre aspas). "
+           "Valores com | vão em definir={parâmetro: valor}; +/− vai em ajustar={parâmetro: passos}; "
+           "\"alterna\" só sai sabendo o estado atual; teclas avulsas vão em teclas=[chave]; macros em macro=nome.")
+    texto = cab + "\n" + "\n".join(blocos)
+    if len(texto) > limite:
+        corte = texto.rfind("\n", 0, limite - 80)
+        texto = texto[: corte if corte > 0 else limite - 80] + \
+            "\n… (resumo cortado por tamanho; use consultar e opcoes para os demais)"
+    return texto

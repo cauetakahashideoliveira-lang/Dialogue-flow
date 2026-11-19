@@ -1,0 +1,17 @@
+{
+ "nome": "sono",
+ "titulo": "Laboratório do sono",
+ "descricao": "Durante a noite, a cada poucos minutos grava um trecho curto, conta roncos (rajadas graves no ritmo da respiração), barulhos e o nível de ruído, estima a temperatura do quarto pela bateria e APAGA o áudio na hora (nada de som fica guardado). acao=iniciar (horas, intervalo_min); acao=estado; acao=parar; acao=relatorio (resumo por hora da última noite, para montar o gráfico). Opcional: ajuste_ar={aparelho, dormir_c, madrugada_c, hora_madrugada} muda o ar ao começar e na hora da madrugada — só use com o valor dito pelo usuário.",
+ "executar": "principal.py",
+ "efeito": "leitura",
+ "acessos": ["termux-api: microphone-record (trechos curtos, apagados após a análise)", "termux-api: battery-status", "ffmpeg e numpy", "grava ~/.controle-ir/medicoes/sono-*.jsonl (só números)", "com ajuste_ar: envia comandos ao ar pelo servidor local"],
+ "tempo_limite": 60,
+ "entrada": {"type": "object", "properties": {
+   "acao": {"type": "string", "description": "iniciar | estado | parar | relatorio"},
+   "horas": {"type": "number", "description": "iniciar: duração, 1–12 (padrão 8)"},
+   "intervalo_min": {"type": "integer", "description": "iniciar: minutos entre trechos, 2–30 (padrão 5)"},
+   "duracao_s": {"type": "integer", "description": "iniciar: segundos de cada trecho, 20–120 (padrão 60)"},
+   "ajuste_ar": {"type": "object", "description": "opcional: {aparelho, dormir_c, madrugada_c, hora_madrugada:'03:00'}"},
+   "sessao": {"type": "string", "description": "relatorio: id da noite (padrão: a última)"}
+ }, "required": ["acao"], "additionalProperties": false}
+}

@@ -13,6 +13,8 @@ from pathlib import Path
 
 from . import __version__, formatos, vocabulario
 from .aparelhos import Aparelhos, ErroAparelho, agora, capacidades, hora_legivel, resumo_aparelho
+from .capacidades import ErroCapacidade, Registro
+from .execucao import Execucao
 from .catalogo import Catalogo
 from .controle import Controlador, executar
 from .descoberta import Descoberta, ErroDescoberta
@@ -32,6 +34,8 @@ class Servico:
         self.cat = catalogo or Catalogo(self.pasta / "catalogo.sqlite")
         self.aparelhos = Aparelhos(self.pasta / "aparelhos.json")
         self.desc = Descoberta(self.cat, emissor, self.pasta / "sessao.json", notificar)
+        self.reg = Registro(Path(__file__).resolve().parent.parent / "capacidades", self.pasta, notificar)
+        self.exec = Execucao(self.pasta, notificar)
         self.trava_envio = threading.Lock()
         self.ultima_requisicao_claude: float | None = None
         self.url_publica: str | None = None
@@ -75,7 +79,8 @@ class Servico:
                     "ultima_configuracao_completa": est.get("estado_completo"),
                     "confirmado_por_voce": {k: v["valor"] for k, v in est.get("confirmado", {}).items()},
                     "controle_original_usado_em": hora_legivel(est.get("controle_original_em")),
-                    "alternativos": len(a.get("origem", {}).get("alternativos", []))}
+                    "alternativos": len(a.get("origem", {}).get("alternativos", [])),
+                    **({"observacao": a["observacao"]} if a.get("observacao") else {})}
         if perfil is not None:
             p = self.cat.perfil(perfil)
             if not p:
@@ -197,7 +202,7 @@ class Servico:
 
     def controlar(self, aparelho, ligar=None, definir=None, ajustar=None, teclas=None, macro=None,
                   permitir_alternancia=False, estado_atual=None, simular=False, permitir_servico=False,
-                  repetir_ultimo=False) -> dict:
+                  repetir_ultimo=False, ouvir=False) -> dict:
         a = self._aparelho(aparelho)
         if repetir_ultimo:
             if not a.get("ultimo_pedido"):
@@ -211,12 +216,18 @@ class Servico:
                         "permitir_alternancia": permitir_alternancia, "estado_atual": estado_atual,
                         "permitir_servico": permitir_servico}]
         resultados = []
+        escuta = self._comecar_escuta() if ouvir and not simular else None
+        # o que o ruído do ar deve fazer: ligar → cômodo mais barulhento; desligar → mais silencioso
+        esperado = None if (macro or repetir_ultimo) else {True: "mais_alto", False: "mais_baixo"}.get(ligar)
+        t_envio = None
         with self.trava_envio:
             for i, ped in enumerate(pedidos):
                 ped = {k: v for k, v in ped.items() if v not in (None, {}, [])}
                 ped.setdefault("permitir_alternancia", permitir_alternancia)
                 ctrl = Controlador(a)
                 plano = ctrl.planejar(ped)
+                if t_envio is None:
+                    t_envio = time.time()
                 r = executar(a, plano, self.emissor, simular)
                 resultados.append(r)
                 if r["status"] in ("sinal_enviado", "parcial") and not simular and not macro and not repetir_ultimo:
@@ -227,9 +238,41 @@ class Servico:
             if not simular:
                 self.aparelhos.salvar(a)
         if len(resultados) == 1:
-            return resultados[0]
-        return {"aparelho": a["nome"], "macro": macro, "passos": resultados,
-                "status": "sinal_enviado" if all(r["status"] == "sinal_enviado" for r in resultados) else "parcial"}
+            out = resultados[0]
+        else:
+            out = {"aparelho": a["nome"], "macro": macro, "passos": resultados,
+                   "status": "sinal_enviado" if all(r["status"] == "sinal_enviado" for r in resultados) else "parcial"}
+        if escuta is not None:
+            out["ouvido"] = self._terminar_escuta(escuta, a["nome"], t_envio, esperado)
+        return out
+
+    # ------------------------------------------------------------- confirmação pelo microfone
+    def _ambiente_cap(self) -> dict:
+        return {"CONTROLE_IR_DIR": str(self.pasta)}
+
+    def _comecar_escuta(self, segundos: int = 11, pre: float = 3.0) -> dict:
+        """Começa a gravar antes do envio (capacidade ouvir_bipe). Nunca impede o envio: falha vira aviso."""
+        try:
+            r = self.reg.executar("ouvir_bipe", {"acao": "gravar", "segundos": segundos}, self._ambiente_cap())
+        except ErroCapacidade as e:
+            return {"erro": str(e)}
+        res = r.get("resultado") or {}
+        if r.get("status") != "ok" or res.get("erro"):
+            return {"erro": res.get("erro") or r.get("erro") or r.get("status")}
+        time.sleep(pre)  # ~0,5 s para o microfone começar + trecho "antes" para comparar o ruído do ar
+        return {"ok": True}
+
+    def _terminar_escuta(self, escuta: dict, nome: str, t_envio: float | None, esperado: str | None = None) -> dict:
+        if escuta.get("erro") or t_envio is None:
+            return {"veredito": "sem_escuta", "erro": escuta.get("erro") or "nada foi enviado"}
+        try:
+            args = {"acao": "analisar", "aparelho": nome, "envio_em": t_envio, "manter_audio": True}
+            if esperado:
+                args["esperado"] = esperado
+            r = self.reg.executar("ouvir_bipe", args, self._ambiente_cap())
+        except ErroCapacidade as e:
+            return {"veredito": "sem_escuta", "erro": str(e)}
+        return r.get("resultado") if r.get("status") == "ok" else {"veredito": "sem_escuta", "erro": r}
 
     def _macro(self, a: dict, nome: str) -> dict:
         macros = a.get("macros", {})
@@ -273,7 +316,7 @@ class Servico:
 
     def editar_aparelho(self, aparelho, renomear=None, adicionar_comando=None, remover_comando=None,
                         renomear_comando=None, faixas=None, macro=None, remover_macro=None, trocar_perfil=None,
-                        configuracao=None, excluir=False) -> dict:
+                        configuracao=None, observacao=None, excluir=False) -> dict:
         a = self._aparelho(aparelho)
         feitos = []
         if excluir:
@@ -371,6 +414,14 @@ class Servico:
                 if k in configuracao:
                     a.setdefault("config", {})[k] = max(0.1, min(float(configuracao[k]), 10.0))
             feitos.append(f"configuração: {a['config']}")
+        if observacao is not None:
+            texto = " ".join(str(observacao).split())[:600]
+            if texto:
+                a["observacao"] = texto
+                feitos.append("observação gravada")
+            else:
+                a.pop("observacao", None)
+                feitos.append("observação apagada")
         if renomear:
             novo_id = vocabulario.slug(renomear)
             if novo_id != a["id"] and novo_id in self.aparelhos.dados["aparelhos"]:
@@ -452,6 +503,139 @@ class Servico:
                 time.sleep(0.3)
         return {"status": "sinal_enviado", "enviados": enviados, "sinal": s.descricao(),
                 "orientacao": "Se funcionou, guarde com editar_aparelho(adicionar_comando={nome, conteudo}) ou importar."}
+
+    # ------------------------------------------------------------- capacidades plugáveis
+    def capacidades(self, acao="listar", nome=None, nota=None) -> dict:
+        try:
+            if acao == "listar":
+                return {"capacidades": self.reg.listar()}
+            if acao == "ver":
+                return self.reg.ver(str(nome))
+            if acao == "anotar":
+                return self.reg.anotar(str(nome), nota or "")
+        except ErroCapacidade as e:
+            raise ErroUso(str(e)) from e
+        raise ErroUso("acao deve ser listar, ver ou anotar")
+
+    def executar_capacidade(self, nome, argumentos=None) -> dict:
+        from .seguranca import armado
+        pol = self.exec.politica.efetiva()
+        if pol["travado"] or not armado(pol):  # o guardião do MCP já barra; aqui vale para qualquer outro caminho
+            raise ErroUso("capacidades exigem o sistema armado e destravado: arme no celular (widget “Armar "
+                          "Controle IR” ou controle-ir armar)")
+        try:
+            return self.reg.executar(str(nome), argumentos or {}, {"CONTROLE_IR_DIR": str(self.pasta)})
+        except ErroCapacidade as e:
+            raise ErroUso(str(e)) from e
+
+    def propor_capacidade(self, nome, manifesto=None, arquivos=None) -> dict:
+        try:
+            r = self.reg.propor(str(nome), manifesto or {}, arquivos or {})
+            if self.exec.politica.ler().get("auto_capacidades"):  # modo autônomo: ativa na hora (consentido no celular)
+                self.reg.aprovar(str(nome), r["sha256"][:16])
+                self.exec.auditar({"evento": "capacidade_auto_aprovada", "capacidade": nome, "sha": r["sha256"][:16]})
+                self.exec.notificar({"tipo": "alerta", "texto": f"Capacidade “{nome}” criada e ativada (modo autônomo)"})
+                return {**r, "status": "ativa", "auto_aprovada": True,
+                        "observacao": "Modo autônomo: a capacidade já está ativa. Para desligar: controle-ir exec "
+                                      "modo cauteloso (no celular)."}
+            return r
+        except ErroCapacidade as e:
+            raise ErroUso(str(e)) from e
+
+    # ------------------------------------------------------------- execução governada
+    def executar_comando(self, comando, aguardar=30, tempo_limite=120, pasta=None, motivo=None) -> dict:
+        try:
+            return self.exec.pedir(comando, aguardar, tempo_limite, pasta, motivo=motivo)
+        except ValueError as e:
+            raise ErroUso(str(e)) from e
+
+    def tarefa(self, id=None, parar=False, linhas=60) -> dict:  # noqa: A002 — nome do argumento no MCP
+        try:
+            if id is None:
+                return {"tarefas": self.exec.listar(15)}
+            return self.exec.parar(str(id)) if parar else self.exec.estado(str(id), int(linhas or 60))
+        except KeyError as e:
+            raise ErroUso(str(e)) from e
+
+    def politica(self) -> dict:
+        return {**self.exec.politica.resumo(), "codigo_autenticador": self.exec.autorizacao.estado()}
+
+    def autorizar(self, codigo=None, tarefa=None, liberar_minutos=None, capacidade=None, sha=None,
+                  destravar=False) -> dict:
+        """Aprovação pelo Claude, de qualquer aparelho. Só existe no modo "codigo" (código de 6 dígitos do app
+        autenticador, de preferência noutro aparelho); "desligada" (padrão): aprova-se só no celular. Não há mais
+        aprovação "pelo chat": uma chamada do agente não pode aprovar o próprio agente."""
+        if not any([tarefa, liberar_minutos, capacidade, destravar]):
+            raise ErroUso("informe o que autorizar: tarefa, liberar_minutos, capacidade (com sha) ou destravar")
+        if capacidade and not sha:
+            raise ErroUso("para aprovar uma capacidade, informe o sha devolvido por propor_capacidade (o código "
+                          "que o usuário viu)")
+        modo = self.exec.politica.ler()["aprovacao_remota"]
+        if modo != "codigo":
+            self.exec.auditar({"evento": "autorizacao_remota", "resultado": "recusada_sem_codigo"})
+            raise ErroUso("aprovação remota desligada: aprove no celular (notificação, widget “Armar Controle IR” "
+                          "ou controle-ir exec destravar). Para aprovar daqui, o dono configura o código do "
+                          "autenticador no celular: controle-ir exec codigo configurar")
+        if modo == "codigo":
+            try:
+                ok = self.exec.autorizacao.verificar(codigo)
+            except ValueError as e:
+                raise ErroUso(str(e)) from e
+            if not ok:
+                self.exec.auditar({"evento": "autorizacao_remota", "resultado": "codigo_invalido"})
+                raise ErroUso("código inválido ou já usado; peça ao usuário o código atual do app autenticador")
+        feito = {}
+        pol = self.exec.politica
+        if destravar or liberar_minutos:
+            p = pol.ler()
+            if destravar:
+                p["travado"] = False
+                feito["destravado"] = True
+            if liberar_minutos:
+                m = max(1, min(int(liberar_minutos), 240))
+                p["liberado_ate"], p["travado"] = time.time() + m * 60, False
+                feito["liberado_minutos"] = m
+            pol.gravar(p)
+        if tarefa:
+            try:
+                feito["tarefa"] = self.exec.decidir(str(tarefa), True)
+            except KeyError as e:
+                raise ErroUso(str(e)) from e
+        if capacidade:
+            try:
+                feito["capacidade"] = self.reg.aprovar(str(capacidade), str(sha))
+            except ErroCapacidade as e:
+                raise ErroUso(str(e)) from e
+        resumo = {k: (v if not isinstance(v, dict) else v.get("status")) for k, v in feito.items()}
+        self.exec.auditar({"evento": "autorizacao_remota", "resultado": "ok", "modo": modo, "feito": resumo})
+        self.exec.notificar({"tipo": "alerta", "texto": f"Autorizado de outro aparelho: {resumo}"})
+        return {"autorizado": True, **feito}
+
+    def travar(self) -> dict:
+        """Freio de qualquer lugar (só tira poder): nega tudo e encerra as tarefas em andamento."""
+        p = self.exec.politica.ler()
+        p["travado"], p["liberado_ate"] = True, 0
+        self.exec.politica.gravar(p)
+        try:  # os laços em 2º plano das capacidades (sono, termômetro) param ao ver este arquivo
+            (Path(self.pasta) / "PARAR").write_text(str(time.time()))
+        except OSError:
+            pass
+        n = self.exec.parar_todas()
+        self.exec.auditar({"evento": "travado_remotamente", "tarefas_encerradas": n})
+        self.exec.notificar({"tipo": "alerta", "texto": f"Execução TRAVADA pelo Claude ({n} tarefa(s) encerrada(s))"})
+        return {"travado": True, "tarefas_encerradas": n,
+                "destravar": "só no celular: widget “Armar Controle IR” ou controle-ir armar · ou "
+                             "autorizar(codigo do autenticador, destravar=true)"}
+
+    def atualizar_sistema(self, ref, motivo=None, aguardar=40) -> dict:
+        import re
+        if not re.fullmatch(r"[0-9a-f]{40}", str(ref or "")):  # nome de branch ou "a/../outro/repo" não servem
+            raise ErroUso("ref deve ser o hash completo do commit (40 caracteres hexadecimais)")
+        r = self.exec.pedir(f"controle-ir atualizar --ref {ref}", aguardar=aguardar, tempo_limite=60, classe="sistema",
+                            motivo=motivo or f"atualizar o controle-ir para {ref}")
+        r["depois"] = ("Se aprovada, o serviço reinicia em ~1 min com a versão nova; confirme com consultar "
+                       "(campo servidor.versao). Se não voltar, o usuário toca no atalho “Reverter Controle IR”.")
+        return r
 
     # ------------------------------------------------------------- painel
     def estado_painel(self) -> dict:

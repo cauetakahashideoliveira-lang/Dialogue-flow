@@ -1,0 +1,817 @@
+<title>Central da Casa</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: status no topo → Gênio (conversa que age e programa o celular) → painéis criados → controles fixos → diário e memória */
+:root {
+  --bg: #eef3f4; --surface: #ffffff; --surface-2: #f5f8f9; --ink: #13232a; --muted: #5a6c74; --line: #d6dfe2;
+  --accent: #0d7682; --accent-ink: #ffffff; --accent-soft: #d8eef0; --warm: #b8552f; --warm-soft: #f6e3da;
+  --ok: #2c7a4d; --warn: #9a6a12; --crit: #ad3535;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c1417; --surface: #142026; --surface-2: #10191d; --ink: #e4edf0; --muted: #91a3aa; --line: #23343b;
+  --accent: #46b6c1; --accent-ink: #062126; --accent-soft: #15353a; --warm: #e0835c; --warm-soft: #3a2219;
+  --ok: #5cc28a; --warn: #e2b15a; --crit: #ef7b7b; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0c1417; --surface: #142026; --surface-2: #10191d; --ink: #e4edf0; --muted: #91a3aa; --line: #23343b;
+  --accent: #46b6c1; --accent-ink: #062126; --accent-soft: #15353a; --warm: #e0835c; --warm-soft: #3a2219;
+  --ok: #5cc28a; --warn: #e2b15a; --crit: #ef7b7b; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 22px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: 28px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.sub { color: var(--muted); font-size: 13px; }
+.sec { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sec .sub { max-width: 60ch; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); font-size: 13px; max-width: 100%; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--ok); } .dot.crit { background: var(--crit); } .dot.warn { background: var(--warn); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.cap { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.readout { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; flex-wrap: wrap; }
+.temp { font-family: var(--mono); font-weight: 700; font-size: 44px; font-variant-numeric: tabular-nums; line-height: 1; }
+.temp small { font-size: 18px; color: var(--muted); font-weight: 500; }
+.step { display: flex; gap: 8px; }
+button, .chip { font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); padding: 8px 12px; min-height: 40px; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .55; cursor: progress; }
+.round { width: 44px; height: 44px; padding: 0; font-size: 22px; font-family: var(--mono); }
+.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.ghost { border-color: transparent; background: transparent; color: var(--muted); min-height: 32px; padding: 4px 8px; }
+.danger { color: var(--crit); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { min-height: 32px; padding: 4px 10px; font-size: 13px; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+.label { font-size: 12px; color: var(--muted); }
+.msg { font-size: 13px; color: var(--muted); min-height: 1.2em; overflow-wrap: anywhere; }
+.msg.ok { color: var(--ok); } .msg.crit { color: var(--crit); } .msg.warn { color: var(--warn); }
+.tvpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-width: 220px; }
+.tvpad button { min-height: 38px; padding: 4px; }
+.photo { width: 100%; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); }
+.ph { display: grid; place-items: center; aspect-ratio: 4/3; border-radius: 10px; border: 1px dashed var(--line); color: var(--muted); font-size: 13px; text-align: center; padding: 12px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; margin: 0; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.big { font-family: var(--mono); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+svg text { fill: var(--muted); font-family: var(--mono); font-size: 10px; }
+.note { font-size: 12px; color: var(--muted); }
+/* Gênio */
+.genio { background: var(--surface); border: 1px solid var(--accent); border-radius: 18px; padding: 18px; display: grid; gap: 14px; }
+.genio h2 { font-size: 22px; }
+.ideias { display: flex; flex-wrap: wrap; gap: 6px; }
+.ideias button { min-height: 32px; font-size: 13px; padding: 4px 10px; background: var(--surface-2); }
+textarea { width: 100%; box-sizing: border-box; min-height: 64px; resize: vertical; font: inherit; color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 40px; }
+.chat { display: grid; gap: 10px; max-height: 560px; overflow-y: auto; padding-right: 2px; }
+.bolha { border-radius: 12px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.bolha.eu { background: var(--accent-soft); justify-self: end; max-width: 85%; }
+.bolha.ele { background: var(--surface-2); border: 1px solid var(--line); }
+.atv { display: grid; gap: 4px; margin-top: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: normal; }
+.atv .ok { color: var(--ok); } .atv .crit { color: var(--crit); } .atv .warn { color: var(--warn); }
+details { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+summary { cursor: pointer; padding: 6px 10px; font-family: var(--mono); font-size: 12px; }
+pre { margin: 0; padding: 10px; overflow-x: auto; font-family: var(--mono); font-size: 12px; line-height: 1.5; max-height: 360px; }
+.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+/* painéis criados */
+.widget { border-style: dashed; }
+.widget .tag { font-family: var(--mono); font-size: 10px; color: var(--warm); background: var(--warm-soft); border-radius: 6px; padding: 2px 6px; white-space: nowrap; }
+.vazio { border: 1px dashed var(--line); border-radius: var(--r); padding: 18px; color: var(--muted); font-size: 14px; }
+.diario { display: grid; gap: 4px; font-size: 13px; }
+.diario div { display: grid; grid-template-columns: 52px 1fr; gap: 8px; }
+.diario time { font-family: var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.mem { display: flex; flex-wrap: wrap; gap: 6px; }
+.mem span { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 13px; }
+.mem .note { border: 0; background: none; padding: 0; }
+@media (prefers-reduced-motion: no-preference) { button { transition: border-color .15s, background .15s; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Central da Casa</h1>
+      <div class="sub">O celular é o controle; o Claude é quem opera, programa e lembra.</div>
+    </div>
+    <span class="pill"><span class="dot" id="statusDot"></span><span id="statusTxt">Conectando ao celular…</span></span>
+  </div>
+
+  <section class="genio" aria-labelledby="gTit">
+    <div class="sec"><h2 id="gTit">Gênio</h2><span class="cap">Claude · age, programa o celular e cria painéis</span></div>
+    <div class="ideias" id="ideias">
+      <button>Deixa o quarto fresquinho para dormir</button>
+      <button>Cria um medidor da bateria e da temperatura do celular</button>
+      <button>Cria uma ferramenta que mede a velocidade da internet e um gráfico do histórico</button>
+      <button>Pisca a lanterna 3 vezes e fala “boa noite” no celular</button>
+      <button>Quais sensores o meu celular tem?</button>
+      <button>Lembra que eu gosto do quarto a 23 graus</button>
+    </div>
+    <div class="chat" id="chat" aria-live="polite"></div>
+    <label class="label" for="pedido">Peça qualquer coisa — ele age de verdade e, se faltar uma ferramenta, escreve uma.</label>
+    <textarea id="pedido" placeholder="Ex.: cria um botão que deixa o escritório em 22 graus no seco"></textarea>
+    <div class="row">
+      <button class="primary" id="enviar">Enviar</button>
+      <button id="mic" hidden>🎙️ Falar</button>
+      <button id="parar" hidden>Parar</button>
+      <select id="modo" aria-label="Como pensar">
+        <option value="auto">Automático</option><option value="quick">Rápido</option><option value="default">Pensar mais</option>
+      </select>
+      <label class="switch" id="vozWrap" hidden><input type="checkbox" id="voz" checked> responder em voz</label>
+    </div>
+  </section>
+
+  <div class="sec"><h2>Seus painéis</h2><span class="sub">Criados pelo Gênio a pedido seu. Ficam salvos; o × remove.</span></div>
+  <div class="grid" id="painel"><div class="vazio">Nenhum painel ainda. Peça ao Gênio: “cria um botão…”, “cria um medidor…”, “cria um gráfico…”.</div></div>
+
+  <div class="sec"><h2>Controles</h2><span class="sub">Ares, TV, câmera, temperatura e sono.</span></div>
+  <div class="grid" id="grid">
+    <section class="card" id="tvCard">
+      <header><h2>TV do quarto</h2><span class="cap">Samsung · IR 38 kHz</span></header>
+      <div class="row">
+        <button class="primary" data-tv='{"definir":{"energia":"ligado"}}'>Ligar</button>
+        <button data-tv='{"definir":{"energia":"desligado"}}'>Desligar</button>
+        <button data-tv='{"ajustar":{"volume":-1}}' aria-label="Volume menos">Vol −</button>
+        <button data-tv='{"ajustar":{"volume":1}}' aria-label="Volume mais">Vol +</button>
+        <button data-tv='{"teclas":["mudo_alternar"],"permitir_alternancia":true}'>Mudo</button>
+      </div>
+      <div class="row">
+        <button data-tv='{"teclas":["netflix"]}'>Netflix</button>
+        <button data-tv='{"teclas":["prime_video"]}'>Prime Video</button>
+        <button data-tv='{"teclas":["inicio"]}'>Início</button>
+        <button data-tv='{"teclas":["voltar"]}'>Voltar</button>
+      </div>
+      <div class="tvpad" aria-label="Setas">
+        <span></span><button data-tv='{"teclas":["cima"]}' aria-label="Cima">▲</button><span></span>
+        <button data-tv='{"teclas":["esquerda"]}' aria-label="Esquerda">◀</button><button data-tv='{"teclas":["ok"]}'>OK</button><button data-tv='{"teclas":["direita"]}' aria-label="Direita">▶</button>
+        <span></span><button data-tv='{"teclas":["baixo"]}' aria-label="Baixo">▼</button><span></span>
+      </div>
+      <div class="msg" id="tvMsg"></div>
+    </section>
+
+    <section class="card">
+      <header><h2>Ver o ar do quarto</h2><span class="cap">câmera traseira</span></header>
+      <div class="ph" id="fotoBox">Tire uma foto para ver o visor do ar. A foto é apagada no celular logo depois.</div>
+      <div class="row"><button class="primary" id="fotoBtn">Tirar foto</button><span class="msg" id="fotoMsg"></span></div>
+    </section>
+
+    <section class="card">
+      <header><h2>Temperatura do quarto</h2><span class="cap">pela bateria</span></header>
+      <div class="readout"><div class="temp" id="tAr">--<small> °C</small></div>
+        <dl class="kv"><dt>Bateria</dt><dd id="tBat">–</dd><dt>Confiança</dt><dd id="tConf">–</dd><dt>Tendência</dt><dd id="tTend">–</dd></dl></div>
+      <svg id="tGraf" viewBox="0 0 320 90" width="100%" height="90" role="img" aria-label="Histórico da temperatura"><text x="8" y="50">Toque em Ver histórico</text></svg>
+      <div class="row"><button class="primary" id="tBtn">Medir agora</button><button id="tHist">Ver histórico</button></div>
+      <div class="note">Mais certo com o celular parado, fora da tomada e com a tela apagada.</div>
+      <div class="msg" id="tMsg"></div>
+    </section>
+
+    <section class="card">
+      <header><h2>Laboratório do sono</h2><span class="cap">áudio apagado na hora</span></header>
+      <dl class="kv"><dt>Noite</dt><dd id="sNoite">–</dd><dt>Trechos medidos</dt><dd id="sTrechos">–</dd><dt>Roncos</dt><dd id="sRoncos">–</dd><dt>Barulhos</dt><dd id="sBarulhos">–</dd></dl>
+      <svg id="sGraf" viewBox="0 0 320 110" width="100%" height="110" role="img" aria-label="Roncos e temperatura por hora"><text x="8" y="55">Roncos por hora aparecem aqui de manhã</text></svg>
+      <div class="row">
+        <button class="primary" id="sIniciar">Começar a noite</button>
+        <button id="sEstado">Atualizar</button>
+        <button id="sRel">Relatório</button>
+        <button class="danger" id="sParar">Parar</button>
+      </div>
+      <div class="row" id="sConfirma" hidden>
+        <span class="note">O microfone vai ouvir o quarto por 8 h, em trechos de 1 min a cada 5 min. Confirmar?</span>
+        <button class="primary" id="sSim">Sim, começar</button><button id="sNao">Cancelar</button>
+      </div>
+      <div class="msg" id="sMsg"></div>
+    </section>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <header><h2>Diário da casa</h2><span class="cap">últimas ações</span></header>
+      <div class="diario" id="diario"><div class="note">As ações feitas pelo app aparecem aqui.</div></div>
+      <div class="row"><button id="aprendeu">O que você aprendeu sobre mim?</button></div>
+      <div class="msg" id="aprMsg"></div>
+    </section>
+    <section class="card">
+      <header><h2>Memória</h2><span class="cap">o que o Gênio sabe de você</span></header>
+      <div class="mem" id="memoria"><span class="note">Diga ao Gênio “lembra que…” para guardar uma preferência.</span></div>
+      <div class="note" id="dbNota"></div>
+    </section>
+  </div>
+  <div class="note">Os comandos saem pelo emissor infravermelho do celular; a confirmação física é sua (ou pela câmera e pelo som). Se a sua organização exigir, o claude.ai pede a aprovação de cada comando. No celular, “Travar Controle IR” para tudo na hora.</div>
+</div>
+
+<script>
+const SERVER = "Controle master";
+const AC_LABEL = { "ar do quarto": "Quarto", "ar do escritório": "Escritório", "ar condicionado laboratório": "Laboratório" };
+const MODOS = { frio: "Frio", automatico: "Auto", desumidificar: "Seco", ventilar: "Ventilar", calor: "Calor" };
+const VENT = { baixa: "Baixa", media: "Média", alta: "Alta", automatica: "Auto" };
+const FERR_WIDGET = ["controlar", "executar_capacidade", "executar_comando", "consultar", "opcoes"];
+let mcp = null, sample = null, dict = null, tts = null, db = null;
+const S = { aparelhos: [], capacidades: [], widgets: {}, memoria: [], eventos: [], acs: {}, chat: [], timers: [] };
+const $ = (id) => document.getElementById(id);
+
+/* ---------------- utilidades ---------------- */
+function h(tag, attrs, ...filhos) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v; else if (k.startsWith("on")) el[k] = v; else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const f of filhos.flat()) if (f != null && f !== false) el.append(f instanceof Node ? f : String(f));
+  return el;
+}
+function cortar(x, max) { const s = typeof x === "string" ? x : JSON.stringify(x); return s.length > max ? s.slice(0, max) + " …(cortado)" : s; }
+function pegar(obj, caminho) {
+  if (!caminho) return obj;
+  const partes = String(caminho).replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean);
+  const ir = (o) => partes.reduce((a, p) => (a == null ? undefined : a[p]), o);
+  let v = ir(obj);
+  if (v === undefined && obj && obj.resultado) v = ir(obj.resultado);
+  return v;
+}
+function hora(t) { const d = new Date(t > 1e12 ? t : t * 1000); return d.toTimeString().slice(0, 5); }
+function slug(t) { return String(t || "painel").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "painel"; }
+function erroTexto(e) {
+  const c = e && e.code;
+  if (c === "approval_required") return "Precisa da sua aprovação no claude.ai (regra da organização). Toque de novo e aprove.";
+  if (c === "not_in_manifest") return "O conector não foi liberado para esta página (menu Permissões do artefato).";
+  if (c === "server_not_connected") return "Adicione o conector Controle master em claude.ai → Configurações → Conectores.";
+  if (c === "needs_reauth") return "Reconecte o Controle master em claude.ai → Configurações → Conectores.";
+  if (c === "blocked_by_policy") return "A política da organização bloqueia esta ferramenta.";
+  if (c === "server_unavailable" || c === "upstream_error") return "O celular não respondeu. Confira se o Controle IR está ligado (atalho Ligar).";
+  if (c === "tool_error") { const p = e.result && e.result.structuredContent; return (p && p.erro) || e.message || "O celular recusou o pedido."; }
+  return (e && e.message) || "Falhou.";
+}
+function msg(el, txt, tipo) { el.textContent = txt || ""; el.className = "msg" + (tipo ? " " + tipo : ""); }
+async function chamar(tool, input) {
+  if (!mcp) throw { code: "capability_disabled", message: "Conector indisponível nesta visualização." };
+  const r = await mcp.callTool(SERVER, tool, input);
+  const p = r.payload;
+  if (p && typeof p === "object" && p.erro) throw { code: "tool_error", message: p.erro };
+  if (p && typeof p === "object" && p.resultado && typeof p.resultado === "object" && p.resultado.erro) throw { code: "tool_error", message: p.resultado.erro };
+  if (p && typeof p === "object" && p.status === "tempo_esgotado") throw { code: "tool_error", message: "O celular demorou demais para responder." };
+  return r;
+}
+function resumoEnvio(p) {
+  if (!p) return "Enviado.";
+  if (p.status === "sinal_enviado") {
+    const rot = (p.enviados || []).map((e) => e.rotulo).filter(Boolean).join(" · ");
+    let t = "Sinal enviado" + (rot ? ": " + rot : ".");
+    if (p.ouvido) t += " · som: " + String(p.ouvido.veredito || "?").replace(/_/g, " ");
+    return t;
+  }
+  if (p.status === "precisa_confirmacao") return "Precisa confirmar: " + (p.motivo || p.observacao || "");
+  return p.status ? String(p.status).replace(/_/g, " ") : "Enviado.";
+}
+async function controlar(input) {
+  const r = await chamar("controlar", input);
+  try { await mcp.invalidate(SERVER, "opcoes"); } catch (_) {}
+  const p = r.payload || {};
+  registrar({ tipo: "controle", texto: `${input.aparelho}: ${resumoEnvio(p)}` });
+  return p;
+}
+function registrar(ev) {
+  const e = Object.assign({ t: Date.now() }, ev, { texto: cortar(ev.texto || "", 300) });
+  if (db) db.collection("eventos").add(e).catch(() => {});
+  else { S.eventos.unshift(e); S.eventos = S.eventos.slice(0, 30); renderDiario(); }
+}
+
+/* ---------------- status do celular ---------------- */
+function renderStatus(p) {
+  const v = p && p.servidor && p.servidor.versao;
+  $("statusDot").className = "dot " + (p && p.emissor && p.emissor.disponivel ? "ok" : "warn");
+  $("statusTxt").textContent = v ? `Celular online · v${v} · ${(p.aparelhos_salvos || []).length} aparelhos` : "Celular respondeu";
+  S.aparelhos = (p && p.aparelhos_salvos) || [];
+  for (const a of S.aparelhos) if (a.categoria === "ar_condicionado") montarAr(a);
+}
+function statusErro(e) { $("statusDot").className = "dot crit"; $("statusTxt").textContent = erroTexto(e); }
+
+/* ---------------- ares ---------------- */
+function montarAr(a) {
+  if (S.acs[a.nome]) return;
+  const id = "ac" + Object.keys(S.acs).length;
+  const el = h("section", { class: "card" });
+  el.innerHTML = `
+    <header><h2></h2><span class="cap"></span></header>
+    <div class="readout"><div class="temp"><span id="${id}t">--</span><small> °C</small></div>
+      <div class="step"><button class="round" id="${id}m" aria-label="Menos 1 grau">−</button><button class="round" id="${id}p" aria-label="Mais 1 grau">+</button></div></div>
+    <div><div class="label">Modo</div><div class="chips" id="${id}modo"></div></div>
+    <div><div class="label">Ventilação</div><div class="chips" id="${id}vent"></div></div>
+    <div class="row"><button class="primary" id="${id}lig">Ligar com isso</button><button id="${id}des">Desligar</button>
+      <label class="switch"><input type="checkbox" id="${id}ouv"> confirmar pelo som</label></div>
+    <div class="row" id="${id}extra"></div>
+    <div class="msg" id="${id}msg"></div>
+    <div class="note" id="${id}ult"></div>`;
+  el.querySelector("h2").textContent = "Ar · " + (AC_LABEL[a.nome] || a.nome);
+  el.querySelector(".cap").textContent = (a.perfil || "") + " · IR 38 kHz";
+  $("grid").insertBefore(el, $("tvCard"));
+  const ac = { nome: a.nome, id, temp: 24, modo: "frio", vent: "automatica", min: 16, max: 30 };
+  S.acs[a.nome] = ac;
+  const desenhar = () => {
+    $(id + "t").textContent = ac.temp;
+    for (const b of $(id + "modo").children) b.setAttribute("aria-pressed", String(b.dataset.v === ac.modo));
+    for (const b of $(id + "vent").children) b.setAttribute("aria-pressed", String(b.dataset.v === ac.vent));
+  };
+  $(id + "m").onclick = () => { ac.temp = Math.max(ac.min, ac.temp - 1); desenhar(); };
+  $(id + "p").onclick = () => { ac.temp = Math.min(ac.max, ac.temp + 1); desenhar(); };
+  const enviar = async (btn, input) => {
+    btn.disabled = true; msg($(id + "msg"), "Enviando…");
+    try { const p = await controlar(input); msg($(id + "msg"), resumoEnvio(p), "ok"); }
+    catch (e) { msg($(id + "msg"), erroTexto(e), "crit"); }
+    finally { btn.disabled = false; }
+  };
+  $(id + "lig").onclick = (ev) => {
+    const input = { aparelho: ac.nome, ligar: true, definir: { temperatura: ac.temp, modo: ac.modo, ventilacao: ac.vent } };
+    if ($(id + "ouv").checked) input.ouvir = true;
+    enviar(ev.currentTarget, input);
+  };
+  $(id + "des").onclick = (ev) => {
+    const input = { aparelho: ac.nome, ligar: false };
+    if ($(id + "ouv").checked) input.ouvir = true;
+    enviar(ev.currentTarget, input);
+  };
+  mcp.watchTool(SERVER, "opcoes", { aparelho: a.nome }, (evt) => {
+    if (evt.type !== "data") { msg($(id + "msg"), erroTexto(evt.error), "warn"); return; }
+    const o = evt.result.payload || {};
+    const ec = (o.estado_completo && o.estado_completo.parametros) || {};
+    if (ec.temperatura) { ac.min = ec.temperatura.min; ac.max = ec.temperatura.max; }
+    const u = o.ultima_configuracao_completa || {};
+    if (u.temperatura) ac.temp = Number(u.temperatura);
+    if (u.modo) ac.modo = u.modo;
+    if (u.ventilacao) ac.vent = u.ventilacao;
+    const chips = (box, lista, nomes, campo) => {
+      box.replaceChildren(...(lista || []).map((v) => h("button", { class: "chip", "data-v": v, onclick: () => { ac[campo] = v; desenhar(); } }, nomes[v] || v)));
+    };
+    chips($(id + "modo"), ec.modo, MODOS, "modo");
+    chips($(id + "vent"), ec.ventilacao, VENT, "vent");
+    $(id + "extra").replaceChildren(...(o.comandos || []).filter((c) => c.chave !== "energia_desligar").map((c) =>
+      h("button", { title: c.rotulo, onclick: (ev) => enviar(ev.currentTarget, { aparelho: ac.nome, teclas: [c.chave], permitir_alternancia: c.tipo === "alternar" }) },
+        c.rotulo.replace(/\s*\(.*\)$/, ""))));
+    const ue = o.ultimo_envio || {};
+    $(id + "ult").textContent = ue.energia ? `Último envio: ${ue.energia}${ue.temperatura ? ", " + ue.temperatura + " °C" : ""}${ue.modo ? ", " + ue.modo : ""}` : "";
+    desenhar();
+  });
+}
+
+/* ---------------- TV ---------------- */
+document.querySelectorAll("[data-tv]").forEach((b) => {
+  b.onclick = async () => {
+    b.disabled = true; msg($("tvMsg"), "Enviando…");
+    try { const p = await controlar(Object.assign({ aparelho: "tv do quarto" }, JSON.parse(b.dataset.tv))); msg($("tvMsg"), resumoEnvio(p), "ok"); }
+    catch (e) { msg($("tvMsg"), erroTexto(e), "crit"); }
+    finally { b.disabled = false; }
+  };
+});
+
+/* ---------------- câmera ---------------- */
+function imagemDe(r) { const img = (r.content || []).find((c) => c.type === "image"); return img ? `data:${img.mimeType};base64,${img.data}` : null; }
+$("fotoBtn").onclick = async () => {
+  const b = $("fotoBtn"); b.disabled = true; msg($("fotoMsg"), "Fotografando…");
+  try {
+    const r = await chamar("executar_capacidade", { nome: "foto", argumentos: { camera: "traseira", alvo: "ar do quarto" } });
+    const src = imagemDe(r);
+    if (!src) throw { message: "A câmera não devolveu imagem." };
+    $("fotoBox").replaceWith(h("img", { class: "photo", alt: "Foto do ar do quarto", src, id: "fotoBox" }));
+    msg($("fotoMsg"), `Foto das ${((r.payload || {}).resultado || {}).quando || "agora"}`, "ok");
+    registrar({ tipo: "foto", texto: "Foto do ar do quarto" });
+  } catch (e) { msg($("fotoMsg"), erroTexto(e), "crit"); }
+  finally { b.disabled = false; }
+};
+
+/* ---------------- gráficos ---------------- */
+function graficoLinha(svg, pts, cor) {
+  if (pts.length < 2) { svg.innerHTML = `<text x="8" y="50">Poucos pontos ainda</text>`; return; }
+  const W = 320, H = 90, pl = 38, pr = 8, pt = 8, pb = 18;
+  const ys = pts.map((p) => p.y), xs = pts.map((p) => p.x);
+  const span = Math.max(...ys) - Math.min(...ys);
+  const pad = span ? span * 0.15 : 1;
+  const y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const sx = (x) => pl + (W - pl - pr) * (x - x0) / ((x1 - x0) || 1);
+  const sy = (y) => pt + (H - pt - pb) * (1 - (y - y0) / ((y1 - y0) || 1));
+  const d = pts.map((p, i) => (i ? "L" : "M") + sx(p.x).toFixed(1) + " " + sy(p.y).toFixed(1)).join(" ");
+  const fmt = (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
+  const rotX = (x) => (x > 1e9 ? hora(x) : String(Math.round(x)));
+  svg.innerHTML = `
+    <line x1="${pl}" y1="${sy(y0)}" x2="${W - pr}" y2="${sy(y0)}" stroke="var(--line)"/>
+    <line x1="${pl}" y1="${sy(y1)}" x2="${W - pr}" y2="${sy(y1)}" stroke="var(--line)" stroke-dasharray="3 3"/>
+    <text x="2" y="${sy(y1) + 4}">${fmt(y1)}</text><text x="2" y="${sy(y0) + 4}">${fmt(y0)}</text>
+    <text x="${pl}" y="${H - 4}">${rotX(x0)}</text><text x="${W - pr}" y="${H - 4}" text-anchor="end">${rotX(x1)}</text>
+    <path d="${d} L${sx(x1)} ${sy(y0)} L${sx(x0)} ${sy(y0)} Z" fill="${cor}" fill-opacity="0.12" stroke="none"/>
+    <path d="${d}" fill="none" stroke="${cor}" stroke-width="2"/>
+    <circle cx="${sx(pts[pts.length - 1].x)}" cy="${sy(pts[pts.length - 1].y)}" r="3.5" fill="${cor}"/>`;
+}
+
+/* ---------------- termômetro ---------------- */
+function mostrarLeitura(r) {
+  if (!r) return;
+  $("tAr").replaceChildren(String(r.ar_estimado_c ?? "--"), h("small", {}, " °C"));
+  $("tBat").textContent = r.bateria_c != null ? r.bateria_c + " °C" : "–";
+  $("tConf").textContent = r.confianca ? r.confianca + (r.motivos && r.motivos.length ? " (" + r.motivos[0] + ")" : "") : "–";
+  const td = r.tendencia_c_por_hora;
+  $("tTend").textContent = td == null ? "–" : (td > 0 ? "+" : "") + td + " °C/h";
+}
+$("tBtn").onclick = async () => {
+  const b = $("tBtn"); b.disabled = true; msg($("tMsg"), "Medindo por 15 s…");
+  try { const r = await chamar("executar_capacidade", { nome: "termometro", argumentos: { acao: "ler", segundos: 15 } });
+    mostrarLeitura((r.payload || {}).resultado); msg($("tMsg"), "Medido.", "ok"); }
+  catch (e) { msg($("tMsg"), erroTexto(e), "crit"); }
+  finally { b.disabled = false; }
+};
+$("tHist").onclick = async () => {
+  const b = $("tHist"); b.disabled = true; msg($("tMsg"), "Lendo o histórico…");
+  try {
+    const r = await chamar("executar_capacidade", { nome: "termometro", argumentos: { acao: "historico", n: 120 } });
+    const res = (r.payload || {}).resultado || {};
+    const leit = res.leituras || [];
+    const ok = leit.filter((l) => l.confianca !== "baixa" && l.ar_estimado_c != null);
+    graficoLinha($("tGraf"), ok.map((l) => ({ x: l.t, y: l.ar_estimado_c })), "var(--accent)");
+    if (leit.length) mostrarLeitura(Object.assign({}, leit[leit.length - 1], { tendencia_c_por_hora: res.tendencia_c_por_hora }));
+    msg($("tMsg"), `${leit.length} leituras (${ok.length} confiáveis)`, "ok");
+  } catch (e) { msg($("tMsg"), erroTexto(e), "crit"); }
+  finally { b.disabled = false; }
+};
+
+/* ---------------- sono ---------------- */
+async function sono(acao, extra) {
+  const r = await chamar("executar_capacidade", { nome: "sono", argumentos: Object.assign({ acao }, extra || {}) });
+  return (r.payload || {}).resultado || {};
+}
+function graficoSono(svg, porHora) {
+  if (!porHora || !porHora.length) { svg.innerHTML = `<text x="8" y="55">Sem dados da noite ainda</text>`; return; }
+  const W = 320, H = 110, pl = 8, pr = 8, pt = 10, pb = 20, n = porHora.length;
+  const bw = (W - pl - pr) / n, max = Math.max(1, ...porHora.map((x) => x.roncos));
+  let s = "";
+  porHora.forEach((x, i) => {
+    const alt = (H - pt - pb) * x.roncos / max, px = pl + i * bw + 2;
+    s += `<rect x="${px.toFixed(1)}" y="${(H - pb - alt).toFixed(1)}" width="${(bw - 4).toFixed(1)}" height="${alt.toFixed(1)}" rx="3" fill="var(--warm)" fill-opacity="0.75"/>`;
+    s += `<text x="${(px + (bw - 4) / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${String(x.hora).slice(0, 2)}h</text>`;
+  });
+  const temps = porHora.map((x, i) => ({ i, t: x.ar_c })).filter((p) => p.t != null);
+  if (temps.length > 1) {
+    const t0 = Math.min(...temps.map((p) => p.t)) - 0.5, t1 = Math.max(...temps.map((p) => p.t)) + 0.5;
+    const d = temps.map((p, k) => (k ? "L" : "M") + (pl + p.i * bw + bw / 2).toFixed(1) + " " + (pt + (H - pt - pb) * (1 - (p.t - t0) / (t1 - t0))).toFixed(1)).join(" ");
+    s += `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2"/><text x="${W - pr}" y="${pt + 2}" text-anchor="end">${t1.toFixed(0)}°</text>`;
+  }
+  svg.innerHTML = s;
+}
+function mostrarSono(r) {
+  $("sNoite").textContent = r.sessao ? r.sessao + (r.ativo ? " · em andamento" : "") : "–";
+  $("sTrechos").textContent = r.trechos ?? r.trechos_medidos ?? "–";
+  $("sRoncos").textContent = r.roncos != null ? r.roncos + (r.ronco_pct_do_ouvido != null ? ` (${r.ronco_pct_do_ouvido}% do tempo ouvido)` : "") : (r.ultimo ? r.ultimo.roncos : "–");
+  $("sBarulhos").textContent = r.barulhos ?? (r.ultimo ? r.ultimo.barulhos : "–");
+  if (r.por_hora) graficoSono($("sGraf"), r.por_hora);
+}
+const btnSono = (id, fn) => { $(id).onclick = async () => { const b = $(id); b.disabled = true;
+  try { await fn(); } catch (e) { msg($("sMsg"), erroTexto(e), "crit"); } finally { b.disabled = false; } }; };
+$("sIniciar").onclick = () => { $("sConfirma").hidden = false; };
+$("sNao").onclick = () => { $("sConfirma").hidden = true; };
+btnSono("sSim", async () => { const r = await sono("iniciar", { horas: 8 }); $("sConfirma").hidden = true;
+  msg($("sMsg"), r.iniciado ? `Noite começou · até ${r.ate} · ${r.trechos}` : (r.erro || "Não iniciou"), r.iniciado ? "ok" : "warn");
+  if (r.iniciado) registrar({ tipo: "sono", texto: "Laboratório do sono começou" }); });
+btnSono("sEstado", async () => { const r = await sono("estado"); mostrarSono(r); msg($("sMsg"), r.ativo ? "Medindo agora." : "Nenhuma noite em andamento.", "ok"); });
+btnSono("sRel", async () => { const r = await sono("relatorio"); if (r.erro) { msg($("sMsg"), r.erro, "warn"); return; } mostrarSono(r);
+  msg($("sMsg"), r.hora_com_mais_ronco ? `Mais ronco por volta das ${r.hora_com_mais_ronco}. ${r.nota}` : r.nota || "", "ok"); });
+btnSono("sParar", async () => { const r = await sono("parar"); msg($("sMsg"), r.parado ? "Noite encerrada." : "Nada para parar.", "ok"); });
+
+/* ---------------- painéis criados (widgets) ---------------- */
+function validarWidget(w) {
+  if (!w || typeof w !== "object") throw new Error("spec precisa ser um objeto");
+  const tipos = ["botoes", "medidor", "grafico", "nota"];
+  if (!tipos.includes(w.tipo)) throw new Error("tipo deve ser " + tipos.join(", "));
+  const out = { id: slug(w.id || w.titulo), titulo: cortar(String(w.titulo || "Painel"), 60), tipo: w.tipo,
+    descricao: w.descricao ? cortar(String(w.descricao), 200) : null, criado_em: Date.now() };
+  const acao = (a, onde) => {
+    if (!a || !FERR_WIDGET.includes(a.ferramenta)) throw new Error(`${onde}: ferramenta deve ser uma de ${FERR_WIDGET.join(", ")}`);
+    if (a.entrada != null && typeof a.entrada !== "object") throw new Error(`${onde}: entrada deve ser objeto`);
+    return { ferramenta: a.ferramenta, entrada: a.entrada || {} };
+  };
+  if (w.tipo === "botoes") {
+    if (!Array.isArray(w.botoes) || !w.botoes.length) throw new Error("botoes precisa de uma lista");
+    out.botoes = w.botoes.slice(0, 8).map((b, i) => ({ rotulo: cortar(String(b.rotulo || "Botão " + (i + 1)), 40), acao: acao(b.acao, "botão " + (i + 1)) }));
+  }
+  if (w.tipo === "medidor" || w.tipo === "grafico") out.fonte = acao(w.fonte, "fonte");
+  if (w.tipo === "medidor") {
+    if (!Array.isArray(w.campos) || !w.campos.length) throw new Error("medidor precisa de campos [{rotulo, caminho, unidade}]");
+    out.campos = w.campos.slice(0, 6).map((c) => ({ rotulo: cortar(String(c.rotulo || c.caminho), 40), caminho: String(c.caminho || ""), unidade: c.unidade ? String(c.unidade).slice(0, 8) : "" }));
+  }
+  if (w.tipo === "grafico") {
+    const s = w.serie || {};
+    if (!s.lista || !s.y) throw new Error("grafico precisa de serie {lista, x, y, unidade}");
+    out.serie = { lista: String(s.lista), x: s.x ? String(s.x) : "", y: String(s.y), unidade: s.unidade ? String(s.unidade).slice(0, 8) : "" };
+  }
+  if (w.tipo === "nota") out.texto = cortar(String(w.texto || ""), 1200);
+  const am = Number(w.atualizar_min);
+  if (am && (w.tipo === "medidor" || w.tipo === "grafico")) out.atualizar_min = Math.max(5, Math.min(am, 720));
+  return out;
+}
+async function salvarWidget(w) {
+  if (db) await db.doc("widgets/" + w.id).set(w); else { S.widgets[w.id] = w; renderWidgets(); }
+}
+async function removerWidget(id) {
+  if (db) await db.doc("widgets/" + id).delete(); else { delete S.widgets[id]; renderWidgets(); }
+}
+async function rodarAcao(a) {
+  if (a.ferramenta === "controlar") return { payload: await controlar(a.entrada) };
+  return await chamar(a.ferramenta, a.entrada);
+}
+function textoResultado(r) {
+  const p = r.payload;
+  if (p && p.status === "sinal_enviado") return resumoEnvio(p);
+  if (p && p.saida != null) return cortar(String(p.saida).trim().split("\n").slice(-2).join(" · ") || "ok", 160);
+  if (p && p.resultado) return cortar(p.resultado, 160);
+  return "Feito.";
+}
+function renderWidgets() {
+  S.timers.forEach(clearInterval); S.timers = [];
+  const lista = Object.values(S.widgets).sort((a, b) => (a.criado_em || 0) - (b.criado_em || 0));
+  if (!lista.length) { $("painel").replaceChildren(h("div", { class: "vazio" }, "Nenhum painel ainda. Peça ao Gênio: “cria um botão…”, “cria um medidor…”, “cria um gráfico…”.")); return; }
+  $("painel").replaceChildren(...lista.map(cardWidget));
+}
+function cardWidget(w) {
+  const st = h("div", { class: "msg" });
+  const confirmar = h("div", { class: "row", hidden: true },
+    h("span", { class: "note" }, "Remover este painel?"),
+    h("button", { class: "danger", onclick: async () => { try { await removerWidget(w.id); } catch (e) { msg(st, "Não removeu: " + (e.message || e.code), "crit"); } } }, "Remover"),
+    h("button", { onclick: () => { confirmar.hidden = true; } }, "Cancelar"));
+  const corpo = h("div", { style: "display:grid;gap:10px;min-width:0" });
+  const card = h("section", { class: "card widget" },
+    h("header", {}, h("h3", {}, w.titulo), h("span", { class: "row", style: "gap:4px;flex-wrap:nowrap" }, h("span", { class: "tag" }, "Gênio"),
+      h("button", { class: "ghost", "aria-label": "Remover painel", onclick: () => { confirmar.hidden = false; } }, "×"))),
+    w.descricao ? h("div", { class: "note" }, w.descricao) : null, corpo, confirmar, st);
+  if (w.tipo === "nota") corpo.append(h("div", { style: "white-space:pre-wrap" }, w.texto || ""));
+  if (w.tipo === "botoes") {
+    corpo.append(h("div", { class: "row" }, ...(w.botoes || []).map((b) => h("button", { onclick: async (ev) => {
+      const el = ev.currentTarget; el.disabled = true; msg(st, "Executando…");
+      try { const r = await rodarAcao(b.acao); msg(st, textoResultado(r), "ok"); if (b.acao.ferramenta !== "controlar") registrar({ tipo: "painel", texto: `${w.titulo}: ${b.rotulo}` }); }
+      catch (e) { msg(st, erroTexto(e), "crit"); } finally { el.disabled = false; } } }, b.rotulo))));
+  }
+  if (w.tipo === "medidor" || w.tipo === "grafico") {
+    const dl = h("dl", { class: "kv" });
+    const svg = w.tipo === "grafico" ? document.createElementNS("http://www.w3.org/2000/svg", "svg") : null;
+    if (svg) { svg.setAttribute("viewBox", "0 0 320 90"); svg.setAttribute("width", "100%"); svg.setAttribute("height", "90"); svg.innerHTML = `<text x="8" y="50">Toque em Atualizar</text>`; }
+    if (w.tipo === "medidor") (w.campos || []).forEach((c) => dl.append(h("dt", {}, c.rotulo), h("dd", { class: "big" }, "–")));
+    const atualizar = async (btn) => {
+      if (btn) btn.disabled = true; msg(st, "Lendo…");
+      try {
+        const r = await chamar(w.fonte.ferramenta, w.fonte.entrada);
+        const p = r.payload;
+        if (w.tipo === "medidor") {
+          const dds = dl.querySelectorAll("dd");
+          w.campos.forEach((c, i) => { const v = pegar(p, c.caminho); dds[i].textContent = v == null ? "–" : (typeof v === "object" ? cortar(v, 60) : v) + (c.unidade ? " " + c.unidade : ""); });
+        } else {
+          const lista = pegar(p, w.serie.lista) || [];
+          const pts = (Array.isArray(lista) ? lista : []).map((it, i) => ({ x: w.serie.x ? Number(pegar(it, w.serie.x)) : i, y: Number(pegar(it, w.serie.y)) }))
+            .filter((q) => isFinite(q.x) && isFinite(q.y));
+          graficoLinha(svg, pts, "var(--warm)");
+        }
+        msg(st, "Atualizado às " + hora(Date.now()), "ok");
+      } catch (e) { msg(st, erroTexto(e), "crit"); } finally { if (btn) btn.disabled = false; }
+    };
+    corpo.append(w.tipo === "medidor" ? dl : svg, h("div", { class: "row" },
+      h("button", { onclick: (ev) => atualizar(ev.currentTarget) }, "Atualizar"),
+      w.atualizar_min ? h("span", { class: "note" }, `sozinho a cada ${w.atualizar_min} min`) : null));
+    if (w.atualizar_min) S.timers.push(setInterval(() => { if (!document.hidden) atualizar(null); }, w.atualizar_min * 60000));
+  }
+  return card;
+}
+
+/* ---------------- diário e memória ---------------- */
+function renderDiario() {
+  const box = $("diario");
+  if (!S.eventos.length) { box.replaceChildren(h("div", { class: "note" }, "As ações feitas pelo app aparecem aqui.")); return; }
+  box.replaceChildren(...S.eventos.slice(0, 15).map((e) => h("div", {}, h("time", {}, hora(e.t)), h("span", {}, e.texto))));
+}
+function renderMemoria() {
+  const box = $("memoria");
+  if (!S.memoria.length) { box.replaceChildren(h("span", { class: "note" }, "Diga ao Gênio “lembra que…” para guardar uma preferência.")); return; }
+  box.replaceChildren(...S.memoria.map((m) => h("span", {}, m.texto,
+    h("button", { class: "ghost", "aria-label": "Esquecer", onclick: () => { if (db && m.id) db.doc("memoria/" + m.id).delete().catch(() => {}); else { S.memoria = S.memoria.filter((x) => x !== m); renderMemoria(); } } }, "×"))));
+}
+async function lembrar(texto) {
+  const m = { texto: cortar(String(texto), 200), t: Date.now() };
+  if (db) { await db.collection("memoria").add(m); } else { S.memoria.push(m); renderMemoria(); }
+}
+$("aprendeu").onclick = async () => {
+  const b = $("aprendeu");
+  if (!sample) { msg($("aprMsg"), "O Claude não está disponível nesta visualização.", "warn"); return; }
+  b.disabled = true; msg($("aprMsg"), "Pensando…");
+  try {
+    let evs = S.eventos;
+    if (db) { const snap = await db.collection("eventos").orderBy("t", "desc").limit(300).get(); evs = snap.docs.map((d) => d.data()); }
+    if (!evs.length) { msg($("aprMsg"), "Ainda não há ações no diário para aprender.", "warn"); return; }
+    const linhas = evs.map((e) => `${new Date(e.t).toLocaleString("pt-BR", { weekday: "short", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })} — ${e.texto}`).join("\n");
+    const { text } = await sample(`Este é o diário de ações da casa do usuário (mais recente primeiro) e o que ele pediu para lembrar.
+Diário:
+${linhas}
+Memória: ${S.memoria.map((m) => m.texto).join("; ") || "(vazia)"}
+Em português do Brasil, em no máximo 5 linhas: diga que hábitos você percebe (horários, temperaturas, aparelhos) e sugira 1 ou 2 rotinas automáticas concretas que o Gênio poderia criar. Se houver pouco dado, diga isso.`, { modelTier: "quick", cache: false });
+    msg($("aprMsg"), text, "ok");
+  } catch (e) { msg($("aprMsg"), e.code === "not_granted" ? "Você recusou o uso do Claude nesta página." : (e.message || "Falhou."), "crit"); }
+  finally { b.disabled = false; }
+};
+
+/* ---------------- Gênio ---------------- */
+let turnoAtual = null;
+function novoTurnoUI(texto) {
+  const resp = h("div", {}, "Pensando…");
+  const atv = h("div", { class: "atv" });
+  $("chat").append(h("div", { class: "bolha eu" }, texto), h("div", { class: "bolha ele" }, resp, atv));
+  $("chat").scrollTop = $("chat").scrollHeight;
+  turnoAtual = { resp, atv };
+}
+function atividade(texto, tipo, extra) {
+  if (!turnoAtual) return;
+  turnoAtual.atv.append(h("div", { class: tipo || "" }, texto));
+  if (extra) turnoAtual.atv.append(extra);
+  $("chat").scrollTop = $("chat").scrollHeight;
+}
+function codigoUI(titulo, codigo) { return h("details", {}, h("summary", {}, titulo), h("pre", {}, codigo)); }
+function falha(e) { const t = erroTexto(e); atividade("  ✗ " + t, "crit"); return new Error(t); }
+
+const FERRAMENTAS = [
+  { name: "controlar", description: "Envia um comando infravermelho a um aparelho salvo e devolve o que foi enviado. Ar: ligar=true com definir {temperatura, modo (frio|automatico|desumidificar|ventilar|calor), ventilacao (baixa|media|alta|automatica)}, ou ligar=false. TV: definir {energia: ligado|desligado}, ajustar {volume: ±n}, teclas [netflix, prime_video, inicio, voltar, ok, cima, baixo, esquerda, direita, mudo_alternar].",
+    inputSchema: { type: "object", properties: { aparelho: { type: "string" }, ligar: { type: "boolean" }, definir: { type: "object" }, ajustar: { type: "object" }, teclas: { type: "array", items: { type: "string" } }, ouvir: { type: "boolean", description: "grava pelo microfone e confere o som do ar" } }, required: ["aparelho"] },
+    execute: async (inp) => {
+      const input = { aparelho: String(inp.aparelho) };
+      for (const k of ["ligar", "definir", "ajustar", "teclas", "ouvir"]) if (inp[k] !== undefined) input[k] = inp[k];
+      if (Array.isArray(input.teclas) && input.teclas.includes("mudo_alternar")) input.permitir_alternancia = true;
+      atividade("→ " + input.aparelho + " " + cortar(Object.assign({}, input, { aparelho: undefined }), 160));
+      try { const p = await controlar(input); const t = resumoEnvio(p); atividade("  " + t, "ok"); return { status: p.status, resumo: t, estado: p.estado_presumido, ouvido: p.ouvido }; }
+      catch (e) { throw falha(e); } } },
+  { name: "opcoes_aparelho", description: "Detalhes de um aparelho salvo: parâmetros, valores aceitos, teclas extras e o último envio. Use antes de criar botões com teclas.",
+    inputSchema: { type: "object", properties: { aparelho: { type: "string" } }, required: ["aparelho"] },
+    execute: async (inp) => { const r = await chamar("opcoes", { aparelho: String(inp.aparelho) }); const o = r.payload || {};
+      return cortar({ parametros: o.parametros, estado_completo: o.estado_completo, comandos: (o.comandos || []).map((c) => ({ chave: c.chave, rotulo: c.rotulo, tipo: c.tipo })), ultimo_envio: o.ultimo_envio, macros: o.macros }, 9000); } },
+  { name: "executar_capacidade", description: "Roda uma capacidade (ferramenta) instalada no celular com os argumentos dela e devolve o resultado (JSON). Se ela devolver uma foto, a foto aparece para o usuário.",
+    inputSchema: { type: "object", properties: { nome: { type: "string" }, argumentos: { type: "object" } }, required: ["nome"] },
+    execute: async (inp) => {
+      atividade("→ capacidade " + inp.nome + " " + cortar(inp.argumentos || {}, 120));
+      try {
+        const r = await chamar("executar_capacidade", { nome: String(inp.nome), argumentos: inp.argumentos || {} });
+        const src = imagemDe(r);
+        if (src) atividade("  foto:", "ok", h("img", { class: "photo", src, alt: "Foto do celular" }));
+        const p = r.payload || {};
+        atividade("  " + (p.status || "ok") + (p.segundos != null ? ` em ${p.segundos} s` : ""), p.status === "falhou" ? "crit" : "ok");
+        registrar({ tipo: "capacidade", texto: `Rodou ${inp.nome}` });
+        return cortar(Object.assign({}, p, src ? { foto: "exibida ao usuário" } : {}), 9000);
+      } catch (e) { throw falha(e); } } },
+  { name: "executar_comando", description: "Roda uma linha de shell (bash) no Termux do celular e devolve status e o fim da saída. Bom para investigar (pacotes, sensores, rede) e para ações rápidas: termux-torch on|off, termux-vibrate -d ms, termux-tts-speak -l pt 'texto', termux-volume, termux-brightness, termux-notification. Nada destrutivo sem o usuário pedir.",
+    inputSchema: { type: "object", properties: { comando: { type: "string" }, motivo: { type: "string" }, aguardar: { type: "number" } }, required: ["comando"] },
+    execute: async (inp) => {
+      atividade("$ " + cortar(String(inp.comando), 200));
+      try {
+        const r = await chamar("executar_comando", { comando: String(inp.comando), motivo: String(inp.motivo || "pedido do Gênio"), aguardar: Math.min(Number(inp.aguardar) || 30, 55) });
+        const p = r.payload || {};
+        atividade("  " + (p.status || "?") + (p.codigo != null ? ` (código ${p.codigo})` : ""), p.codigo ? "crit" : "ok");
+        registrar({ tipo: "comando", texto: cortar(String(inp.comando), 80) });
+        return { status: p.status, codigo: p.codigo, saida: cortar(String(p.saida || ""), 6000), id: p.id };
+      } catch (e) { throw falha(e); } } },
+  { name: "ver_codigo_capacidade", description: "Mostra o código e o manifesto de uma capacidade instalada, para corrigir ou se inspirar.",
+    inputSchema: { type: "object", properties: { nome: { type: "string" } }, required: ["nome"] },
+    execute: async (inp) => { const r = await chamar("capacidades", { acao: "ver", nome: String(inp.nome) }); return cortar((r.payload || {}).arquivos || r.payload, 12000); } },
+  { name: "criar_capacidade", description: "Escreve e instala no celular uma ferramenta nova (script Python que lê JSON na entrada padrão e imprime UM JSON na saída). Com o modo autônomo do celular ela já fica ativa. Recriar com o mesmo nome substitui. Depois teste com executar_capacidade.",
+    inputSchema: { type: "object", properties: {
+      nome: { type: "string", description: "a-z, 0-9 e _, começando por letra" }, titulo: { type: "string" }, descricao: { type: "string" },
+      efeito: { type: "string", enum: ["leitura", "acao"] }, entrada: { type: "object", description: "JSON Schema dos argumentos: {type:'object', properties:{...}}" },
+      codigo: { type: "string", description: "conteúdo completo de principal.py" }, tempo_limite: { type: "number" } }, required: ["nome", "titulo", "descricao", "codigo"] },
+    execute: async (inp) => {
+      const nome = String(inp.nome).toLowerCase();
+      const codigo = String(inp.codigo);
+      const manifesto = { titulo: String(inp.titulo), descricao: String(inp.descricao), executar: "principal.py", efeito: inp.efeito === "acao" ? "acao" : "leitura",
+        acessos: ["criada pelo Gênio da Central da Casa"], tempo_limite: Math.min(Number(inp.tempo_limite) || 60, 300),
+        entrada: inp.entrada && typeof inp.entrada === "object" ? inp.entrada : { type: "object", properties: {} } };
+      atividade("✎ escrevendo a ferramenta " + nome, "", codigoUI(`principal.py (${codigo.split("\n").length} linhas)`, codigo));
+      try {
+        const r = await chamar("propor_capacidade", { nome, manifesto, arquivos: { "principal.py": codigo } });
+        const p = r.payload || {};
+        atividade("  " + (p.status === "ativa" ? "instalada e ativa no celular" : "proposta: " + (p.status || "?")), p.status === "ativa" ? "ok" : "warn");
+        registrar({ tipo: "criacao", texto: `Gênio criou a ferramenta ${nome}` });
+        carregarCapacidades();
+        return { status: p.status, auto_aprovada: p.auto_aprovada, observacao: p.observacao || p.orientacao };
+      } catch (e) { throw falha(e); } } },
+  { name: "criar_painel", description: "Cria ou substitui (mesmo id) um painel fixo no app. spec: {id, titulo, descricao?, tipo: 'botoes'|'medidor'|'grafico'|'nota', botoes?: [{rotulo, acao:{ferramenta, entrada}}], fonte?: {ferramenta, entrada}, campos?: [{rotulo, caminho, unidade}], serie?: {lista, x, y, unidade}, texto?, atualizar_min?}. ferramenta: controlar | executar_capacidade | executar_comando | consultar | opcoes. caminho/lista/x/y são caminhos com pontos no resultado (ex.: 'resultado.bateria.percentage' ou 'leituras'). Teste a fonte antes para acertar os caminhos.",
+    inputSchema: { type: "object", properties: { spec: { type: "object" } }, required: ["spec"] },
+    execute: async (inp) => {
+      const w = validarWidget(inp.spec);
+      await salvarWidget(w);
+      atividade("▦ painel “" + w.titulo + "” criado", "ok");
+      registrar({ tipo: "criacao", texto: `Gênio criou o painel ${w.titulo}` });
+      return { criado: w.id };
+    } },
+  { name: "remover_painel", description: "Remove um painel do app pelo id.",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    execute: async (inp) => { await removerWidget(slug(inp.id)); atividade("▦ painel removido", "ok"); return { removido: slug(inp.id) }; } },
+  { name: "lembrar", description: "Guarda na memória do app uma preferência ou fato sobre o usuário ou a casa (ex.: 'gosta do quarto a 23 °C para dormir'). Use quando ele pedir para lembrar ou disser uma preferência clara.",
+    inputSchema: { type: "object", properties: { fato: { type: "string" } }, required: ["fato"] },
+    execute: async (inp) => { await lembrar(inp.fato); atividade("✓ lembrado: " + cortar(String(inp.fato), 120), "ok"); return { ok: true }; } },
+];
+
+function contexto() {
+  const ap = S.aparelhos.map((a) => `- "${a.nome}" (${a.categoria}, perfil ${a.perfil}; parâmetros: ${(a.parametros || []).join(", ")})`).join("\n") || "- (carregando)";
+  const caps = S.capacidades.map((c) => `- ${c.nome}: ${cortar(c.descricao || c.titulo || "", 160)} · args: ${Object.keys((c.entrada && c.entrada.properties) || {}).join(", ") || "nenhum"}`).join("\n") || "- (carregando)";
+  const pains = Object.values(S.widgets).map((w) => `- ${w.id} (${w.tipo}): ${w.titulo}`).join("\n") || "- nenhum";
+  const mem = S.memoria.map((m) => "- " + m.texto).join("\n") || "- (vazia)";
+  const evs = S.eventos.slice(0, 6).map((e) => `- ${hora(e.t)} ${e.texto}`).join("\n") || "- (nenhuma)";
+  return `Você é o Gênio da Casa: o Claude dentro do app Central da Casa, com controle real do celular do usuário (POCO, Android 16, Termux, modo autônomo) e dos aparelhos por infravermelho. Fale português do Brasil, curto e direto. Aja de verdade com as ferramentas; não finja.
+O que você faz: controla aparelhos; roda capacidades; roda comandos no Termux; ESCREVE ferramentas novas (criar_capacidade) quando falta uma; cria painéis fixos no app (criar_painel); guarda preferências (lembrar).
+Como escrever uma capacidade: principal.py em Python 3 que lê os argumentos com json.loads(sys.stdin.read() or "{}") e imprime UM json.dumps(..., ensure_ascii=False). Disponível: stdlib, numpy, ffmpeg, curl, nmap e o Termux:API (termux-battery-status, termux-wifi-connectioninfo, termux-wifi-scaninfo, termux-sensor -l e -s NOME -n 1, termux-tts-speak, termux-notification, termux-volume, termux-brightness, termux-torch, termux-vibrate, termux-camera-photo, termux-microphone-record). Use subprocess.run(..., capture_output=True, text=True, timeout=...). Guarde dados em os.path.expanduser("~/.controle-ir/medicoes/"). Depois de criar, TESTE com executar_capacidade e corrija recriando se falhar. Para um gráfico, faça a capacidade guardar histórico e devolver uma lista.
+Painéis: crie com criar_painel depois de testar a fonte; botões repetem ações; medidores e gráficos leem uma fonte ao tocar em Atualizar (ou a cada atualizar_min, só se o usuário pedir).
+Regras: só aparelhos, rede e contas do próprio usuário; nunca apps ou sites de banco e pagamento; nada destrutivo (apagar arquivos dele, desinstalar, mexer no sistema) sem ele pedir explicitamente; se algo falhar, diga o que falhou. Ar-condicionado: mande temperatura, modo e ventilação juntos. Pedido vago ("fresquinho"): use a memória ou escolha algo sensato e diga o que escolheu.
+Aparelhos:
+${ap}
+Capacidades instaladas:
+${caps}
+Painéis do app:
+${pains}
+Memória do usuário:
+${mem}
+Últimas ações:
+${evs}`;
+}
+
+let ctl = null;
+async function perguntar(textoForcado) {
+  const texto = String(textoForcado || $("pedido").value).trim();
+  if (!texto) return;
+  $("pedido").value = "";
+  novoTurnoUI(texto);
+  if (!sample) { turnoAtual.resp.textContent = "O Claude não está disponível nesta visualização."; return; }
+  $("enviar").disabled = true; $("parar").hidden = false;
+  const sel = $("modo").value;
+  const construir = /\b(cri[ae]|crie|construa|constr[oó]i|monte|programa|ferramenta|widget|painel|bot[aã]o|gr[aá]fico|medidor|automati|script|capacidade|mede|medir|histórico)/i.test(texto);
+  const modelTier = sel === "auto" ? (construir ? "default" : "quick") : sel;
+  const msgs = [...S.chat.slice(-8), { role: "user", content: contexto() + "\n\nPedido do usuário: " + texto }];
+  ctl = new AbortController();
+  try {
+    const { text } = await sample(msgs, { tools: FERRAMENTAS, modelTier, signal: ctl.signal,
+      onText: ({ text: t }) => { turnoAtual.resp.textContent = t; } });
+    turnoAtual.resp.textContent = text || "Feito.";
+    S.chat.push({ role: "user", content: texto }, { role: "assistant", content: text || "Feito." });
+    if (tts && $("voz").checked && text) tts.speak(text.slice(0, 1900), { language: "pt-BR" }).catch(() => {});
+  } catch (e) {
+    const c = e.code;
+    turnoAtual.resp.textContent = e.text || (c === "cancelled" ? "Parado." : "");
+    if (c !== "cancelled") atividade(c === "not_granted" ? "Você recusou o uso do Claude nesta página." : c === "rate_limited" ? "Muitos pedidos agora; espere um pouco." : c === "tools_unavailable" ? "O Gênio não pode usar ferramentas nesta visualização." : (e.message || "Falhou."), "crit");
+  } finally { $("enviar").disabled = false; $("parar").hidden = true; }
+}
+$("enviar").onclick = () => perguntar();
+$("pedido").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) perguntar(); });
+$("parar").onclick = () => { if (ctl) ctl.abort(); if (tts) tts.stop(); };
+for (const b of $("ideias").children) b.onclick = () => perguntar(b.textContent);
+
+async function carregarCapacidades() {
+  if (!mcp) return;
+  try { const r = await mcp.callTool(SERVER, "capacidades", { acao: "listar" }, { cache: false }); S.capacidades = ((r.payload || {}).capacidades || []).filter((c) => c.estado === "ativa"); }
+  catch (_) { /* o Gênio segue sem a lista */ }
+}
+
+/* ---------------- inicialização ---------------- */
+(async () => {
+  const cl = window.claude;
+  if (!cl || !cl.use) { statusErro({ message: "Abra esta página no claude.ai para controlar a casa." }); return; }
+  [mcp, sample, dict, tts, db] = await Promise.all(["mcp", "sample", "dictation", "tts", "db"].map((n) => cl.use(n).catch(() => null)));
+  if (tts) $("vozWrap").hidden = false;
+  if (dict) {
+    $("mic").hidden = false;
+    let base = "", ouvindo = false;
+    dict.onPartial(({ text }) => { $("pedido").value = (base + " " + text).trim(); });
+    dict.onFinal(({ text }) => { base = (base + " " + text).trim(); $("pedido").value = base; });
+    dict.onState(({ state: st }) => {
+      ouvindo = st === "listening" || st === "starting";
+      $("mic").textContent = ouvindo ? "⏹ Parar de ouvir" : "🎙️ Falar";
+      if (st === "idle" && base) { const t = base; base = ""; perguntar(t); }
+    });
+    $("mic").onclick = () => {
+      if (ouvindo) { dict.stop().catch(() => {}); return; }
+      base = ""; $("pedido").value = "";
+      dict.start().catch((e) => { if (e && e.code === "not_granted") $("mic").hidden = true; });
+    };
+  }
+  if (db) {
+    db.collection("widgets").onSnapshot((snap) => { S.widgets = {}; snap.docs.forEach((d) => { S.widgets[d.id] = Object.assign({}, d.data(), { id: d.id }); }); renderWidgets(); },
+      () => { $("dbNota").textContent = "Não consegui ler os painéis salvos agora."; });
+    db.collection("memoria").onSnapshot((snap) => { S.memoria = snap.docs.map((d) => Object.assign({}, d.data(), { id: d.id })).sort((a, b) => a.t - b.t); renderMemoria(); }, () => {});
+    db.collection("eventos").orderBy("t", "desc").limit(30).onSnapshot((snap) => { S.eventos = snap.docs.map((d) => d.data()); renderDiario(); }, () => {});
+  } else {
+    $("dbNota").textContent = "Nesta visualização os painéis e a memória não ficam salvos.";
+  }
+  if (!mcp) { statusErro({ message: "Conector indisponível nesta visualização." }); return; }
+  mcp.watchTool(SERVER, "consultar", {}, (evt) => {
+    if (evt.type === "data") renderStatus(evt.result.payload);
+    else statusErro(evt.error);
+  }, { refetchInterval: 120000 });
+  carregarCapacidades();
+})();
+</script>

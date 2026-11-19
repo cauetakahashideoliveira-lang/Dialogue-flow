@@ -33,6 +33,19 @@
 | **Turbo** (extra, com oscilação e visor apagado) | **funcionou** |
 | 18 °C + oscilar (sinal avulso, não salvo) | sinal enviado, sem confirmação |
 | oscilar + visor apagado em 16 °C (sinal avulso, não salvo) | sinal enviado; o mesmo estado está no Turbo, que funcionou |
+| ligar 16 °C (frio, automática), 18/11 22:17 | **funcionou** (usuário: "o ar ligou") |
+| **Visor desligado** (`x_luz`) com o ar já em 16 °C/frio/automática, 18/11 23:49 (relógio do celular) | **funcionou** (usuário: "deu certo"); estado registrado no celular: ligado, visor desligado |
+
+## Confirmação automática (18/11/2026)
+
+- **Pelo som (`ouvir_bipe` / `controlar` com `ouvir=true`, 1.0.16):** a gravação sincronizada funciona (o envio
+  cai em ~1,0 s do áudio), mas em 3 tentativas o microfone **não captou bipe** depois do envio (energia estável
+  ~−50 dBFS; só um zumbido de 438 Hz, provavelmente do próprio ar). Sem referência salva. Falta saber se este
+  Gree apita ao receber o mesmo estado e a que distância o celular estava.
+- **Pela imagem (`foto`, 1.0.17):** funciona; a 2–3 m o ar aparece inteiro (alto da parede, acima do espelho do
+  armário) com a **luz do visor acesa no lado direito do painel**, mas os dígitos não dão para ler em 960 px.
+  O recorte (`recorte=[x0,y0,x1,y1]`, `alvo="ar do quarto"`) está no GitHub e **só vai para o celular quando o
+  usuário pedir**. A foto pega o espelho do armário: o reflexo de quem está no quarto aparece.
 
 ## Comandos extras (criados a partir da captura real)
 

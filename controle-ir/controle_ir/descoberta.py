@@ -220,7 +220,7 @@ class Descoberta:
             self._iniciar_thread()
         r = self.progresso(ultimos=0)
         r["avisos"] = avisos
-        r["como_parar"] = ("Enter sozinho no Termux, o botão “Reagiu — pausar” no painel ou na notificação, "
+        r["como_parar"] = ("Enter sozinho no Termux (tela do serviço ou console), o botão “Reagiu — pausar” no painel ou na notificação, "
                            "ou diga “ligou/apitou” no chat (o Claude chama pausar).")
         r["proximos"] = [self._descr_candidato(i) for i in range(0, min(3, len(fila)))]
         return r

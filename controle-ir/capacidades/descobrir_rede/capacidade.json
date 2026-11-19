@@ -1,0 +1,14 @@
+{
+ "nome": "descobrir_rede",
+ "titulo": "Inventário da rede local",
+ "descricao": "Varre a sub-rede do Wi-Fi atual (só leitura: conexão TCP em portas comuns, SSDP/UPnP, Gree e Midea por UDP), adivinha o tipo de cada aparelho (roteador, câmera, TV, ar, impressora...), compara com o inventário anterior e avisa de aparelhos novos ou sumidos. Não precisa de nmap.",
+ "executar": "principal.py",
+ "efeito": "leitura",
+ "acessos": ["rede local (somente a sub-rede do próprio Wi-Fi)", "termux-api: wifi-connectioninfo", "grava ~/.controle-ir/medicoes/inventario.json"],
+ "tempo_limite": 120,
+ "entrada": {"type": "object", "properties": {
+   "sub_rede": {"type": "string", "description": "ex.: 192.168.5 (padrão: a do IP do Wi-Fi atual)"},
+   "udp": {"type": "boolean", "description": "testa também Gree/Midea por UDP (padrão true)"},
+   "rotulo": {"type": "object", "description": "apelidos opcionais {ip: nome} gravados no inventário"}
+ }, "additionalProperties": false}
+}

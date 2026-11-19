@@ -1,0 +1,16 @@
+{
+ "nome": "termometro",
+ "titulo": "Termômetro do cômodo pela bateria do celular",
+ "descricao": "Estima a temperatura do ar do cômodo pela temperatura da bateria, que acompanha o ambiente quando o celular está parado (fora da tomada, pouco uso). acao=ler: mede por alguns segundos e devolve a estimativa, a confiança e a tendência (°C/h). acao=calibrar com temperatura_real (de um termômetro ou do visor do ar estabilizado) ajusta a diferença bateria→ar. acao=monitorar com minutos: mede a cada 2 min em segundo plano e guarda o histórico. acao=historico: últimas leituras.",
+ "executar": "principal.py",
+ "efeito": "leitura",
+ "acessos": ["termux-api: battery-status", "grava ~/.controle-ir/medicoes/temperatura.jsonl e termometro.json"],
+ "tempo_limite": 60,
+ "entrada": {"type": "object", "properties": {
+   "acao": {"type": "string", "description": "ler | calibrar | monitorar | historico"},
+   "segundos": {"type": "integer", "description": "ler: tempo de medição, 5–40 (padrão 15)"},
+   "temperatura_real": {"type": "number", "description": "calibrar: temperatura do ar medida agora (°C)"},
+   "minutos": {"type": "integer", "description": "monitorar: por quanto tempo, 5–720 (padrão 60)"},
+   "n": {"type": "integer", "description": "historico: quantas leituras (padrão 30)"}
+ }, "required": ["acao"], "additionalProperties": false}
+}

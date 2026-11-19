@@ -36,6 +36,10 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 (manhã) — Noite com o serviço ligado sem uso:** o servidor ficou no ar desde 18/11 22:54, sem reiniciar
+  (o HyperOS não derrubou), e o usuário viu **gasto mínimo de bateria**. De manhã: 49%, descarregando, 26,6 °C,
+  CPU parada (carga 0). Decisão do usuário: **pode ficar ligado o tempo todo** (antes ligava só para usar).
+  O histórico do termômetro não mede o repouso (as leituras de 22:56–23:55 foram com o celular em uso, 200–1000 mA).
 - **19/11 — Skill `/god-mode`** (`.claude/skills/god-mode/`): adaptação do G0DM0D3 (elder-plinius, AGPL-3.0) com
   AutoTune de 20 contextos (+ português), aprendizado por notas, STM, pontuação neutra, `perguntar` e `comparar`
   (OpenRouter ou servidor local) com síntese pelo Claude. Ficaram de fora os prompts de jailbreak, a diretiva
@@ -93,10 +97,12 @@
   enxergam as ferramentas novas (lista fixa por conversa): usar conversa nova.
 - (histórico) Servidor no celular na versão **1.0.7** (atualizado em 18/11 às 20h08; catálogo mantido, sem reconstruir).
 - **Termux:Widget instalado** com os atalhos "Ligar Controle IR" e "Desligar Controle IR" na tela inicial,
-  testados em 18/11: o usuário liga o serviço só quando vai usar, para poupar bateria. Se o conector não
+  testados em 18/11. Até 18/11 o usuário ligava o serviço só para usar; em 19/11 viu que uma noite inteira ligado
+  gasta quase nada e decidiu deixar **ligado o tempo todo** (os atalhos continuam valendo). Se o conector não
   responder (Service Unavailable / Not Found), peça para tocar em "Ligar Controle IR"; logo depois de ligar,
   as 1–2 primeiras chamadas podem falhar enquanto o túnel abre (repita após alguns segundos).
-- Início automático (Termux:Boot): **não ativado**, por escolha do usuário (bateria).
+- Início automático (Termux:Boot): **não ativado**. O motivo era bateria; com o gasto mínimo medido em 19/11, dá
+  para ativar com `controle-ir inicio-automatico sim` se o usuário quiser (volta sozinho depois de reiniciar o celular).
 
 ## Conector no Claude
 - Nome atual: "Controle master" (sem login, URL com segredo). O antigo "Controle do POCO" foi removido.
@@ -140,8 +146,8 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
 ## Implementado em 18/11 (versões 1.0.6 e 1.0.7, instaladas no celular)
 - **Ligar/desligar com um toque (1.0.7):** atalhos "Ligar Controle IR" e "Desligar Controle IR" em
   `~/.shortcuts/tasks` para o app Termux:Widget (o instalador cria; `controle-ir atalhos`); `controle-ir
-  ligar|desligar` avisam na tela; botão Desligar na notificação. O usuário prefere ligar só quando for usar,
-  para poupar bateria: se o conector não responder, peça para tocar em "Ligar Controle IR".
+  ligar|desligar` avisam na tela; botão Desligar na notificação. Desde 19/11 o serviço fica ligado direto (gasto
+  mínimo numa noite); se o conector não responder, peça para tocar em "Ligar Controle IR".
 - **Início automático (Termux:Boot):** `controle-ir inicio-automatico sim|nao|status` cria/remove
   `~/.termux/boot/controle-ir` (wake lock + `controle-ir iniciar --fundo`).
 - **Segundo plano:** `iniciar --fundo` roda sem console; registro em `~/.controle-ir/servico.log` (permissão 600,

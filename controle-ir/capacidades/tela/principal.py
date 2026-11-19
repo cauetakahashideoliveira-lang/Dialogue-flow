@@ -24,6 +24,9 @@ RISH = os.path.join(BASE, "rish", "rish")
 TMP = os.path.join(BASE, "tela")
 # pasta de troca com o usuário shell: ele escreve aqui e o Termux (com acesso ao armazenamento) lê
 COMPARTILHADA = os.environ.get("CONTROLE_IR_COMPARTILHADA") or "/storage/emulated/0/Download/.controle-ir-tela"
+# área do shell onde o comando escreve de fato: o system_server recusa (Failed transaction) as saídas de `cmd`
+# (ex.: input) que apontam para a memória compartilhada ou para o cano do app; daqui o resultado é copiado
+TMP_SHELL = os.environ.get("CONTROLE_IR_TMP_SHELL") or "/data/local/tmp"
 BLOQUEADOS_ARQ = os.path.join(BASE, "tela_bloqueados.json")
 # Apps em que a ferramenta não toca nem digita (bancos, pagamentos, senhas, autenticadores). Editável no arquivo acima.
 BLOQUEADOS_PADRAO = [
@@ -151,10 +154,13 @@ def rish(cmd, timeout=20):
     if not os.access(pasta, os.R_OK | os.W_OK):
         raise SemShizuku(f"o Termux não acessa a pasta de troca {pasta}: rode termux-setup-storage e permita o "
                          "acesso aos arquivos")
-    base = os.path.join(pasta, f"cmd-{os.getpid()}-{time.monotonic_ns()}")
+    nome = f"cir-{os.getpid()}-{time.monotonic_ns()}"
+    base = os.path.join(pasta, nome)
     saida, erros, codigo = base + ".out", base + ".err", base + ".rc"
-    remoto = (f"mkdir -p {shlex.quote(pasta)}; ( {cmd} ) > {shlex.quote(saida)} 2> {shlex.quote(erros)}; "
-              f"echo $? > {shlex.quote(codigo)}")
+    t = shlex.quote(os.path.join(TMP_SHELL, nome))
+    remoto = (f"mkdir -p {shlex.quote(pasta)}; ( {cmd} ) < /dev/null > {t}.out 2> {t}.err; rc=$?; "
+              f"cat {t}.out > {shlex.quote(saida)}; cat {t}.err > {shlex.quote(erros)}; rm -f {t}.out {t}.err; "
+              f"echo $rc > {shlex.quote(codigo)}")
     try:
         r = subprocess.run(["sh", RISH, "-c", remoto], capture_output=True, timeout=timeout, env=env, check=False)
         out, err, rc = _ler(saida), _ler(erros), _ler(codigo)

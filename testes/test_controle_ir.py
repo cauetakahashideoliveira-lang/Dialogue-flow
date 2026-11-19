@@ -1336,7 +1336,10 @@ class TestTelaPorArquivo(unittest.TestCase):
         bin_ = self.tmp / "bin"
         bin_.mkdir()
         (bin_ / "uiautomator").write_text(f'cat > "$2" <<\'FIM\'\n{TestTela.XML}\nFIM\necho "UI hierchary dumped to: $2"\n')
-        (bin_ / "input").write_text('if [ "$BLOQUEAR_INPUT" = 1 ]; then echo "java.lang.SecurityException: Injecting '
+        # como no POCO: o system_server recusa a saída de `cmd input` na memória compartilhada ou num cano
+        (bin_ / "input").write_text('case "$(readlink /proc/$$/fd/1) $(readlink /proc/$$/fd/0)" in *compartilhada*|*pipe:*) '
+                                    'echo "cmd: Failure calling service input: Failed transaction (2147483646)"; exit 2;; esac\n'
+                                    'if [ "$BLOQUEAR_INPUT" = 1 ]; then echo "java.lang.SecurityException: Injecting '
                                     'to another application requires INJECT_EVENTS permission" >&2; exit 1; fi\n'
                                     'if [ "$BLOQUEAR_INPUT" = 2 ]; then echo "cmd: Failure calling service input: '
                                     'Failed transaction (2147483646)"; exit 2; fi\n'
@@ -1346,6 +1349,8 @@ class TestTelaPorArquivo(unittest.TestCase):
         self.m.RISH = str(rish)
         self.m.COMPARTILHADA = str(self.tmp / "compartilhada")
         self.m.TMP = str(self.tmp / "tela")
+        self.m.TMP_SHELL = str(self.tmp / "local_tmp")
+        Path(self.m.TMP_SHELL).mkdir()
         self.registro = self.tmp / "input.log"
         self.env = mock.patch.dict(os.environ, {"PATH": f"{bin_}:{os.environ['PATH']}",
                                                 "REGISTRO_INPUT": str(self.registro)})
@@ -1361,6 +1366,7 @@ class TestTelaPorArquivo(unittest.TestCase):
         grande = self.m.rish("head -c 300000 /dev/zero | tr '\\0' x")[0]
         self.assertEqual(len(grande), 300000)  # sem corte
         self.assertEqual(self._sobras(), [])  # nada fica na memória compartilhada
+        self.assertEqual(list(Path(self.m.TMP_SHELL).iterdir()), [])  # nem na área do shell
         self.assertTrue((Path(self.m.COMPARTILHADA) / ".nomedia").exists())
 
     def test_dump_ui_e_toque(self):

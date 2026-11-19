@@ -362,9 +362,12 @@ def painel_cli(a) -> int:
         p = pol.ler()
         p["modo_painel"] = True
         pol.gravar(p)
-        r = painel.sincronizar(PASTA, __version__)
         print("✔ Pareado com o painel. A partir de agora só o painel arma (com a sua digital).")
-        print(f"  estado: {json.dumps(r, ensure_ascii=False)}")
+        try:
+            r = painel.sincronizar(PASTA, __version__)
+            print(f"  estado: {json.dumps(r, ensure_ascii=False)}")
+        except Exception as e:  # noqa: BLE001 — o pareamento já valeu; o serviço tenta de novo a cada 30 s
+            print(f"  aviso: a primeira sincronização falhou ({e}); o serviço tenta de novo a cada 30 s")
         print("  Reinicie o serviço para ele acompanhar o painel: controle-ir desligar; controle-ir ligar")
         return 0
     cfg = painel.ler(PASTA)

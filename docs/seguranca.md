@@ -74,7 +74,12 @@ sozinho: quem arma é o painel, com a digital.
 - **Latência medida:** armar/desarmar/emergência chegam ao celular na próxima busca (≤ 30 s + rede); com o
   celular sem internet, vale o último estado assinado até o seu prazo (no máximo 24 h).
 - **Custo no celular:** uma requisição HTTPS pequena a cada 30 s (≈ 2 900/dia) e uma verificação Ed25519.
-- **Evidência:** `node painel/testes/e2e.cjs` (Chromium com autenticador virtual + código real do celular, 27
+- **Histórico do celular no painel (1.0.25):** só o que acontece depois do pareamento (o anterior fica no
+  celular), no máximo 30 eventos por envio, gravados numa transação encadeada; cada evento leva a posição no
+  arquivo e o painel ignora reenvios. Sem rede ou com tempo esgotado, o celular só tenta de novo em 30 s.
+- **iPad/Safari:** as opções da passkey são buscadas antes do toque (o Safari só abre o Face ID logo depois do
+  toque); um convite só é gasto quando a passkey nova é aceita.
+- **Evidência:** `node painel/testes/e2e.cjs` (Chromium com autenticador virtual + código real do celular, 30
   verificações) e `testes/test_controle_ir.py::TestPainel`.
 - **Raiz de confiança:** a conta da Cloudflare (quem a controla altera o Worker). Use 2FA nela. Recuperação se
   perder todas as passkeys: no D1 (Cloudflare → D1 → painel → Console) `UPDATE credenciais SET revogada = 1;` e

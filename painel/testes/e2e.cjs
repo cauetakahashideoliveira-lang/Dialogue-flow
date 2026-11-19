@@ -62,6 +62,8 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   const cdp2 = await ipad.newCDPSession(pIpad); await cdp2.send('WebAuthn.enable');
   await cdp2.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal',
     hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+  const conv0 = new URL(link).hash.split('=')[1];
+  ok(await semSessao('registro/opcoes', { convite: conv0 }) === 200, 'tentativa que não conclui não gasta o convite');
   await pIpad.goto(link); await pIpad.fill('#nomeConvite', 'iPad (teste)'); await pIpad.click('#btAceitar');
   await pIpad.waitForSelector('#logado:not(.escondido)');
   ok(/iPad \(teste\)/.test(await pIpad.textContent('#passkeys')), 'iPad cadastrado pelo convite, com a digital dele');
@@ -78,6 +80,11 @@ async function semSessao(rota, corpo = {}, cab = {}) {
     'o mesmo código de pareamento não serve duas vezes');
   let s = sincronizar();
   ok(s.seq >= 1 && s.efetiva.armado_ate === 0, 'celular recém-cadastrado começa DESARMADO (estado assinado conferido)');
+
+  // 3b. Histórico do celular: lotes de até 30 numa transação, sem repetir o que o painel já recebeu
+  const h = celular(`import time,os\nq=time.strftime('%Y-%m-%d %H:%M:%S')\nopen(os.path.join(P,'auditoria.jsonl'),'a').write(''.join(json.dumps({'quando':q,'evento':'e2e_%d'%i})+'\\n' for i in range(45)))\na=painel.sincronizar(P,'e2e');cfg=painel.ler(P);o=cfg['offset']\nb=painel.sincronizar(P,'e2e')\ncfg=painel.ler(P);cfg['offset']=o;painel.gravar(P,cfg)\nc=painel.sincronizar(P,'e2e')\nprint(json.dumps([a['eventos_aceitos'],b['eventos_aceitos'],c['eventos_enviados'],c['eventos_aceitos']]))`);
+  ok(h[0] === 30 && h[1] === 15, `histórico enviado em lotes (30 + 15): ${h}`);
+  ok(h[2] === 15 && h[3] === 0, 'reenvio do mesmo trecho (resposta perdida) não duplica no painel');
 
   // 4. Armar com a digital; o painel só mostra "aplicado" depois que o celular confirma
   await clicar('#btArmar2');

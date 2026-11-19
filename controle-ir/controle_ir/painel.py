@@ -17,6 +17,7 @@ import urllib.request
 from pathlib import Path
 
 INTERVALO = 30
+MAX_EVENTOS = 30  # por envio: cabe numa transação do painel (limite de consultas do plano grátis)
 ARQUIVO = "painel.json"
 
 
@@ -87,6 +88,8 @@ def _http(metodo: str, url: str, token: str | None = None, corpo=None, timeout: 
             return e.code, json.loads(e.read() or b"{}")
         except ValueError:
             return e.code, {}
+    except (urllib.error.URLError, OSError) as e:  # sem rede ou tempo esgotado: tratado como offline
+        return 0, {"erro": str(getattr(e, "reason", e))[:200]}
 
 
 def parear(pasta, url: str, codigo: str, nome: str, versao: str) -> dict:
@@ -96,8 +99,12 @@ def parear(pasta, url: str, codigo: str, nome: str, versao: str) -> dict:
     st, r = _http("POST", f"{url}/api/celular/parear", corpo={"codigo": codigo, "nome": nome, "versao": versao})
     if st != 200:
         raise ValueError(r.get("erro") or f"o painel respondeu HTTP {st}")
+    try:  # o histórico de antes do pareamento fica só no celular; o painel recebe daqui em diante
+        offset = (Path(pasta) / "auditoria.jsonl").stat().st_size
+    except OSError:
+        offset = 0
     cfg = {"url": url, "aparelho": r["aparelho"], "token": r["token"], "chave_publica": r["chave_publica"],
-           "seq_max": 0, "offset": 0, "pareado_em": time.time()}
+           "seq_max": 0, "offset": offset, "pareado_em": time.time()}
     gravar(pasta, cfg)
     return cfg
 
@@ -128,24 +135,30 @@ def sincronizar(pasta, versao: str, ao_reduzir=None) -> dict:
     armado_agora = not e.get("travado") and e.get("armado_ate", 0) > agora
     if ao_reduzir and (e.get("travado") or (armado_antes and not armado_agora)):
         ao_reduzir("emergência no painel" if e.get("travado") else "desarmado pelo painel")
-    eventos, novo_offset = _eventos_novos(pasta, int(cfg.get("offset", 0)))
-    st2, _ = _http("POST", f"{cfg['url']}/api/celular/ack", cfg["token"],
-                   {"seq": e["seq"], "versao": versao, "eventos": eventos})
+    desde = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(cfg["pareado_em"])) if cfg.get("pareado_em") else ""
+    eventos, novo_offset, arquivo = _eventos_novos(pasta, int(cfg.get("offset", 0)), desde)
+    st2, r2 = _http("POST", f"{cfg['url']}/api/celular/ack", cfg["token"],
+                   {"seq": e["seq"], "versao": versao, "eventos": eventos, "arquivo": arquivo}, timeout=20)
     if st2 == 200:
         cfg = ler(pasta) or cfg
         cfg["offset"] = novo_offset
         gravar(pasta, cfg)
     return {"pareado": True, "seq": e["seq"], "armado_ate": e["armado_ate"], "travado": e["travado"],
-            "eventos_enviados": len(eventos) if st2 == 200 else 0}
+            "eventos_enviados": len(eventos) if st2 == 200 else 0,
+            "eventos_aceitos": r2.get("recebidos", 0) if st2 == 200 else 0}
 
 
-def _eventos_novos(pasta, offset: int, maximo: int = 100) -> tuple[list, int]:
+def _eventos_novos(pasta, offset: int, desde: str = "", maximo: int = MAX_EVENTOS) -> tuple[list, int, str]:
+    """Linhas novas da auditoria local a partir de `offset` (no máximo `maximo` por envio, para o painel gravar
+    tudo numa só transação). Cada evento leva `_fim` (posição no arquivo) para o painel ignorar repetidos, e
+    `arquivo` identifica o arquivo (se ele for trocado, as posições recomeçam)."""
     arq = Path(pasta) / "auditoria.jsonl"
     try:
         with open(arq, "rb") as f:
+            arquivo = str(os.fstat(f.fileno()).st_ino)
             f.seek(0, 2)
             if offset > f.tell():  # arquivo encolheu: alguém apagou linhas — o painel registra
-                return [{"evento": "auditoria_local_encolheu", "antes": offset, "agora": f.tell()}], f.tell()
+                return [{"evento": "auditoria_local_encolheu", "antes": offset, "agora": f.tell()}], f.tell(), arquivo
             f.seek(offset)
             linhas, pos = [], offset
             for linha in f:
@@ -156,10 +169,12 @@ def _eventos_novos(pasta, offset: int, maximo: int = 100) -> tuple[list, int]:
                     d = json.loads(linha)
                 except ValueError:
                     continue
-                linhas.append({k: (str(v)[:200] if isinstance(v, str) else v) for k, v in d.items()})
-            return linhas, pos
+                if desde and str(d.get("quando", "9")) < desde:  # anterior ao pareamento: fica só no celular
+                    continue
+                linhas.append({**{k: (str(v)[:200] if isinstance(v, str) else v) for k, v in d.items()}, "_fim": pos})
+            return linhas, pos, arquivo
     except OSError:
-        return [], offset
+        return [], offset, ""
 
 
 class Sincronizador:

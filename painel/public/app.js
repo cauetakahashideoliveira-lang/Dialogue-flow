@@ -16,15 +16,30 @@ const ha = t => { if (!t) return 'nunca'; const s = Math.max(0, Math.round(Date.
   return s < 90 ? `há ${s} s` : s < 5400 ? `há ${Math.round(s / 60)} min` : `há ${Math.round(s / 3600)} h`; };
 function el(tag, txt, cls) { const e = document.createElement(tag); if (txt != null) e.textContent = txt; if (cls) e.className = cls; return e; }
 
+// O Safari (iPad/iPhone) só abre o Face ID se o pedido da passkey vier logo depois do toque. Por isso as opções
+// do desafio são buscadas ANTES (ao abrir a página e depois de cada uso) e a digital vem antes da ação.
+let preLogin = null, preLoginEm = 0, digitalEm = 0;
+function prepararLogin() {
+  api('login/opcoes').then(p => { preLogin = p; preLoginEm = Date.now(); }).catch(() => { preLogin = null; });
+}
 async function digital() {  // confirmação com passkey (entrar ou renovar antes de uma ação sensível)
-  const { desafio_id, opcoes } = await api('login/opcoes');
-  const resposta = await startAuthentication({ optionsJSON: opcoes });
-  return api('login/verificar', { desafio_id, resposta });
+  let p = preLogin && Date.now() - preLoginEm < 240000 ? preLogin : null;
+  preLogin = null;
+  try {
+    if (!p) p = await api('login/opcoes');
+    const resposta = await startAuthentication({ optionsJSON: p.opcoes });
+    const r = await api('login/verificar', { desafio_id: p.desafio_id, resposta });
+    digitalEm = Date.now();
+    return r;
+  } finally { prepararLogin(); }
 }
 async function comDigital(fn) {
+  if (Date.now() - digitalEm > 100000) await digital();  // a digital primeiro, ainda dentro do toque
   try { return await fn(); } catch (e) {
     if (e.status !== 403 || !/digital/.test(e.message)) throw e;
-    await digital(); return fn();
+    digitalEm = 0;  // no Chrome dá para pedir de novo aqui; no Safari, o toque seguinte resolve
+    try { await digital(); } catch { throw new Error('confirme a digital de novo: toque outra vez no botão'); }
+    return fn();
   }
 }
 
@@ -88,11 +103,17 @@ $('btConvite').onclick = () => acao(() => comDigital(async () => {
   $('convite').replaceChildren(el('span', `Abra no outro aparelho em até ${expira_em_min} min (uso único): `), el('code', link));
 }), 'Convite criado');
 const conviteNaUrl = new URLSearchParams(location.hash.slice(1)).get('convite');
-if (conviteNaUrl) $('aceitarConvite').classList.remove('escondido');
+let preConvite = null;
+const prepararConvite = () => api('registro/opcoes', { convite: conviteNaUrl })
+  .then(p => { preConvite = p; }).catch(e => aviso(e.message, 'perigo-t'));
+if (conviteNaUrl) { $('aceitarConvite').classList.remove('escondido'); prepararConvite(); }
 $('btAceitar').onclick = () => acao(async () => {
-  const { desafio_id, opcoes } = await api('registro/opcoes', { convite: conviteNaUrl });
-  const resposta = await startRegistration({ optionsJSON: opcoes });
-  await api('registro/verificar', { desafio_id, resposta, nome: $('nomeConvite').value || 'iPad' });
+  const p = preConvite || await api('registro/opcoes', { convite: conviteNaUrl });
+  preConvite = null;
+  try {
+    const resposta = await startRegistration({ optionsJSON: p.opcoes });
+    await api('registro/verificar', { desafio_id: p.desafio_id, resposta, nome: $('nomeConvite').value || 'iPad' });
+  } catch (e) { prepararConvite(); throw e; }  // o convite continua valendo: é só tocar de novo
   history.replaceState(null, '', '/'); $('aceitarConvite').classList.add('escondido');
 }, 'Digital deste aparelho cadastrada');
 $('btArmarDia').onclick = () => acao(() => comDigital(() => api('armar', { ate: meiaNoite() })), 'Armado até a meia-noite');
@@ -106,5 +127,6 @@ $('btParear').onclick = () => acao(() => comDigital(async () => {
 }), 'Código criado');
 $('btIntegridade').onclick = () => acao(async () => { const r = await api('integridade'); if (!r.ok) throw new Error(`histórico alterado no evento ${r.quebra_em}`); aviso(`Histórico íntegro (${r.eventos} eventos)`, 'ok'); }, 'Histórico íntegro');
 $('btSair').onclick = () => acao(() => api('sair'), 'Saiu');
+prepararLogin();
 carregar();
 setInterval(() => { if (dados && !document.hidden) carregar(); }, 15000);

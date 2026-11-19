@@ -723,6 +723,22 @@ class TestPainel(unittest.TestCase):
         self.assertIsNone(self.p.estado_valido(self.pasta))  # revogado: falha fechada
         self.assertFalse(self.s.politica()["armado"])
 
+    def test_sem_rede_e_historico_desde_o_pareamento(self):
+        st, r = self.p._http("GET", "http://127.0.0.1:1/x", timeout=2)  # nada escutando: offline, sem exceção
+        self.assertEqual(st, 0)
+        self.assertIn("erro", r)
+        arq = Path(self.pasta) / "auditoria.jsonl"
+        arq.write_text(json.dumps({"quando": "2026-01-01 10:00:00", "evento": "antigo"}) + "\n" +
+                       "".join(json.dumps({"quando": "2026-11-19 10:00:00", "evento": f"novo{i}"}) + "\n"
+                               for i in range(40)))
+        ev, fim, arquivo = self.p._eventos_novos(self.pasta, 0, "2026-11-19 00:00:00")
+        self.assertEqual(len(ev), self.p.MAX_EVENTOS)  # lote limitado (uma transação no painel)
+        self.assertNotIn("antigo", json.dumps(ev))  # o que é de antes do pareamento fica só no celular
+        self.assertEqual(ev[-1]["_fim"], fim)  # posição de cada evento: o painel ignora repetidos
+        self.assertTrue(arquivo)
+        ev2, fim2, _ = self.p._eventos_novos(self.pasta, fim, "2026-11-19 00:00:00")
+        self.assertEqual((len(ev2), fim2), (10, arq.stat().st_size))
+
 
 class TestGreeVariante(unittest.TestCase):
     """ferramentas/gree_variante.py: sinais que funcionaram no “ar do quarto” (Gree GWH09KF) em 17/11/2026."""

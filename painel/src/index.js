@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS eventos (id INTEGER PRIMARY KEY AUTOINCREMENT, quando
   origem TEXT NOT NULL, tipo TEXT NOT NULL, dados TEXT, hash TEXT NOT NULL, hash_anterior TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS tentativas (chave TEXT PRIMARY KEY, n INTEGER NOT NULL, janela INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS convites (hash TEXT PRIMARY KEY, expira INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS recebimentos (aparelho TEXT PRIMARY KEY, arquivo TEXT NOT NULL, ate INTEGER NOT NULL);
 `;
 let esquemaPronto = false;
 async function inicializar(env) {
@@ -67,14 +68,28 @@ const definir = (env, k, v) => env.DB.prepare('INSERT INTO config (k, v) VALUES 
   .bind(k, v, v).run();
 
 // auditoria do painel: encadeada por hash (cada linha cobre a anterior); só o Worker escreve
-async function registrar(env, origem, tipo, dados = {}) {
-  const ult = await env.DB.prepare('SELECT hash FROM eventos ORDER BY id DESC LIMIT 1').first();
-  const anterior = ult ? ult.hash : 'inicio';
-  const quando = agora(), corpo = JSON.stringify(dados).slice(0, 2000);
-  const hash = await sha256(`${anterior}|${quando}|${origem}|${tipo}|${corpo}`);
-  await env.DB.prepare('INSERT INTO eventos (quando, origem, tipo, dados, hash, hash_anterior) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(quando, origem, tipo, corpo, hash, anterior).run();
+// Histórico encadeado: cada INSERT só vale se o topo da cadeia for o esperado, e o lote inteiro roda numa
+// transação (batch). Se outra gravação entrou no meio, nada é gravado e o lote é refeito sobre o topo novo.
+const ACRESCENTA = `INSERT INTO eventos (quando, origem, tipo, dados, hash, hash_anterior) SELECT ?, ?, ?, ?, ?, ?
+  WHERE COALESCE((SELECT hash FROM eventos ORDER BY id DESC LIMIT 1), 'inicio') = ?`;
+async function registrarVarios(env, itens, extras = []) {
+  for (let tentativa = 0; tentativa < 4; tentativa++) {
+    const ult = await env.DB.prepare('SELECT hash FROM eventos ORDER BY id DESC LIMIT 1').first();
+    let anterior = ult ? ult.hash : 'inicio';
+    const quando = agora(), stmts = [];
+    for (const { origem, tipo, dados } of itens) {
+      const corpo = JSON.stringify(dados ?? {}).slice(0, 2000);
+      const hash = await sha256(`${anterior}|${quando}|${origem}|${tipo}|${corpo}`);
+      stmts.push(env.DB.prepare(ACRESCENTA).bind(quando, origem, tipo, corpo, hash, anterior, anterior));
+      anterior = hash;
+    }
+    if (!stmts.length) { if (extras.length) await env.DB.batch(extras); return; }
+    const r = await env.DB.batch([...stmts, ...extras]);
+    if (r[0].meta.changes) return;
+  }
+  throw new Error('histórico ocupado; tente de novo');
 }
+const registrar = (env, origem, tipo, dados = {}) => registrarVarios(env, [{ origem, tipo, dados }]);
 
 async function limitar(env, req, rota, max = 10) {  // limite simples por IP e minuto
   const ip = req.headers.get('cf-connecting-ip') || 'local';
@@ -147,6 +162,7 @@ async function consumirDesafio(env, id, tipo) {  // uso único
 async function registroOpcoes(env, req, corpo) {
   const total = (await env.DB.prepare('SELECT COUNT(*) AS n FROM credenciais WHERE revogada = 0').first()).n;
   const s = await sessao(env, req);
+  let convite = null;
   if (total === 0) {  // primeira passkey: exige o código inicial definido pelo dono na Cloudflare
     if (!env.CODIGO_INICIAL || String(env.CODIGO_INICIAL).length < 12)
       return erro('defina o segredo CODIGO_INICIAL (12+ caracteres) no painel da Cloudflare', 503);
@@ -161,7 +177,7 @@ async function registroOpcoes(env, req, corpo) {
       await registrar(env, 'painel', 'convite_recusado', {});
       return erro('convite inválido ou vencido', 403);
     }
-    await env.DB.prepare('DELETE FROM convites WHERE hash = ?').bind(h).run();
+    convite = h;  // só é gasto quando a passkey nova for aceita (uma tentativa que falha não queima o convite)
   } else if (!fresca(s)) {
     return erro('para cadastrar outro aparelho, entre com uma passkey já cadastrada (há menos de 2 min)', 403);
   }
@@ -173,12 +189,12 @@ async function registroOpcoes(env, req, corpo) {
     authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
     excludeCredentials: existentes.results.map(c => ({ id: c.id, transports: c.transportes ? JSON.parse(c.transportes) : undefined })),
   });
-  const id = await guardarDesafio(env, opcoes.challenge, 'registro', s ? s.hash : null);
+  const id = await guardarDesafio(env, opcoes.challenge, convite ? 'registro_convite' : 'registro', convite || (s ? s.hash : null));
   return json({ desafio_id: id, opcoes });
 }
 
 async function registroVerificar(env, req, corpo) {
-  const d = await consumirDesafio(env, corpo.desafio_id, 'registro');
+  const d = await consumirDesafio(env, corpo.desafio_id, 'registro') || await consumirDesafio(env, corpo.desafio_id, 'registro_convite');
   if (!d) return erro('desafio inválido ou vencido', 400);
   const { rpID, origem } = rp(req);
   let v;
@@ -189,6 +205,10 @@ async function registroVerificar(env, req, corpo) {
     return erro(`passkey recusada: ${e.message}`, 400);
   }
   if (!v.verified) return erro('passkey recusada', 400);
+  if (d.tipo === 'registro_convite') {  // uso único, gasto agora (atômico)
+    const g = await env.DB.prepare('DELETE FROM convites WHERE hash = ? AND expira >= ?').bind(d.sessao, agora()).run();
+    if (!g.meta.changes) return erro('convite já usado ou vencido', 403);
+  }
   const c = v.registrationInfo.credential;
   const nome = String(corpo.nome || 'aparelho').slice(0, 40);
   await env.DB.prepare('INSERT INTO credenciais (id, chave, contador, transportes, nome, criada) VALUES (?, ?, ?, ?, ?, ?)')
@@ -321,8 +341,17 @@ async function ackCelular(env, req, corpo) {
   const seq = Number(corpo.seq) || 0;
   await env.DB.prepare('UPDATE aparelhos SET aplicado_seq = MAX(aplicado_seq, ?), aplicado_em = ?, versao = ? WHERE id = ?')
     .bind(seq, agora(), String(corpo.versao || ap.versao || '').slice(0, 20), ap.id).run();
-  const eventos = Array.isArray(corpo.eventos) ? corpo.eventos.slice(0, 200) : [];
-  for (const ev of eventos) await registrar(env, `celular:${ap.id}`, String(ev.evento || 'evento').slice(0, 40), ev);
+  // até 30 eventos por envio, gravados numa só transação; `_fim` (posição no arquivo do celular) evita repetidos
+  // quando a resposta anterior se perdeu e o celular reenviou o mesmo trecho
+  let eventos = Array.isArray(corpo.eventos) ? corpo.eventos.slice(0, 30) : [];
+  const arquivo = String(corpo.arquivo || '');
+  const rec = await env.DB.prepare('SELECT arquivo, ate FROM recebimentos WHERE aparelho = ?').bind(ap.id).first();
+  let ate = rec && rec.arquivo === arquivo && !eventos.some(e => e && e.evento === 'auditoria_local_encolheu') ? rec.ate : 0;
+  eventos = eventos.filter(e => e && typeof e === 'object' && !(Number(e._fim) > 0 && Number(e._fim) <= ate));
+  for (const e of eventos) if (Number(e._fim) > ate) ate = Number(e._fim);
+  const marca = env.DB.prepare('INSERT INTO recebimentos (aparelho, arquivo, ate) VALUES (?, ?, ?) ON CONFLICT(aparelho) DO UPDATE SET arquivo = ?, ate = ?')
+    .bind(ap.id, arquivo, ate, arquivo, ate);
+  await registrarVarios(env, eventos.map(ev => ({ origem: `celular:${ap.id}`, tipo: String(ev.evento || 'evento').slice(0, 40), dados: ev })), [marca]);
   return json({ ok: true, recebidos: eventos.length });
 }
 

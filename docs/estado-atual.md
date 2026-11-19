@@ -5,7 +5,11 @@
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
-- Servidor no celular na versão **1.0.7** (atualizado em 18/11 às 20h08; catálogo mantido, sem reconstruir).
+- **19/11:** celular atualizado para a **1.0.12** (aparelhos e catálogo mantidos; confirmado por `consultar`). O
+  atalho Ligar do widget não subiu o serviço e não deixou registro; o serviço sobe com `controle-ir` no Termux.
+  A 1.0.13 faz o `ligar` registrar desde o início e mostrar a falha na tela. Sessões antigas do Claude não
+  enxergam as ferramentas novas (lista fixa por conversa): usar conversa nova.
+- (histórico) Servidor no celular na versão **1.0.7** (atualizado em 18/11 às 20h08; catálogo mantido, sem reconstruir).
 - **Termux:Widget instalado** com os atalhos "Ligar Controle IR" e "Desligar Controle IR" na tela inicial,
   testados em 18/11: o usuário liga o serviço só quando vai usar, para poupar bateria. Se o conector não
   responder (Service Unavailable / Not Found), peça para tocar em "Ligar Controle IR"; logo depois de ligar,
@@ -47,7 +51,7 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
   agir sem pedir aprovação a cada passo (freio: `travar`). Linha ética: só o que é dele ou autorizado.
 - O usuário também usa o Claude no iPad e quer aprovar pelo chat sem código: padrão `aprovacao_remota: chat`
   (o Claude pergunta, ele diz sim). Não configurar TOTP a menos que ele peça.
-- **Instalar a 1.0.12** (capacidades, execução governada, atualizar/reverter, aprovação no celular ou por
+- **Instalar a 1.0.13** (`controle-ir atualizar --ref <commit>` no Termux) (capacidades, execução governada, atualizar/reverter, aprovação no celular ou por
   código do autenticador de outro aparelho, origens). É a última instalação colando a linha: depois, `atualizar_sistema(ref)` pelo Claude. Ver
   `docs/modo-deus.md` (§8 próximos experimentos, §9 perguntas).
 - Gravar as ressalvas como observação de cada aparelho (`editar_aparelho(observacao=…)`) para chegarem ao

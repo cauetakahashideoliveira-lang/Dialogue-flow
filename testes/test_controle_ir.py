@@ -1004,11 +1004,13 @@ class TestSegundoPlano(unittest.TestCase):
         for f in (ligar, desligar, tarefas, tarefas.parent):
             self.assertEqual(f.stat().st_mode & 0o777, 0o700)
         self.assertIn("já estava desligado", self.cli("desligar")[1])
+        self.assertIn("desligar: pedido", (self.pasta / "servico.log").read_text())  # rastro mesmo sem serviço
         p = subprocess.Popen([sys.executable, "-m", "controle_ir", "ligar"], env=self.env, stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         try:
             self.assertTrue(self.esperar(self.saude))
             self.assertIn("já está ligado", self.cli("ligar")[1])
+            self.assertIn("ligar: já estava ligado", (self.pasta / "servico.log").read_text())
             self.assertTrue(self.esperar(lambda: "ligado — pode pedir" in
                                          (self.pasta / "servico.log").read_text(), 5))
             self.assertIn("Controle IR desligado", self.cli("desligar")[1])

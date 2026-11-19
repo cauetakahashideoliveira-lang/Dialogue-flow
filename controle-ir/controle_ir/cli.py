@@ -447,6 +447,18 @@ def capacidade_cli(a) -> int:
         return 1
 
 
+def _registrar(msg: str):
+    """Linha com data no servico.log (permissão 600), mesmo sem o serviço rodar: rastro dos atalhos do widget."""
+    try:
+        PASTA.mkdir(parents=True, exist_ok=True)
+        log = caminho_log()
+        with open(log, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%d/%m %H:%M:%S')} {msg}\n")
+        os.chmod(log, 0o600)
+    except OSError:
+        pass
+
+
 def _aviso(texto: str):
     """Aviso curto na tela do celular (termux-toast); no terminal também imprime."""
     print(texto, flush=True)
@@ -1016,14 +1028,27 @@ def main(argv=None):
             print("ATENÇÃO: já houve chamadas de fora da rede permitida; se forem suas, volte com: controle-ir origens observar")
         return 0
     if cmd == "ligar":
-        if servico_ativo():
-            _aviso("Controle IR já está ligado")
-            return 0
-        _aviso("Ligando o Controle IR…")
-        a = ap.parse_args(["iniciar", "--fundo"])
-        a.avisar = True
-        return iniciar(a)
+        # chamado pelo atalho do widget, sem terminal: registra desde o primeiro instante e mostra o motivo de
+        # qualquer falha na tela (antes, um erro aqui sumia sem deixar rastro)
+        _registrar(f"ligar: pedido (versão {__version__}, terminal={'sim' if sys.stdin and sys.stdin.isatty() else 'não'})")
+        try:
+            if servico_ativo():
+                _registrar("ligar: já estava ligado")
+                _aviso("Controle IR já está ligado")
+                return 0
+            _aviso("Ligando o Controle IR…")
+            a = ap.parse_args(["iniciar", "--fundo"])
+            a.avisar = True
+            return iniciar(a)
+        except SystemExit:
+            raise
+        except BaseException as e:  # noqa: BLE001
+            import traceback
+            _registrar("ligar: FALHOU\n" + traceback.format_exc())
+            _aviso(f"Controle IR: falha ao ligar ({type(e).__name__}: {str(e)[:80]}). Veja: controle-ir log")
+            return 1
     if cmd == "desligar":
+        _registrar("desligar: pedido")
         _aviso("Controle IR desligado" if parar_servico() else "Controle IR já estava desligado")
         return 0
     if cmd == "log":

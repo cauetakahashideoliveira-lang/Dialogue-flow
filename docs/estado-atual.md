@@ -9,6 +9,13 @@
   bateria → ~29 °C estimado, confiança média com o celular em uso; monitorando 60 min), ouvido do ar no
   `controlar(ouvir=true)` (3 s antes + ~8 s depois do envio, compara o ruído), `tela` e o recorte da `foto`
   instalados com o aval do usuário ("pode começar a fazer essa integração").
+- **19/11 — Central da Casa** (artefato privado https://claude.ai/artifact/XSh6ivS8Cc6BsKakes2pCh, fonte
+  `artefatos/central-da-casa.html`): página do claude.ai que usa o conector Controle master (consultar, opcoes,
+  controlar, executar_capacidade) — ares, TV, foto do ar, termômetro, sono — e um assistente (sample com
+  ferramentas + ditado + voz). A parte do sono depende da 1.0.19.
+- **19/11 — 1.0.19 no GitHub (commit 5f07335), NÃO instalada:** `sono` (laboratório do sono) e `sonar`
+  (presença por ultrassom, experimental). Instalar com `atualizar_sistema` quando o usuário estiver presente
+  (cada chamada pede aprovação da organização).
 - **19/11 — PENDENTE (continuar numa conversa nova):**
   1. Agente de tela: `tela` instalada, falta o Shizuku. O usuário está configurando (opções do desenvolvedor,
      Depuração USB + "Depuração USB (Configurações de segurança)" do Xiaomi + Depuração sem fio, parear e

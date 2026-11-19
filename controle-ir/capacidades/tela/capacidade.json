@@ -194,7 +194,7 @@
    },
    "iniciar": {
     "type": "object",
-    "description": "piloto: liga o laço rápido no celular {modo:\"quiz\", app:\"pacote\", prazo:s, chutar, conferir, cerebros:[\"memoria\",\"api\",\"local\"], modelo, pensar, local_url, politica, ignorar:[...], duracao:s}"
+    "description": "piloto: liga o laço rápido no celular {modo:\"quiz\", app:\"pacote\", prazo:s, chutar, conferir, cerebros:[\"memoria\",\"local\",\"api\"], modelos:[\"claude-haiku-5-5\",\"claude-sonnet-5-5\",\"claude-opus-5-5\"] (do mais fraco ao mais forte), confianca:0.95 (certeza do local para não esperar a API), pensar, esforco, local_url, politica, ignorar:[...], duracao:s}"
    },
    "parar": {
     "type": "boolean",

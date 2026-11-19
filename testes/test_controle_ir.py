@@ -2518,6 +2518,60 @@ class TestPiloto(unittest.TestCase):
         self.assertIsNone(idx)
         self.assertLess(seg, 1.0)
 
+    def _servidor_eventos(self, eventos, atraso=0.0):
+        """SSE com eventos JSON prontos (formato da Anthropic ou do llama-server)."""
+        class H(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                time.sleep(atraso)
+                for ev in eventos:
+                    b = f"data: {json.dumps(ev)}\n\n".encode()
+                    self.wfile.write(f"{len(b):x}\r\n".encode() + b + b"\r\n")
+                    self.wfile.flush()
+                self.wfile.write(b"0\r\n\r\n")
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        return f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def test_escada_de_inteligencia(self):
+        import math
+
+        def local(digito, prob):
+            return self._servidor_eventos([{"choices": [{"delta": {"content": digito}, "logprobs": {"content": [
+                {"token": digito, "logprob": math.log(prob)}]}}]}])
+        api = self._servidor_eventos([{"type": "content_block_delta", "delta": {"type": "text_delta", "text": "3"}}],
+                                     atraso=0.3)
+        ops = [{"texto": t} for t in ("a", "b", "c")]
+        self.m.ler_chave = lambda: "chave-falsa"
+        base = {"cerebros": ["local", "api"], "api_base": api, "modelos": ["forte"]}
+        # local com certeza alta: vai na hora, sem esperar a API
+        c = self.m.Cerebros(dict(base, local_url=local("1", 0.99)))
+        idx, fonte, seg, _ = c.decidir("p?", ops, 3)
+        self.assertEqual((idx, fonte), (0, "local 99%"))
+        self.assertLess(seg, 0.25)
+        # local em dúvida: espera o forte, que discorda — vale o forte
+        c = self.m.Cerebros(dict(base, local_url=local("1", 0.40)))
+        idx, fonte, seg, _ = c.decidir("p?", ops, 3)
+        self.assertEqual((idx, fonte), (2, "forte"))
+        # prazo curto: o forte não chega a tempo — vale a melhor que chegou (o local em dúvida)
+        c = self.m.Cerebros(dict(base, local_url=local("2", 0.40)))
+        idx, fonte, seg, _ = c.decidir("p?", ops, 0.15)
+        self.assertEqual((idx, fonte), (1, "local 40%"))
+        self.assertEqual(self.m.corpo_api("claude-haiku-5-5", "s", "u")["thinking"], {"type": "disabled"})
+        self.assertEqual(self.m.corpo_api("claude-sonnet-5-5", "s", "u")["thinking"], {"type": "between_tools"})
+        self.assertNotIn("thinking", self.m.corpo_api("claude-opus-5-5", "s", "u"))
+
     def test_laco_toca_no_alvo_semantico_e_grava(self):
         url = self._servidor_sse(["2"])
         telas = [self.tela(), self.tela()]

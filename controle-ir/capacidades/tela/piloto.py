@@ -162,7 +162,7 @@ class Conexao:
                         continue
                     pedaco = _texto_do_evento(ev)
                     if pedaco:
-                        ao_texto(pedaco)
+                        ao_texto(pedaco, ev)
                 return
             except (OSError, http.client.HTTPException):
                 self.fechar()
@@ -199,20 +199,60 @@ def prompt_quiz(pergunta, opcoes):
     return "Pergunta: " + pergunta + "\n" + "\n".join(f"{i + 1}) {o['texto']}" for i, o in enumerate(opcoes))
 
 
+def _confianca(ev, digito):
+    """Probabilidade do token com o dígito escolhido (llama-server com logprobs); None se o cérebro não informa."""
+    import math
+    try:
+        for item in ev["choices"][0]["logprobs"]["content"]:
+            if digito in item.get("token", ""):
+                return math.exp(item["logprob"])
+    except (KeyError, IndexError, TypeError):
+        pass
+    return None
+
+
+def corpo_api(modelo, sistema, conteudo, pensar=False, esforco="low"):
+    """Pedido mais rápido que cada modelo aceita (o raciocínio desliga de jeitos diferentes em cada família)."""
+    corpo = {"model": modelo, "max_tokens": 16, "stream": True, "system": sistema,
+             "messages": [{"role": "user", "content": conteudo}], "output_config": {"effort": esforco}}
+    if pensar:
+        corpo["max_tokens"] = 4000
+    elif "haiku" in modelo:
+        corpo["thinking"] = {"type": "disabled"}
+    elif "sonnet-5-5" in modelo:
+        corpo["thinking"] = {"type": "between_tools"}
+    else:  # Opus 5.5 / Fable: o raciocínio não desliga; esforço baixo e espaço para pensar pouco
+        corpo["max_tokens"] = 2000
+    return corpo
+
+
 class Cerebros:
+    """Escada de inteligência: memória (ms) → modelo local com CONFIANÇA (~0,3 s) → modelos da API do mais fraco ao
+    mais forte, todos disparados juntos. Vale: o local se tiver certeza alta; senão o mais forte que chegar no
+    prazo; no aperto, a melhor resposta que já chegou."""
+
     def __init__(self, cfg):
         self.cfg = cfg
-        self.api = Conexao(API_HOST) if "api" in cfg.get("cerebros", ["memoria", "api"]) else None
+        cer = cfg.get("cerebros", ["memoria", "api"])
+        self.modelos = list(cfg.get("modelos") or [cfg.get("modelo", MODELO)]) if "api" in cer else []
+        base = re.match(r"^(https?)://([\w.-]+)(?::(\d+))?", cfg.get("api_base", "https://" + API_HOST))
+        seguro = base.group(1) == "https"
+        porta = int(base.group(3) or (443 if seguro else 80))
+        self.conexoes = {m: Conexao(base.group(2), porta, seguro) for m in self.modelos}
         self.local = None
-        if "local" in cfg.get("cerebros", []):
+        if "local" in cer:
             m = re.match(r"^http://([\w.]+):(\d+)", cfg.get("local_url", "http://127.0.0.1:8080"))
             self.local = Conexao(m.group(1), int(m.group(2)), seguro=False) if m else None
         self.memoria = carregar_memoria()
 
+    @property
+    def api(self):
+        return bool(self.modelos)
+
     def aquecer(self):
         """Abre as conexões e, no modelo local, processa a política uma vez (fica no cache: a 1ª pergunta de
         verdade não paga os ~2 s de aquecimento)."""
-        for c in (self.api, self.local):
+        for c in list(self.conexoes.values()) + [self.local]:
             if c:
                 threading.Thread(target=c.aquecer, daemon=True).start()
         if self.local:
@@ -220,25 +260,21 @@ class Cerebros:
             threading.Thread(target=self._local, args=("Aquecimento: responda 1.", ops, queue.Queue(), time.time()),
                              daemon=True).start()
 
-    def _api(self, pergunta, opcoes, fila, t0):
+    def _api(self, modelo, pergunta, opcoes, fila, t0):
         chave = ler_chave()
         if not chave:
-            fila.put(("api", None, "sem chave da API no celular", time.time() - t0))
+            fila.put((modelo, None, "sem chave da API no celular", time.time() - t0, None))
             return
-        corpo = {"model": self.cfg.get("modelo", MODELO), "max_tokens": 16, "stream": True,
-                 "system": self.cfg.get("politica") or POLITICA,
-                 "messages": [{"role": "user", "content": prompt_quiz(pergunta, opcoes)}]}
-        if not self.cfg.get("pensar"):
-            corpo["thinking"] = {"type": "disabled"}
-            corpo["output_config"] = {"effort": "low"}
-        self._correr("api", self.api, "/v1/messages", corpo,
+        corpo = corpo_api(modelo, self.cfg.get("politica") or POLITICA, prompt_quiz(pergunta, opcoes),
+                          bool(self.cfg.get("pensar")), self.cfg.get("esforco", "low"))
+        self._correr(modelo, self.conexoes[modelo], "/v1/messages", corpo,
                      {"content-type": "application/json", "x-api-key": chave, "anthropic-version": API_VERSAO},
                      len(opcoes), fila, t0)
 
     def _local(self, pergunta, opcoes, fila, t0):
         corpo = {"messages": [{"role": "system", "content": self.cfg.get("politica") or POLITICA},
                               {"role": "user", "content": prompt_quiz(pergunta, opcoes)}],
-                 "max_tokens": 4, "stream": True, "temperature": 0}
+                 "max_tokens": 4, "stream": True, "temperature": 0, "logprobs": True, "top_logprobs": 3}
         self._correr("local", self.local, "/v1/chat/completions", corpo, {"content-type": "application/json"},
                      len(opcoes), fila, t0)
 
@@ -247,25 +283,25 @@ class Cerebros:
         achou = [False]
         buf = [""]
 
-        def ao_texto(p):
+        def ao_texto(p, ev=None):
             if achou[0]:
                 return
             buf[0] += p
             m = re.search(r"[1-9]", buf[0])
             if m and int(m.group()) <= n:
                 achou[0] = True
-                fila.put((nome, int(m.group()) - 1, None, time.time() - t0))  # streaming acionável
+                conf = _confianca(ev, m.group()) if ev else None
+                fila.put((nome, int(m.group()) - 1, None, time.time() - t0, conf))  # streaming acionável
 
         try:
             con.post_stream(caminho, corpo, cab, ao_texto)
             if not achou[0]:
-                fila.put((nome, None, f"resposta sem número: {buf[0][:40]!r}", time.time() - t0))
+                fila.put((nome, None, f"resposta sem número: {buf[0][:40]!r}", time.time() - t0, None))
         except Exception as e:  # noqa: BLE001 — um cérebro falhar não derruba a corrida
-            fila.put((nome, None, str(e)[:160], time.time() - t0))
+            fila.put((nome, None, str(e)[:160], time.time() - t0, None))
 
     def decidir(self, pergunta, opcoes, prazo):
-        """Corrida: memória (instantânea), API e local em paralelo; vale a primeira resposta válida.
-        Devolve (índice ou None, fonte, segundos, erros)."""
+        """Devolve (índice ou None, fonte, segundos, erros). A fonte diz quem decidiu (e a certeza do local)."""
         t0 = time.time()
         lembrado = self.memoria.get(chave_quiz(pergunta, opcoes)) or self.memoria.get(norm(pergunta))
         if lembrado:
@@ -274,25 +310,37 @@ class Cerebros:
                     return i, "memoria", time.time() - t0, []
         fila = queue.Queue()
         corredores = 0
-        if self.api:
-            threading.Thread(target=self._api, args=(pergunta, opcoes, fila, t0), daemon=True).start()
+        for modelo in self.modelos:
+            threading.Thread(target=self._api, args=(modelo, pergunta, opcoes, fila, t0), daemon=True).start()
             corredores += 1
         if self.local:
             threading.Thread(target=self._local, args=(pergunta, opcoes, fila, t0), daemon=True).start()
             corredores += 1
-        erros = []
+        limiar = float(self.cfg.get("confianca", 0.95))
+        forca = {"local": 0, **{m: k + 1 for k, m in enumerate(self.modelos)}}
+        mais_forte = max(forca.values()) if self.modelos else 0
+        melhor, erros = None, []  # (força, índice, fonte, segundos)
         while corredores:
             resto = prazo - (time.time() - t0)
             if resto <= 0:
                 break
             try:
-                nome, idx, erro, seg = fila.get(timeout=resto)
+                nome, idx, erro, seg, conf = fila.get(timeout=resto)
             except queue.Empty:
                 break
             corredores -= 1
-            if idx is not None:
-                return idx, nome, seg, erros
-            erros.append(f"{nome}: {erro}")
+            if idx is None:
+                erros.append(f"{nome}: {erro}")
+                continue
+            fonte = nome if conf is None else f"{nome} {conf:.0%}"
+            if nome == "local" and (not self.modelos or conf is None or conf >= limiar):
+                return idx, fonte, seg, erros  # o rápido tem certeza (ou é o único): vai já
+            if forca[nome] == mais_forte:
+                return idx, fonte, seg, erros  # o mais forte chegou: vai
+            if not melhor or forca[nome] > melhor[0]:
+                melhor = (forca[nome], idx, fonte, seg)
+        if melhor:
+            return melhor[1], melhor[2], time.time() - t0, erros  # aperto: a melhor que chegou
         return None, None, time.time() - t0, erros
 
 

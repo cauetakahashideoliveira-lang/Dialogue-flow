@@ -111,8 +111,17 @@ def sondar(ip, com_udp):
 def vivos(base):
     """Hosts que aceitam conexão em alguma porta comum ou respondem UDP (sem root, sem ping)."""
     def vivo(ip):
-        return ip if any(tcp(ip, p, 0.35) for p in (80, 443, 554, 53, 22, 8080, 8001, 9000, 5000, 62078)) else None
-    with ThreadPoolExecutor(64) as ex:
+        # porta aberta OU recusada (RST) prova que o aparelho está ligado; só o silêncio total conta como ausente
+        for p in (80, 443, 554, 53, 22, 8080):
+            try:
+                socket.create_connection((ip, p), timeout=1.2).close()
+                return ip
+            except ConnectionRefusedError:
+                return ip
+            except OSError:
+                continue
+        return None
+    with ThreadPoolExecutor(96) as ex:
         return sorted(filter(None, ex.map(vivo, ["%s.%d" % (base, i) for i in range(1, 255)])),
                       key=lambda i: int(i.rsplit(".", 1)[1]))
 

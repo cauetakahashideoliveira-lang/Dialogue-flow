@@ -45,6 +45,9 @@ Responda ao usuário em português.
 - Quando uma solução funcionar e for reutilizável, transforme-a em capacidade (propor_capacidade) e registre o
   resultado confirmado com capacidades(acao="anotar").
 - atualizar_sistema(ref=<hash do commit>) instala no celular uma versão nova publicada no GitHub (com aprovação).
+- Confirmação pelo som: controlar com ouvir=true grava pelo microfone durante o envio; o campo "ouvido" diz se
+  houve bipe logo depois do envio. Sem referência salva, pergunte ao usuário se o aparelho apitou; se sim, salve
+  com executar_capacidade(nome="ouvir_bipe", argumentos={acao:"analisar", aparelho, salvar_referencia:true}).
 - No modo autônomo (politica.perfil=="autonomo"), tudo roda sem perguntar e as capacidades que você cria já entram
   ativas: aja direto (pesquise, crie a ferramenta, rode, observe, ajuste) sem pedir aprovação a cada passo. Só pare
   para confirmar o que é claramente arriscado e irreversível (apagar dados do usuário, enviar algo em nome dele,
@@ -115,6 +118,8 @@ FERRAMENTAS = [
          "permitir_alternancia": dict(B, description="aceita enviar uma tecla que só alterna sem saber o estado"),
          "permitir_servico": dict(B, description="somente se o usuário pedir explicitamente um comando de serviço"),
          "simular": dict(B, description="só planeja, não transmite"),
+         "ouvir": dict(B, description="grava pelo microfone do celular durante o envio e diz se ouviu o bipe do "
+                                      "aparelho (capacidade ouvir_bipe); a resposta traz o campo 'ouvido'"),
      }, ["aparelho"]),
      "annotations": EMITE},
     {"name": "registrar_estado", "title": "Registrar o que aconteceu no aparelho",

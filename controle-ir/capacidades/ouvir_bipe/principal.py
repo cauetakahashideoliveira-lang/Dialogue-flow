@@ -84,6 +84,19 @@ def detectar_bipes(amostras, taxa=TAXA, fmin=1000.0, fmax=6000.0, quadro=0.032, 
     return sorted(out, key=lambda e: -e["forca_db"])
 
 
+def filtrar_janela(bipes, envio_s, antes=0.6, depois=3.5):
+    """Só os bipes que começam perto do envio (de `antes` s antes até `depois` s depois); acrescenta atraso_s.
+    A folga antes do envio cobre o atraso entre pedir a gravação e o microfone começar de fato."""
+    if envio_s is None:
+        return bipes
+    out = []
+    for b in bipes:
+        atraso = b["inicio_s"] - envio_s
+        if -antes <= atraso <= depois:
+            out.append(dict(b, atraso_s=round(atraso, 2)))
+    return out
+
+
 def comparar(bipes, ref, tolerancia=0.05):
     """Bipes que batem com a frequência de referência (±5 %)."""
     if not ref:
@@ -121,8 +134,12 @@ def decodificar():
     return np.frombuffer(r.stdout, dtype=np.int16).astype(np.float32) / 32768.0
 
 
-def analisar(aparelho=None, salvar_referencia=False, manter_audio=False):
+def analisar(aparelho=None, salvar_referencia=False, manter_audio=False, envio_em=None):
     est = ler_json(ESTADO, {})
+    if envio_em:
+        est["envio_em"] = float(envio_em)
+        gravar_json(ESTADO, est)
+    envio_s = (est["envio_em"] - est["inicio"]) if est.get("envio_em") and est.get("inicio") else None
     falta = est.get("fim", 0) - time.time()
     if falta > 0:
         time.sleep(min(falta + 1.0, 25))
@@ -141,7 +158,8 @@ def analisar(aparelho=None, salvar_referencia=False, manter_audio=False):
     except RuntimeError as e:
         return {"erro": str(e)}
     nivel = float(20 * np.log10(np.sqrt(np.mean(x ** 2)) + 1e-9)) if x.size else None
-    bipes = detectar_bipes(x)
+    todos = detectar_bipes(x)
+    bipes = filtrar_janela(todos, envio_s)
     refs = ler_json(REFS, {})
     ref = refs.get(aparelho) if aparelho else None
     batem = comparar(bipes, ref)
@@ -161,6 +179,8 @@ def analisar(aparelho=None, salvar_referencia=False, manter_audio=False):
     else:
         veredito = "bipe_ouvido_sem_referencia" if bipes else "nada_ouvido"
     return {"veredito": veredito, "aparelho": aparelho, "referencia": ref, "bipes": bipes[:5],
+            "envio_no_audio_s": round(envio_s, 2) if envio_s is not None else None,
+            "sons_fora_da_janela": len(todos) - len(bipes),
             "batem_com_referencia": batem[:3], "duracao_audio_s": round(x.size / TAXA, 1),
             "nivel_medio_db": round(nivel, 1) if nivel is not None else None,
             "dica": None if bipes or (nivel or -99) > -70 else
@@ -173,7 +193,8 @@ def main():
     if acao == "gravar":
         out = gravar(max(2, min(int(a.get("segundos", 7)), 20)))
     elif acao == "analisar":
-        out = analisar(a.get("aparelho"), bool(a.get("salvar_referencia")), bool(a.get("manter_audio")))
+        out = analisar(a.get("aparelho"), bool(a.get("salvar_referencia")), bool(a.get("manter_audio")),
+                       a.get("envio_em"))
     else:
         out = {"erro": "acao deve ser gravar ou analisar"}
     print(json.dumps(out, ensure_ascii=False))

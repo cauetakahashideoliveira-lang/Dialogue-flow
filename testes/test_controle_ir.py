@@ -1178,6 +1178,21 @@ class TestOuvirBipe(unittest.TestCase):
         q[20000:20800] += 0.002 * np.sin(2 * np.pi * 2300 * np.arange(800) / 16000)
         self.assertEqual(self.m.detectar_bipes(q), [])
 
+    def test_janela_do_envio(self):
+        bipes = [{"inicio_s": 0.5}, {"inicio_s": 3.2}, {"inicio_s": 9.0}]
+        j = self.m.filtrar_janela(bipes, envio_s=3.0)
+        self.assertEqual([b["inicio_s"] for b in j], [3.2])
+        self.assertEqual(j[0]["atraso_s"], 0.2)
+        self.assertEqual(self.m.filtrar_janela(bipes, None), bipes)
+
+    def test_controlar_com_ouvir_envia_mesmo_sem_microfone(self):
+        s, _ = novo_servico()
+        s.salvar_aparelho("ar do quarto", perfil=105)
+        r = s.controlar("ar do quarto", ligar=True, definir={"temperatura": 24, "modo": "frio"}, ouvir=True)
+        self.assertEqual(r["status"], "sinal_enviado")
+        self.assertEqual(r["ouvido"]["veredito"], "sem_escuta")  # sem Termux:API aqui: avisa, não falha
+        self.assertNotIn("ouvido", s.controlar("ar do quarto", definir={"temperatura": 23}))
+
     def test_comparar_com_referencia(self):
         bipes = [{"freq_hz": 2700}, {"freq_hz": 4000}]
         self.assertEqual(self.m.comparar(bipes, {"freq_hz": 2750}), [{"freq_hz": 2700}])

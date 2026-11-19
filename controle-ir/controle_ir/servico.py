@@ -202,7 +202,7 @@ class Servico:
 
     def controlar(self, aparelho, ligar=None, definir=None, ajustar=None, teclas=None, macro=None,
                   permitir_alternancia=False, estado_atual=None, simular=False, permitir_servico=False,
-                  repetir_ultimo=False) -> dict:
+                  repetir_ultimo=False, ouvir=False) -> dict:
         a = self._aparelho(aparelho)
         if repetir_ultimo:
             if not a.get("ultimo_pedido"):
@@ -216,12 +216,16 @@ class Servico:
                         "permitir_alternancia": permitir_alternancia, "estado_atual": estado_atual,
                         "permitir_servico": permitir_servico}]
         resultados = []
+        escuta = self._comecar_escuta() if ouvir and not simular else None
+        t_envio = None
         with self.trava_envio:
             for i, ped in enumerate(pedidos):
                 ped = {k: v for k, v in ped.items() if v not in (None, {}, [])}
                 ped.setdefault("permitir_alternancia", permitir_alternancia)
                 ctrl = Controlador(a)
                 plano = ctrl.planejar(ped)
+                if t_envio is None:
+                    t_envio = time.time()
                 r = executar(a, plano, self.emissor, simular)
                 resultados.append(r)
                 if r["status"] in ("sinal_enviado", "parcial") and not simular and not macro and not repetir_ultimo:
@@ -232,9 +236,39 @@ class Servico:
             if not simular:
                 self.aparelhos.salvar(a)
         if len(resultados) == 1:
-            return resultados[0]
-        return {"aparelho": a["nome"], "macro": macro, "passos": resultados,
-                "status": "sinal_enviado" if all(r["status"] == "sinal_enviado" for r in resultados) else "parcial"}
+            out = resultados[0]
+        else:
+            out = {"aparelho": a["nome"], "macro": macro, "passos": resultados,
+                   "status": "sinal_enviado" if all(r["status"] == "sinal_enviado" for r in resultados) else "parcial"}
+        if escuta is not None:
+            out["ouvido"] = self._terminar_escuta(escuta, a["nome"], t_envio)
+        return out
+
+    # ------------------------------------------------------------- confirmação pelo microfone
+    def _ambiente_cap(self) -> dict:
+        return {"CONTROLE_IR_DIR": str(self.pasta)}
+
+    def _comecar_escuta(self, segundos: int = 5) -> dict:
+        """Começa a gravar antes do envio (capacidade ouvir_bipe). Nunca impede o envio: falha vira aviso."""
+        try:
+            r = self.reg.executar("ouvir_bipe", {"acao": "gravar", "segundos": segundos}, self._ambiente_cap())
+        except ErroCapacidade as e:
+            return {"erro": str(e)}
+        res = r.get("resultado") or {}
+        if r.get("status") != "ok" or res.get("erro"):
+            return {"erro": res.get("erro") or r.get("erro") or r.get("status")}
+        time.sleep(1.0)  # o Termux:API leva um instante para o microfone gravar de fato
+        return {"ok": True}
+
+    def _terminar_escuta(self, escuta: dict, nome: str, t_envio: float | None) -> dict:
+        if escuta.get("erro") or t_envio is None:
+            return {"veredito": "sem_escuta", "erro": escuta.get("erro") or "nada foi enviado"}
+        try:
+            r = self.reg.executar("ouvir_bipe", {"acao": "analisar", "aparelho": nome, "envio_em": t_envio,
+                                                 "manter_audio": True}, self._ambiente_cap())
+        except ErroCapacidade as e:
+            return {"veredito": "sem_escuta", "erro": str(e)}
+        return r.get("resultado") if r.get("status") == "ok" else {"veredito": "sem_escuta", "erro": r}
 
     def _macro(self, a: dict, nome: str) -> dict:
         macros = a.get("macros", {})

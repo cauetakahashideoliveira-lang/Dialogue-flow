@@ -1,7 +1,7 @@
 # Graph Report - Dialogue-flow  (2026-11-19)
 
 ## Corpus Check
-- 69 files · ~98,775 words
+- 69 files · ~98,854 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 8 file(s) not represented in the graph (top: (none) 3, .ir 3, .gz 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 157,587 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `34ae6fcc`
+- Built from commit: `1d75ea8c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -98,15 +98,15 @@
 7. `Controlador` - 26 edges
 8. `normalizar()` - 26 edges
 9. `_iniciar()` - 26 edges
-10. `ErroUso` - 22 edges
+10. `agora()` - 22 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `3b. Gateway OAuth na borda (1.0.26, implementada)` --references--> `TestPainel`  [INFERRED]
   docs/seguranca.md → testes/test_controle_ir.py
-- `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `Catalogo`  [INFERRED]
-  docs/estado-atual.md → controle-ir/controle_ir/catalogo.py
 - `Túnel ngrok com domínio fixo` --conceptually_related_to--> `Tunel`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/tunel.py
+- `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `Catalogo`  [INFERRED]
+  docs/estado-atual.md → controle-ir/controle_ir/catalogo.py
 - `variante()` --implements--> `Variante Gree a partir da captura real (troca só os bits)`  [INFERRED]
   ferramentas/gree_variante.py → docs/aparelhos/quarto/ar-do-quarto.md
 - `Arquivos .ir com os sinais adicionados pelo usuário (formato Flipper)` --conceptually_related_to--> `ler_flipper()`  [INFERRED]
@@ -319,15 +319,15 @@ Nodes (8): Tecla de oscilação do perfil Ferroli/York (oscilacao_alternar), ar 
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Servico` connect `Servico` to `test_controle_ir.py`, `Descoberta`, `cli.py`, `Controlador`, `Aparelhos`, `ServidorMCP`, `Sinal`, `re`, `verificar_cliente_mcp.py`, `novo_servico`, `mcp.py`, `Sinal`, `servico.py`, `_iniciar`, `Registro`, `TestArmacao`?**
-  _High betweenness centrality (0.066) - this node is a cross-community bridge._
+  _High betweenness centrality (0.098) - this node is a cross-community bridge._
 - **Are the 20 inferred relationships involving `Servico` (e.g. with `Aparelhos` and `ErroAparelho`) actually correct?**
   _`Servico` has 20 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Versão do servidor (celular 1.0.4, repositório 1.0.5)` to the rest of the system?**
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `index.js` be split into smaller, more focused modules?**
   _Cohesion score 0.1063973063973064 - nodes in this community are weakly interconnected._
-- **Why does `Catalogo` connect `Descoberta` to `Sinal`, `Sinal`, `servico.py`, `Servico`, `_iniciar`, `main`?**
-  _High betweenness centrality (0.052) - this node is a cross-community bridge._
+- **Why does `criar_servidor()` connect `Servico` to `test_controle_ir.py`, `TestPainel`, `cli.py`, `Aparelhos`, `ServidorMCP`, `novo_servico`, `verificar_cliente_mcp.py`, `_iniciar`, `main`?**
+  _High betweenness centrality (0.043) - this node is a cross-community bridge._
 - **Are the 4 inferred relationships involving `Descoberta` (e.g. with `Catalogo` and `ErroEmissor`) actually correct?**
   _`Descoberta` has 4 INFERRED edges - model-reasoned connections that need verification._
 - **Should `TestPainel` be split into smaller, more focused modules?**

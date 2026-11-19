@@ -149,14 +149,15 @@ def _jar():
         cls = os.path.join(trab, "cls", "controleir")
         for c in os.listdir(cls) if os.path.isdir(cls) else []:
             shutil.copy(os.path.join(cls, c), os.path.join(trab, "dex", "controleir", c))
-        subprocess.run(["dx", "--dex", f"--output={jar}.tmp", os.path.join(trab, "dex")],
+        parcial = jar[:-4] + ".parcial.jar"  # o dx escolhe o formato pela extensão: tem de terminar em .jar
+        subprocess.run(["dx", "--dex", f"--output={parcial}", os.path.join(trab, "dex")],
                        capture_output=True, timeout=180, check=False)
-        if not os.path.exists(jar + ".tmp"):
+        if not os.path.exists(parcial):
             return None
         for velho in os.listdir(TMP):
-            if velho.startswith("controle-tela-") and velho.endswith(".jar"):
+            if velho.startswith("controle-tela-") and velho.endswith(".jar") and velho != os.path.basename(parcial):
                 _apagar(os.path.join(TMP, velho))
-        os.replace(jar + ".tmp", jar)
+        os.replace(parcial, jar)
         return jar
     finally:
         shutil.rmtree(trab, ignore_errors=True)

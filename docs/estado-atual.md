@@ -41,6 +41,12 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Anúncios resolvidos no celular (1.0.41):** medição de uma rodada de Sudoku difícil: 2 min 24 s, sendo ~2 min
+  de anúncios (83%), 21 s de leitura/solução do Claude e 3,5 s de execução. Agora: telas de anúncio (regex `ANUNCIO`)
+  são fechadas pelo próprio celular (botão fechar/pular pelo nome ou pequeno no canto, nunca "instalar/peça agora";
+  volta se abrir outro app; após 45 s, `am force-stop` + reabrir + Continuar). Trava de app inesperado entre passos,
+  erro já com a tela atual, e `esperar_mudanca` olha a tela a cada 0,7 s (vídeo não gera eventos). Incidente: um toque
+  por coordenada no cartão final de um anúncio abriu uma conversa do WhatsApp (nada enviado).
 - **19/11 — Toques direto no gerenciador de entrada (1.0.40):** com a 1.0.39 o Sudoku (51 casas, 102 toques) caiu
   para 68 ms/toque, não ~30: a UiAutomation chama `syncInputTransactions(waitForAnimations=true)` antes/depois de
   cada evento e o app anima a cada número. Agora a leva injeta por `InputManagerGlobal`/`InputManager.injectInputEvent`

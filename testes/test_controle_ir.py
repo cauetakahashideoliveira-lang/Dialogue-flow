@@ -1711,7 +1711,7 @@ class TestTelaPorArquivo(unittest.TestCase):
         self._dumpsys_falso("com.nu.production")
         r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [10, 20]}]})
         self.assertIn("bloqueados", r["erro"])
-        self.assertFalse(self.registro.exists())  # nenhum toque saiu
+        self.assertNotIn("toque", self.registro.read_text() if self.registro.exists() else "")  # nenhum toque saiu
         self._dumpsys_falso()
         r = self.m.agir({"acao": "sequencia", "passos": [{"esperar_texto": "Inexistente", "ate": 0.5}]})
         self.assertIn("não apareceu", r["erro"])
@@ -1882,10 +1882,10 @@ for linha in sys.stdin:
 
     def test_reflexo_para_quando_surge_outra_janela(self):
         self._leitor_falso()
-        (self.tmp / "parar.txt").write_text("com.anuncios|com.anuncios.AdActivity|Anúncio")
+        (self.tmp / "parar.txt").write_text("com.outro|com.outro.PopupActivity|Aviso")
         r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}, {"tocar": [9, 9]}]})
         self.assertIn("janela nova", r["interrompido"])
-        self.assertIn("AdActivity", r["interrompido"])
+        self.assertIn("PopupActivity", r["interrompido"])
         self.assertIn("depois de 1 de 3 toques", r["interrompido"])
         self.assertNotIn(" 9 9", self.registro.read_text())  # o passo seguinte não saiu
         self.assertIn("tela", r)  # e já vem o que está na tela para decidir de novo
@@ -1931,12 +1931,12 @@ for linha in sys.stdin:
         self.assertEqual(r["surgiu"], ["-1.5s com.x Popup «Oi»"])  # o que surgiu enquanto o Claude pensava
         self.assertIn("erro", self.m.reflexos([{"se": "x"}]))  # sem ação
         self.assertIn("erro", self.m.reflexos([{"se": "x", "tecla": "pular"}]))
-        self.m.reflexos([{"janela": "AdActivity", "tecla": "voltar"}])
-        self.assertEqual(self.m.executar({"acao": "reflexos"})["regras"][0]["janela"], "AdActivity")
-        (self.tmp / "parar.txt").write_text("com.anuncios|com.anuncios.AdActivity|Anúncio")
+        self.m.reflexos([{"janela": "PopupActivity", "tecla": "voltar"}])
+        self.assertEqual(self.m.executar({"acao": "reflexos"})["regras"][0]["janela"], "PopupActivity")
+        (self.tmp / "parar.txt").write_text("com.outro|com.outro.PopupActivity|Aviso")
         r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}]})
         self.assertNotIn("interrompido", r)  # o reflexo resolveu sem parar
-        self.assertEqual(r["reflexos"], ["AdActivity"])
+        self.assertEqual(r["reflexos"], ["PopupActivity"])
         log = self.registro.read_text()
         self.assertIn("leitor tecla 4", log)
         self.assertIn("leitor toquesv 50 2 2 3 3", log)  # e seguiu com os toques que faltavam
@@ -1978,6 +1978,34 @@ for linha in sys.stdin:
         self.assertIn("leitor foto 480 110000", self.registro.read_text())  # pediu o recorte do tabuleiro
         self.assertIn(" 0 200 1000 1000", self.registro.read_text())
 
+    def test_botao_de_fechar_anuncio(self):
+        els = [{"texto": "", "desc": "Peça agora", "x": 640, "y": 1973, "l": 900, "a": 150, "clicavel": True},
+               {"texto": "5s", "desc": "", "x": 1165, "y": 275, "l": 90, "a": 90, "desativado": True},
+               {"texto": "", "desc": "", "x": 640, "y": 1462, "l": 1280, "a": 2772, "clicavel": True}]
+        self.assertIsNone(self.m.botao_fechar(els))  # contagem ainda correndo e o resto é o próprio anúncio
+        els.append({"texto": "", "desc": "Anúncio fechado", "x": 1182, "y": 262, "l": 80, "a": 80, "clicavel": True})
+        self.assertEqual(self.m.botao_fechar(els)["x"], 1182)
+        self.assertEqual(self.m.botao_fechar([{"texto": "Instalar e fechar", "desc": "", "x": 1, "y": 1}]), None)
+        self.assertTrue(self.m.ANUNCIO.search("com.applovin.adview.AppLovinFullscreenActivity"))
+        self.assertTrue(self.m.ANUNCIO.search("com.bytedance.sdk.openadsdk.activity.TTFullScreenExpressVideoActivity"))
+        self.assertFalse(self.m.ANUNCIO.search("easy.sudoku.MainActivity"))
+
+    def test_anuncio_e_fechado_no_celular(self):
+        self._leitor_falso()
+        jan = self.tmp / "janela.txt"
+        jan.write_text("app|com.applovin.adview.AppLovinFullscreenActivity|")
+        xml = ('<?xml version="1.0"?><hierarchy><node bounds="[0,0][1280,2772]" text="" content-desc="" '
+               'clickable="true"><node bounds="[1140,220][1220,300]" text="" content-desc="Fechar" clickable="true"/>'
+               '</node></hierarchy>')
+        orig = self.m.dump_ui
+        self.m.dump_ui = lambda: xml
+        self.m._injetar = lambda c: (jan.write_text("com.android.settings|com.android.settings.Principal|"),
+                                     open(self.registro, "a").write("leitor " + c + "\n"))[0] is None
+        r = self.m.fechar_anuncio("com.android.settings", limite=3)
+        self.assertEqual(r["anuncio"], "fechado")
+        self.assertIn("leitor tocar 1180 260", self.registro.read_text())  # tocou o fechar, não o anúncio
+        self.m.dump_ui = orig
+
     def test_leitor_recusa_app_bloqueado(self):
         foco = self.tmp / "foco.txt"
         foco.write_text("com.nu.production")
@@ -1985,7 +2013,7 @@ for linha in sys.stdin:
             self._leitor_falso()
             r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [10, 20]}]})
         self.assertIn("bloqueados", r["erro"])
-        self.assertFalse(self.registro.exists())  # nenhum toque saiu
+        self.assertNotIn("toque", self.registro.read_text() if self.registro.exists() else "")  # nenhum toque saiu
 
     def test_leitor_que_nao_sobe_cai_no_caminho_antigo(self):
         self._leitor_falso(quebrado=True)

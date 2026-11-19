@@ -75,6 +75,7 @@ def elementos(xml_texto, limite=120):
         out.append({"texto": texto[:80], "desc": desc[:80], "id": a.get("resource-id", "").split("/")[-1],
                     "classe": a.get("class", "").split(".")[-1], "clicavel": clicavel, "editavel": editavel,
                     "x": (b[0] + b[2]) // 2, "y": (b[1] + b[3]) // 2, "pacote": a.get("package", ""),
+                    "l": b[2] - b[0], "a": b[3] - b[1],
                     "marcado": a.get("checked") == "true" if marcavel else None,
                     "selecionado": a.get("selected") == "true", "rolavel": rolavel,
                     "focado": a.get("focused") == "true", "desativado": a.get("enabled") == "false"})
@@ -492,6 +493,85 @@ def janela_nova(antes, depois, app=None):
     return True
 
 
+# --------------------------------------------------------------------------- anúncios (resolvidos no celular)
+ANUNCIO = re.compile(r"AppLovinFullscreen|TTFullScreen|TTRewardVideo|TTLandingPage|\.AdActivity|FullScreenWebViewDisplay|"
+                     r"MBRewardVideo|MBInterstitial|MBCommonActivity|Inneractive|Vungle|AdColony|AudienceNetworkActivity|"
+                     r"AdUnitActivity|InterstitialActivity|RewardedVideoActivity|MaxFullscreen|BigoAd|PAGInterstitial|"
+                     r"PAGReward|UnityAds|IronSource|AdsActivity", re.I)
+IGNORAR_APP = re.compile(r"systemui|securitycenter|inputmethod|permissioncontroller|^android$", re.I)
+FECHAR = ("fechar", "close", "pular", "skip", "dispensar", "anuncio fechado", "fechar anuncio")
+NAO_TOCAR = ("instalar", "install", "baixar", "baixe", "download", "obter", "peca agora", "saiba mais", "learn more",
+             "abrir", "open", "get now", "jogar agora", "play now", "comprar")
+
+
+def classe_janela(info):
+    return (info.split("|") + ["", ""])[1]
+
+
+def em_anuncio():
+    ev = eventos()
+    return bool(ev and ANUNCIO.search(classe_janela(ev[2])))
+
+
+def botao_fechar(els):
+    """O botão de fechar/pular do anúncio: pelo nome; senão um elemento pequeno e ativo no canto superior direito.
+    Nunca o que leva para fora (instalar, baixar, peça agora…)."""
+    if not els:
+        return None
+    larg = max(e["x"] + e.get("l", 0) // 2 for e in els)
+    alt = max(e["y"] + e.get("a", 0) // 2 for e in els)
+    for e in els:
+        t = normalizar(e.get("texto") or e.get("desc"))
+        if e.get("desativado") or any(n in t for n in NAO_TOCAR):
+            continue
+        if t in ("x", "×", "✕", "»", ">>") or any(f in t for f in FECHAR):
+            return e
+    for e in els:
+        t = normalizar(e.get("texto") or e.get("desc"))
+        if (not e.get("desativado") and not re.search(r"\d+\s*s$", t) and e["y"] < 0.12 * alt and e["x"] > 0.82 * larg
+                and 0 < e.get("l", 999) < 0.15 * larg and 0 < e.get("a", 999) < 0.08 * alt):
+            return e
+    return None
+
+
+def _abrir(pac):
+    rish(f"monkey -p {pac} -c android.intent.category.LAUNCHER 1")
+
+
+def fechar_anuncio(pacote, limite=45):
+    """Fica no anúncio até fechá-lo: toca o botão de fechar/pular quando aparece (pelo nome ou no canto, nunca no
+    anúncio), volta ao app se um toque abrir outro (loja, WhatsApp) e, passado o limite, encerra e reabre o app."""
+    t0, feitos, tocados = time.time(), [], {}
+    while time.time() - t0 < limite:
+        app = foco()
+        if app and pacote and app != pacote and not IGNORAR_APP.search(app):
+            feitos.append(f"saiu para {app}: voltou")
+            _abrir(pacote)
+            calma(150, 2500)
+            continue
+        if not em_anuncio():
+            return {"anuncio": "fechado", "segundos": round(time.time() - t0, 1), "passos": feitos}
+        b = botao_fechar(elementos(dump_ui()))
+        chave = (b["x"], b["y"]) if b else None
+        if b and time.time() - tocados.get(chave, 0) > 2:
+            tocados[chave] = time.time()
+            _injetar(f"tocar {b['x']} {b['y']}")
+            feitos.append(f"tocou fechar {b['x']},{b['y']}")
+            calma(150, 1500)
+            continue
+        time.sleep(0.5)
+    if pacote:
+        rish(f"am force-stop {pacote}")
+        _abrir(pacote)
+        calma(200, 4000)
+        e = achar(elementos(dump_ui()), "Continuar")
+        if e:
+            _injetar(f"tocar {e['x']} {e['y']}")
+            calma(150, 3000)
+        feitos.append("anúncio preso: encerrou e reabriu o app" + (" e tocou Continuar" if e else ""))
+    return {"anuncio": "encerrado", "segundos": round(time.time() - t0, 1), "passos": feitos}
+
+
 def tela_acesa():
     out, _, _ = rish("dumpsys power | grep -m1 mWakefulness=")
     return "Awake" in out if out else None
@@ -741,6 +821,9 @@ def _ver_depois(a, padrao=None, tocados=()):
     tocou nela. 'mudancas' (sem imagem), 'elementos' (lista inteira), 'imagem' (lista + captura) ou 'nada'."""
     if padrao is None:
         padrao = "auto" if _ajudante() else "nada"
+    fechado = None
+    if _ajudante() and a.get("anuncios", True) is not False and (a.get("ver_depois") or padrao) != "nada" and em_anuncio():
+        fechado = fechar_anuncio(foco())
     if (a.get("ver_depois") or padrao) == "auto":
         esperou = calma(int(a.get("calma_ms", 120)), int(a.get("calma_ate", 1000))) if a.get("calma", True) else None
         tela = ver(False, 480, True, None, so_mudancas=True, formato=a.get("formato", "curto"))
@@ -750,7 +833,8 @@ def _ver_depois(a, padrao=None, tocados=()):
             if b64:
                 tela["_imagem"] = {"mime": "image/jpeg", "base64": b64}
                 tela["recorte"] = reg
-        return {"tela": tela, **({"calma_ms": esperou} if esperou is not None else {})}
+        return {"tela": tela, **({"calma_ms": esperou} if esperou is not None else {}),
+                **({"anuncio_fechado": fechado} if fechado else {})}
     modo = a.get("ver_depois") or ("imagem" if a.get("imagem") else padrao)
     esperou = None
     if modo != "nada" and a.get("calma", True) is not False:
@@ -920,6 +1004,9 @@ class _Executor:
         self.base = None  # janela em que as coordenadas foram lidas (a última vista pelo Claude)
         self.rolou = False  # depois de um deslize, as coordenadas antigas não valem
         self.tocados = []
+        self.anuncios = []  # anúncios que o celular fechou sozinho
+        self.com_anuncios = True
+        self.app_inicial = None  # trava de app inesperado
 
     # --- utilidades
     def descarregar(self):
@@ -992,10 +1079,42 @@ class _Executor:
     def checar_janela(self, info, onde):
         """Surgiu outra janela? Um reflexo guardado resolve (True) ou interrompe; a mesma tela: False."""
         if self.janela is not None and janela_nova(self.janela, info, self.app):
+            if self.lidar_anuncio(info):
+                return True
             if self.aplicar_reflexo(info):
                 return True
             raise _Interrompido(f"surgiu uma janela nova ({onde}): {_janela_curta(info)}", None)
         return False
+
+    def lidar_anuncio(self, info=None):
+        """Surgiu anúncio? Fecha no próprio celular e devolve True (a sequência segue de onde estava)."""
+        if not (self.rapido and self.com_anuncios):
+            return False
+        if info is None:
+            ev = eventos()
+            info = ev[2] if ev else ""
+        if not ANUNCIO.search(classe_janela(info)):
+            return False
+        r = fechar_anuncio(self.app_inicial or self.app)
+        self.anuncios.append(r)
+        ev = eventos()
+        if ev:
+            self.janela = ev[2]
+            if not ANUNCIO.search(classe_janela(ev[2])):
+                self.base = self.base if r["anuncio"] == "fechado" else ev[2]
+        self.app_em = 0.0
+        return True
+
+    def conferir_outro_app(self, onde):
+        """Trava de app inesperado: a tela caiu em outro app (clique em anúncio, link) → para na hora."""
+        if not self.rapido or not self.app_inicial:
+            return
+        ev = eventos()
+        pac = (ev[2].split("|")[0] if ev else "") or ""
+        if pac and pac != self.app_inicial and not IGNORAR_APP.search(pac):
+            atual = foco()
+            if atual and atual != self.app_inicial and not IGNORAR_APP.search(atual):
+                raise _Interrompido(f"a tela foi para outro app ({atual}) depois do {onde}: parei", None)
 
     def ancorar(self):
         """Passo informado (leu a tela, esperou um texto, abriu algo): a referência passa a ser a janela atual."""
@@ -1013,7 +1132,7 @@ class _Executor:
             raise _Interrompido(f"a tela rolou antes do {onde}: as coordenadas antigas não valem (olhe de novo)", None)
         ev = eventos()
         if ev and janela_nova(self.base, ev[2], self.app):
-            if self.aplicar_reflexo(ev[2]):
+            if self.lidar_anuncio(ev[2]) or self.aplicar_reflexo(ev[2]):
                 return
             raise _Interrompido(f"a tela mudou antes do {onde} ({_janela_curta(ev[2])}): as coordenadas eram de "
                                 "outra tela (olhe de novo)", None)
@@ -1082,7 +1201,7 @@ class _Executor:
         while time.time() < fim:
             ev = eventos()
             if ev is not None:
-                self.injetar_cru(f"aguardar {ev[1]} {int(max(0.05, fim - time.time()) * 1000)}")
+                self.injetar_cru(f"aguardar {ev[1]} {int(max(0.05, min(0.7, fim - time.time())) * 1000)}")
             else:
                 time.sleep(0.4)
             agora = relevantes()
@@ -1115,6 +1234,13 @@ class _Executor:
                 ev = eventos()
                 if ev and not self.checar_janela(ev[2], f"depois do {onde}"):
                     self.janela = ev[2]
+            if "abrir" in p:
+                self.app_inicial = str(p["abrir"])
+            elif normalizar(p.get("tecla")) in ("inicio", "recentes"):
+                self.app_inicial = None  # saiu do app de propósito
+            elif self.rapido:
+                self.lidar_anuncio()
+                self.conferir_outro_app(onde)
 
     def passo(self, p, onde):
         if not self.rapido:
@@ -1200,6 +1326,9 @@ class _Executor:
             limite = time.time() + min(float(p.get("ate", 10)), 30)
             t = time.time()
             while self.presente(texto) != quer:
+                if self.lidar_anuncio():
+                    limite = max(limite, time.time() + 5)  # o tempo do anúncio não conta
+                    continue
                 if time.time() > limite:
                     raise _Falha({"erro": f"{onde}: “{texto}” {'não apareceu' if quer else 'não sumiu'} a tempo",
                                   "app": foco()})
@@ -1252,16 +1381,24 @@ def sequencia(a):
         ex.janela = ev[2] if ev else None
         ex.base = _ULTIMA.get("janela") or ex.janela  # o Claude planejou em cima da última tela que viu
         ex.app, ex.app_em = foco(), time.time()
+        ex.app_inicial = ex.app if ex.app and not IGNORAR_APP.search(ex.app) else None
+    ex.com_anuncios = a.get("anuncios", True) is not False
     interrompido = None
     try:
         ex.rodar(passos)
         ex.descarregar()
     except _Falha as f:
-        return {**f.info, "feitos": ex.feitos}
+        try:  # o erro já volta com a tela atual: sem chamada extra para ver o que aconteceu
+            tela = _ver_depois(dict(a, ver_depois=a.get("ver_depois") if a.get("ver_depois") != "nada" else "auto"))
+        except Exception:  # noqa: BLE001
+            tela = {}
+        return {**f.info, "feitos": ex.feitos, **({"anuncios": ex.anuncios} if ex.anuncios else {}), **tela}
     except _Interrompido as i:
         interrompido = {"interrompido": i.motivo, **({"elemento": curto(i.elemento)} if i.elemento else {})}
     if ex.usados:
         interrompido = {**(interrompido or {}), "reflexos": ex.usados}
+    if ex.anuncios:
+        interrompido = {**(interrompido or {}), "anuncios": ex.anuncios}
     gasto = time.time() - ex.t0
     tempos = {"acoes": round(gasto - ex.t_esperas, 2)}
     if ex.t_esperas:
@@ -1359,6 +1496,8 @@ def executar(a):
             largura = max(320, min(int(a.get("largura", 720)), 1080))
             r = ver(bool(a.get("imagem", True)), largura, bool(a.get("elementos", True)), a.get("recorte"),
                     so_mudancas=bool(a.get("so_mudancas")), formato=a.get("formato", "curto"))
+        elif acao == "fechar_anuncio":
+            r = fechar_anuncio(foco(), min(float(a.get("limite", 45)), 120)) if em_anuncio() else {"anuncio": "nenhum"}
         elif acao == "reflexos":
             r = reflexos(a.get("regras"))
         else:

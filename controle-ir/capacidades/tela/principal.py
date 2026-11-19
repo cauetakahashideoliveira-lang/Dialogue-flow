@@ -83,6 +83,34 @@ def elementos(xml_texto, limite=120):
     return out
 
 
+def regioes_visuais(xml_texto, fracao=0.15):
+    """Áreas que a acessibilidade não descreve (folha sem texto ocupando ≥ `fracao` da tela: tabuleiro, jogo,
+    mapa, vídeo). Ali só a imagem mostra o conteúdo. Devolve [[x, y, l, a], ...], a maior primeiro."""
+    try:
+        raiz = ET.fromstring(xml_texto)
+    except ET.ParseError:
+        return []
+    caixas, folhas = [], []
+    for n in raiz.iter("node"):
+        b = ler_bounds(n.attrib.get("bounds"))
+        if not b or b[2] <= b[0] or b[3] <= b[1]:
+            continue
+        caixas.append(b)
+        if n.find("node") is None and not (n.attrib.get("text") or n.attrib.get("content-desc")):
+            folhas.append(b)
+    if not caixas:
+        return []
+    tela = max(c[2] for c in caixas) * max(c[3] for c in caixas)
+    out = [[b[0], b[1], b[2] - b[0], b[3] - b[1]] for b in folhas
+           if (b[2] - b[0]) * (b[3] - b[1]) >= fracao * tela and (b[2] - b[0]) * (b[3] - b[1]) < 0.9 * tela]
+    return sorted(out, key=lambda r: -r[2] * r[3])[:2]
+
+
+def dentro(ponto, regiao):
+    x, y = ponto
+    return regiao[0] <= x <= regiao[0] + regiao[2] and regiao[1] <= y <= regiao[1] + regiao[3]
+
+
 def achar(els, texto):
     """Elemento cujo texto/descrição/id contém `texto` (sem acento, sem caixa). Prefere igual > clicável > primeiro."""
     alvo = normalizar(texto)
@@ -651,10 +679,15 @@ def _linha_do_tempo():
     if ev is None:
         return []
     agora, desde = ev[3], _ULTIMA.get("t")
-    _ULTIMA["t"] = agora
+    _ULTIMA["t"], _ULTIMA["janela"] = agora, ev[2]  # a janela que o Claude viu: referência das coordenadas
     if desde is None:
         return []
-    return [f"-{(agora - t) / 1000:.1f}s {_janela_curta(info)}" for t, info in historico(desde)][-8:]
+    linhas, anterior = [], None
+    for t, info in historico(desde):
+        if info != anterior:
+            linhas.append(f"-{(agora - t) / 1000:.1f}s {_janela_curta(info)}")
+        anterior = info
+    return linhas[-8:]
 
 
 def ver(imagem=True, largura=720, com_elementos=True, recorte=None, so_mudancas=False, formato="curto"):
@@ -685,7 +718,7 @@ def ver(imagem=True, largura=720, com_elementos=True, recorte=None, so_mudancas=
                 out["sem_mudar"] = len(els) - len(dif["entrou"]) - len(dif["mudou"])
             else:
                 out["mudancas"] = "nenhuma"
-            _ULTIMA.update(app=app, els=els)
+            _ULTIMA.update(app=app, els=els, regioes=regioes_visuais(xml))
         if imagem and not rapida[0]:
             b64 = _jpeg(png, largura, recorte)
             if b64:
@@ -702,11 +735,22 @@ def ver(imagem=True, largura=720, com_elementos=True, recorte=None, so_mudancas=
     return out
 
 
-def _ver_depois(a, padrao=None):
-    """Depois de agir, espera a tela assentar (leitor rápido) e olha: 'mudancas' (padrão com o leitor: só o que
-    mudou desde a última olhada), 'elementos' (lista inteira), 'imagem' (lista + captura) ou 'nada' (só o app)."""
+def _ver_depois(a, padrao=None, tocados=()):
+    """Depois de agir, espera a tela assentar (leitor rápido) e olha. 'auto' (padrão com o leitor): só o que mudou e,
+    se a tela tem área visual sem texto (tabuleiro, jogo), a imagem SÓ desse recorte quando a tela é nova ou a ação
+    tocou nela. 'mudancas' (sem imagem), 'elementos' (lista inteira), 'imagem' (lista + captura) ou 'nada'."""
     if padrao is None:
-        padrao = "mudancas" if _ajudante() else "nada"
+        padrao = "auto" if _ajudante() else "nada"
+    if (a.get("ver_depois") or padrao) == "auto":
+        esperou = calma(int(a.get("calma_ms", 120)), int(a.get("calma_ate", 1000))) if a.get("calma", True) else None
+        tela = ver(False, 480, True, None, so_mudancas=True, formato=a.get("formato", "curto"))
+        reg = (_ULTIMA.get("regioes") or [None])[0]
+        if reg and ("elementos" in tela or any(dentro(p, reg) for p in tocados)):
+            b64, res = foto_rapida(min(720, max(320, int(a.get("largura", 480)))), reg)
+            if b64:
+                tela["_imagem"] = {"mime": "image/jpeg", "base64": b64}
+                tela["recorte"] = reg
+        return {"tela": tela, **({"calma_ms": esperou} if esperou is not None else {})}
     modo = a.get("ver_depois") or ("imagem" if a.get("imagem") else padrao)
     esperou = None
     if modo != "nada" and a.get("calma", True) is not False:
@@ -873,6 +917,9 @@ class _Executor:
         self.janela = None  # "pacote|classe|texto" da janela no começo (referência do reflexo)
         self.regras = _regras()
         self.usados = []  # reflexos que agiram nesta sequência
+        self.base = None  # janela em que as coordenadas foram lidas (a última vista pelo Claude)
+        self.rolou = False  # depois de um deslize, as coordenadas antigas não valem
+        self.tocados = []
 
     # --- utilidades
     def descarregar(self):
@@ -949,6 +996,27 @@ class _Executor:
                 return True
             raise _Interrompido(f"surgiu uma janela nova ({onde}): {_janela_curta(info)}", None)
         return False
+
+    def ancorar(self):
+        """Passo informado (leu a tela, esperou um texto, abriu algo): a referência passa a ser a janela atual."""
+        if self.rapido:
+            ev = eventos()
+            if ev:
+                self.base = self.janela = ev[2]
+        self.rolou = False
+
+    def conferir_coordenadas(self, p, onde, rolagem=True):
+        """Toque às cegas (por coordenada) só na tela em que ela foi lida; senão para e manda olhar de novo."""
+        if not self.rapido or p.get("confiar") or self.base is None:
+            return
+        if self.rolou and rolagem:
+            raise _Interrompido(f"a tela rolou antes do {onde}: as coordenadas antigas não valem (olhe de novo)", None)
+        ev = eventos()
+        if ev and janela_nova(self.base, ev[2], self.app):
+            if self.aplicar_reflexo(ev[2]):
+                return
+            raise _Interrompido(f"a tela mudou antes do {onde} ({_janela_curta(ev[2])}): as coordenadas eram de "
+                                "outra tela (olhe de novo)", None)
 
     def tocar_vigiando(self, pontos, pausa, onde):
         """Toques em leva que param na hora se surgir outra janela (aviso, anúncio, fim de jogo) ou um texto de
@@ -1038,6 +1106,9 @@ class _Executor:
             except (ValueError, TypeError, IndexError, KeyError) as e:
                 raise _Falha({"erro": f"{onde}: {e}"}) from e
             self.feitos += 1
+            if isinstance(p.get("tocar"), str) or any(k in p for k in ("esperar_texto", "esperar_sumir", "abrir",
+                                                                       "esperar_mudanca", "se", "se_nao", "repetir")):
+                self.ancorar()
             if self.parar_se and "se" not in p and "se_nao" not in p and "repetir" not in p:
                 self.checar_texto(f"depois do {onde}")
             if self.parar_em_janela and self.rapido:
@@ -1061,7 +1132,9 @@ class _Executor:
                 pontos = [[e["x"], e["y"]]]
             else:
                 pontos = alvo if alvo and isinstance(alvo[0], (list, tuple)) else [alvo]
+                self.conferir_coordenadas(p, onde)
             pontos = [[int(x), int(y)] for x, y in pontos]
+            self.tocados += pontos
             pausa = max(0.0, min(float(p.get("intervalo", 0.05)), 5.0))
             if p.get("segurar"):
                 ms = max(50, min(int(p["segurar"]), 5000))
@@ -1079,6 +1152,8 @@ class _Executor:
                 linhas += [f"input tap {x} {y} || exit 3"] + ([f"sleep {pausa:.2f}"] if pausa else [])
             self.injetar(cmd, linhas)
         elif "deslizar" in p:
+            self.conferir_coordenadas(p, onde, rolagem=False)  # rolar de novo é normal; só a janela importa
+            self.rolou = True
             v = [int(n) for n in p["deslizar"]]
             ms = v[4] if len(v) > 4 else 300
             self.injetar(f"deslizar {v[0]} {v[1]} {v[2]} {v[3]} {ms}",
@@ -1175,6 +1250,7 @@ def sequencia(a):
     if ex.rapido:
         ev = eventos()
         ex.janela = ev[2] if ev else None
+        ex.base = _ULTIMA.get("janela") or ex.janela  # o Claude planejou em cima da última tela que viu
         ex.app, ex.app_em = foco(), time.time()
     interrompido = None
     try:
@@ -1191,7 +1267,7 @@ def sequencia(a):
     if ex.t_esperas:
         tempos["esperas"] = round(ex.t_esperas, 2)
     t = time.time()
-    depois = _ver_depois(a)
+    depois = _ver_depois(a, tocados=ex.tocados)
     tempos["olhar"] = round(time.time() - t, 2)
     return {**(interrompido or {}), "feito": f"{ex.feitos} passos em {gasto:.1f} s", "tempos": tempos, **depois}
 
@@ -1204,6 +1280,11 @@ def agir(a):
     if acao in ("tocar", "digitar", "deslizar") and bloqueado(app, bloqueados()):
         return {"erro": f"recusado: o app em foco ({app}) está na lista de bloqueados (banco/pagamento/senha). "
                         "Edite ~/.controle-ir/tela_bloqueados.json no celular se quiser mudar isso."}
+    if acao in ("tocar", "deslizar") and a.get("texto") is None and not a.get("confiar") and _ULTIMA.get("janela"):
+        ev = eventos()  # coordenada lida numa tela que já não está aí: não toca, mostra a atual
+        if ev and janela_nova(_ULTIMA["janela"], ev[2], app):
+            return {"interrompido": f"a tela mudou desde a última olhada ({_janela_curta(ev[2])}): as coordenadas "
+                                    "eram de outra tela (olhe de novo)", **_ver_depois(a, "auto")}
     if acao == "tocar":
         x, y, alvo = a.get("x"), a.get("y"), None
         if a.get("texto"):
@@ -1260,7 +1341,8 @@ def agir(a):
     if espera > 0:
         time.sleep(min(espera, 10))
     # depois de agir: com o leitor rápido, espera a tela assentar e diz só o que mudou; sem ele, só o app em foco
-    res.update(_ver_depois(a, "elementos" if espera > 0 and not _ajudante() else None))
+    ponto = [[int(a["x"]), int(a["y"])]] if acao == "tocar" and a.get("x") is not None else []
+    res.update(_ver_depois(a, "elementos" if espera > 0 and not _ajudante() else None, tocados=ponto))
     return res
 
 

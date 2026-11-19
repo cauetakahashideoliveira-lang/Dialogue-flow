@@ -1,7 +1,7 @@
 {
  "nome": "tela",
  "titulo": "Agente de tela (ver e tocar no celular)",
- "descricao": "Vê e opera a tela do celular pelo Shizuku, sem root. CICLO RÁPIDO: toda ação (tocar/digitar/tecla/deslizar/sequencia) espera a tela assentar e devolve só o que MUDOU desde a última olhada (ver_depois='mudancas', padrão com o leitor rápido: entrou/saiu/mudou com o valor anterior; tela nova → lista inteira); ver_depois='imagem' inclui a captura, 'nada' só o app. acao=sequencia com 'passos' faz tudo numa chamada, injetado direto (ms por toque): {tocar:[x,y]|[[x,y],...]|'texto', intervalo:s, segurar:ms}, {deslizar:[x,y,x2,y2,ms]}, {digitar:'...'}, {tecla:'voltar'}, {esperar:s}, {calma:s} (até a tela parar), {esperar_texto|esperar_sumir:'...', ate:s}, {esperar_mudanca:s, ignorar:[ids/textos]} (fica olhando até a tela mudar de verdade), {abrir:'pacote'}, condições no próprio celular {se|se_nao:'texto', entao:[...], senao:[...]} e laços {repetir:[...], vezes:N, ate_texto|ate_sumir:'...'}. acao=ver: elementos (texto, id, clicável, marcado, selecionado, rolável, centro x,y) e captura; so_mudancas=true só a diferença; recorte=[x,y,l,a] para ver um pedaço nítido. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução. REFLEXO: numa leva de toques, se surgir uma janela nova (aviso, anúncio, fim de jogo, outro app) o celular para na hora, sem os toques restantes, e a resposta traz 'interrompido' com o que apareceu (parar_em_janela=true vigia também entre os passos; false desliga); parar_se=['texto',...] para quando algum desses textos aparecer. RESPOSTAS CURTAS: elementos numa linha (\"Texto\" (desc) #id x,y sinais) e mudanças como +/-/~; 'surgiu' lista as janelas que apareceram desde a última olhada (formato='json' volta ao antigo). acao=reflexos com regras=[{se:'texto'|janela:'trecho', tocar:[x,y]|'texto'|tecla:'voltar'}] guarda reflexos no celular: numa sequência, no lugar de parar, ele resolve sozinho e segue (resposta traz 'reflexos'); sem regras, lista.",
+ "descricao": "Vê e opera a tela do celular pelo Shizuku, sem root. CICLO RÁPIDO: toda ação (tocar/digitar/tecla/deslizar/sequencia) espera a tela assentar e devolve só o que MUDOU desde a última olhada (ver_depois='mudancas', padrão com o leitor rápido: entrou/saiu/mudou com o valor anterior; tela nova → lista inteira); ver_depois='imagem' inclui a captura, 'nada' só o app. acao=sequencia com 'passos' faz tudo numa chamada, injetado direto (ms por toque): {tocar:[x,y]|[[x,y],...]|'texto', intervalo:s, segurar:ms}, {deslizar:[x,y,x2,y2,ms]}, {digitar:'...'}, {tecla:'voltar'}, {esperar:s}, {calma:s} (até a tela parar), {esperar_texto|esperar_sumir:'...', ate:s}, {esperar_mudanca:s, ignorar:[ids/textos]} (fica olhando até a tela mudar de verdade), {abrir:'pacote'}, condições no próprio celular {se|se_nao:'texto', entao:[...], senao:[...]} e laços {repetir:[...], vezes:N, ate_texto|ate_sumir:'...'}. acao=ver: elementos (texto, id, clicável, marcado, selecionado, rolável, centro x,y) e captura; so_mudancas=true só a diferença; recorte=[x,y,l,a] para ver um pedaço nítido. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução. REFLEXO: numa leva de toques, se surgir uma janela nova (aviso, anúncio, fim de jogo, outro app) o celular para na hora, sem os toques restantes, e a resposta traz 'interrompido' com o que apareceu (parar_em_janela=true vigia também entre os passos; false desliga); parar_se=['texto',...] para quando algum desses textos aparecer. RESPOSTAS CURTAS: elementos numa linha (\"Texto\" (desc) #id x,y sinais) e mudanças como +/-/~; 'surgiu' lista as janelas que apareceram desde a última olhada (formato='json' volta ao antigo). acao=reflexos com regras=[{se:'texto'|janela:'trecho', tocar:[x,y]|'texto'|tecla:'voltar'}] guarda reflexos no celular: numa sequência, no lugar de parar, ele resolve sozinho e segue (resposta traz 'reflexos'); sem regras, lista. QUANDO TOCAR ÀS CEGAS × OLHAR DE NOVO (automático): coordenada só vale na tela em que foi lida. Se a janela mudou desde a última olhada (ou depois de voltar/abrir/rolar), o toque por coordenada não sai: volta 'interrompido' com a tela atual; toque por texto lê a tela na hora e reancora. Na mesma tela, levas de toques vão direto. confiar=true no passo pula a checagem. Depois de agir (ver_depois='auto', padrão): só o que mudou e, se há área visual sem texto (tabuleiro, jogo), a imagem só desse recorte quando a tela é nova ou a ação tocou nela.",
  "executar": "principal.py",
  "efeito": "acao",
  "acessos": [
@@ -62,7 +62,7 @@
    },
    "ver_depois": {
     "type": "string",
-    "description": "mudancas (padrão: só o que mudou) | elementos | imagem | nada"
+    "description": "auto (padrão: mudanças + recorte visual quando preciso) | mudancas | elementos | imagem | nada"
    },
    "elementos": {
     "type": "boolean",
@@ -108,6 +108,10 @@
    "formato": {
     "type": "string",
     "description": "curto (padrão) | json"
+   },
+   "confiar": {
+    "type": "boolean",
+    "description": "tocar/deslizar: não conferir se a tela ainda é a da última olhada"
    }
   },
   "required": [

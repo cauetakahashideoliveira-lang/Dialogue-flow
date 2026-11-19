@@ -41,6 +41,11 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Quando tocar às cegas × olhar de novo (1.0.38):** coordenada só vale na janela em que o Claude a leu
+  (`_ULTIMA["janela"]`): se a janela mudou desde a última olhada, ou depois de voltar/abrir/rolar, o toque por
+  coordenada não sai e volta `interrompido` com a tela atual; toque por texto, esperar_texto, abrir, se/repetir
+  reancoram. Na mesma tela, levas seguem direto. `ver_depois="auto"` (padrão): só o que mudou + imagem apenas do
+  recorte visual sem texto (tabuleiro/jogo, `regioes_visuais`) quando a tela é nova ou a ação tocou nele.
 - **19/11 — Ciclo econômico (1.0.37):** medido de ponta a ponta: 4,3 s por volta, ~2 s são rede + o Claude
   escrever/ler (piso que código não remove). Por isso: respostas curtas (elemento numa linha, mudanças como +/-/~,
   ~metade dos tokens), `surgiu` com as janelas que apareceram desde a última olhada (anel de 32 no leitor) e

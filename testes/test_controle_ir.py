@@ -1772,7 +1772,9 @@ for linha in sys.stdin:
         r = "ok 3"
     elif cmd == "eventos":
         cont += 1
-        r = f"0 {{cont}} {{int(time.monotonic() * 1000)}} com.android.settings|com.android.settings.Principal|"
+        jan = os.path.join(os.path.dirname(reg), "janela.txt")
+        chave = open(jan).read().strip() if os.path.exists(jan) else "com.android.settings|com.android.settings.Principal|"
+        r = f"0 {{cont}} {{int(time.monotonic() * 1000)}} " + chave
     elif cmd == "historico":
         h = os.path.join(os.path.dirname(reg), "historico.txt")
         r = f"{{int(time.monotonic() * 1000) - 1500}} " + open(h).read().strip() if os.path.exists(h) else ""
@@ -1938,6 +1940,43 @@ for linha in sys.stdin:
         log = self.registro.read_text()
         self.assertIn("leitor tecla 4", log)
         self.assertIn("leitor toquesv 50 2 2 3 3", log)  # e seguiu com os toques que faltavam
+
+    def test_coordenada_so_vale_na_tela_em_que_foi_lida(self):
+        self._leitor_falso()
+        self.m.ver(imagem=False)  # o Claude olhou: a referência é a janela de agora
+        (self.tmp / "janela.txt").write_text("com.android.settings|com.android.settings.Aviso|Sair?")
+        r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [[1, 1], [2, 2]]}]})
+        self.assertIn("a tela mudou", r["interrompido"])  # surgiu outra janela desde a olhada: não toca às cegas
+        self.assertFalse(self.registro.exists() and " 1 1" in self.registro.read_text())
+        # a resposta interrompida já mostrou a tela nova: agora ela é a referência. Se mudar de novo, não toca
+        (self.tmp / "janela.txt").write_text("com.android.settings|com.android.settings.Outra|")
+        r = self.m.agir({"acao": "tocar", "x": 5, "y": 5})  # ação única: mesma regra
+        self.assertIn("interrompido", r)
+        self.assertNotIn("tocar 5 5", self.registro.read_text() if self.registro.exists() else "")
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada",
+                         "passos": [{"tocar": "bluetooth"}, {"tocar": [[1, 1], [2, 2]]}]})
+        self.assertNotIn("interrompido", r)  # tocou por texto (leu a tela): reancorou e as coordenadas valem
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [
+            {"deslizar": [1, 900, 1, 300]}, {"deslizar": [1, 900, 1, 300]}, {"tocar": [7, 7]}]})
+        self.assertIn("rolou", r["interrompido"])  # rolar de novo pode; tocar onde estava antes, não
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada",
+                         "passos": [{"deslizar": [1, 900, 1, 300]}, {"tocar": [7, 7], "confiar": True}]})
+        self.assertNotIn("interrompido", r)
+
+    def test_imagem_so_da_area_visual(self):
+        xml = ('<?xml version="1.0"?><hierarchy><node bounds="[0,0][1000,2000]" text="" content-desc="">'
+               '<node bounds="[0,200][1000,1200]" text="" content-desc="" class="BoardView"/>'
+               '<node bounds="[0,1300][500,1400]" text="Desfazer" content-desc=""/></node></hierarchy>')
+        self.assertEqual(self.m.regioes_visuais(xml), [[0, 200, 1000, 1000]])
+        self.assertEqual(self.m.regioes_visuais(TestTela.XML), [])  # tela só de texto: nada de imagem
+        self.assertTrue(self.m.dentro([500, 700], [0, 200, 1000, 1000]))
+        self._leitor_falso()
+        self.m.ver(imagem=False)
+        self.m._ULTIMA["regioes"] = [[0, 200, 1000, 1000]]
+        self.m.dump_ui = lambda: xml
+        self.m.agir({"acao": "sequencia", "passos": [{"tocar": [500, 700]}]})
+        self.assertIn("leitor foto 480 110000", self.registro.read_text())  # pediu o recorte do tabuleiro
+        self.assertIn(" 0 200 1000 1000", self.registro.read_text())
 
     def test_leitor_recusa_app_bloqueado(self):
         foco = self.tmp / "foco.txt"

@@ -5,6 +5,14 @@
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
+- **19/11 — rede de casa inventariada** com a capacidade nova `descobrir_rede` (só leitura, sem nmap): roteador
+  Intelbras Twibi Giga (`.1`), câmeras IP prováveis (`.95`, `.213`, só RTSP 554), `.11` e `.52` sem portas
+  comuns, celular `.94`. TV Samsung e ares não aparecem na rede (sem Wi-Fi ou desligados). Inventário em
+  `~/.controle-ir/medicoes/inventario.json`. nmap 7.993 também instalado no Termux.
+- **19/11 — queda do conector após atualizar:** o ngrok saía com código 1 em laço (agente antigo órfão segurando
+  o domínio fixo) e o conector dava "Not Found"; resolvido com `controle-ir desligar; pkill ngrok; controle-ir
+  ligar`. A **1.0.15** encerra ngrok órfão antes de abrir o túnel, mata o grupo de processos ao parar e mostra o
+  último erro do túnel no registro.
 - **19/11 — modo deus confirmado no POCO** (sessão de teste do Claude Code, conferida por `consultar`): política
   `autonomo` (todas as classes permitir); `estado_celular` ok (bateria, Wi-Fi 5 GHz RSSI −48, 16 comandos do
   Termux:API); `diagnostico_rede` ok (0% de perda, roteador ~26 ms, internet ~76 ms, DNS 64–154 ms, sem

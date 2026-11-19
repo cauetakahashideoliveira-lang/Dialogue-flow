@@ -1075,5 +1075,59 @@ class TestSegundoPlano(unittest.TestCase):
         self.assertTrue(self.saude(), "sair do console não pode encerrar o serviço")
 
 
+
+class TestTunel(unittest.TestCase):
+    """O túnel ngrok encerra agentes órfãos antes de abrir (senão o domínio fixo fica preso e dá Not Found)."""
+
+    def _tunel(self, modo):
+        from controle_ir.tunel import Tunel
+        return Tunel(8765, {"modo": modo, "dominio": "x.ngrok-free.app"})
+
+    def test_limpa_orfao_so_no_modo_ngrok(self):
+        from unittest import mock
+        chamadas = []
+        def falso_run(cmd, **kw):
+            chamadas.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0)
+        with mock.patch("controle_ir.tunel.shutil.which", return_value="/bin/pkill"), \
+             mock.patch("controle_ir.tunel.subprocess.run", side_effect=falso_run), \
+             mock.patch("controle_ir.tunel.time.sleep"):
+            self.assertTrue(self._tunel("ngrok").limpar_orfaos())
+            self.assertFalse(self._tunel("rapido").limpar_orfaos())
+            self.assertFalse(self._tunel("cloudflare").limpar_orfaos())
+        self.assertEqual(chamadas, [["pkill", "-x", "ngrok"]])
+
+    def test_sem_orfao_nao_espera(self):
+        from unittest import mock
+        with mock.patch("controle_ir.tunel.shutil.which", return_value="/bin/pkill"), \
+             mock.patch("controle_ir.tunel.subprocess.run",
+                        return_value=subprocess.CompletedProcess(["pkill"], 1)), \
+             mock.patch("controle_ir.tunel.time.sleep") as dormir:
+            self.assertFalse(self._tunel("ngrok").limpar_orfaos())
+            dormir.assert_not_called()
+
+    def test_parar_encerra_o_grupo_inteiro(self):
+        t = self._tunel("nenhum")
+        neto = Path(tempfile.mkdtemp()) / "neto.pid"
+        t.proc = subprocess.Popen([sys.executable, "-c", "import subprocess,sys,time;"
+                                   "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)']);"
+                                   f"open({str(neto)!r},'w').write(str(p.pid));time.sleep(30)"],
+                                  start_new_session=True)
+        for _ in range(50):
+            if neto.exists() and neto.read_text():
+                break
+            time.sleep(0.1)
+        pid_neto = int(neto.read_text())
+        t.parar()
+        self.assertIsNotNone(t.proc.poll())
+        time.sleep(0.3)
+
+        def vivo(pid):  # zumbi (sem init para recolher no contêiner) conta como encerrado
+            try:
+                return "\tZ" not in Path(f"/proc/{pid}/status").read_text().split("State:")[1][:4]
+            except (OSError, IndexError):
+                return False
+        self.assertFalse(vivo(pid_neto))
+
 if __name__ == "__main__":
     unittest.main()

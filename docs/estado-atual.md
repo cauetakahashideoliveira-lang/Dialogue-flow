@@ -5,14 +5,18 @@
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
+- **19/11 — 1.0.18 no celular (22:54):** `termometro` (temperatura do cômodo pela bateria; 1ª leitura 31 °C na
+  bateria → ~29 °C estimado, confiança média com o celular em uso; monitorando 60 min), ouvido do ar no
+  `controlar(ouvir=true)` (3 s antes + ~8 s depois do envio, compara o ruído), `tela` e o recorte da `foto`
+  instalados com o aval do usuário ("pode começar a fazer essa integração").
 - **19/11 — PENDENTE (continuar numa conversa nova):**
-  1. Agente de tela: capacidade `tela` pronta no GitHub (commit bb75d15), **não instalada**. O usuário está
-     configurando o Shizuku (opções do desenvolvedor, Depuração USB + "Depuração USB (Configurações de
-     segurança)" do Xiaomi + Depuração sem fio, parear e Iniciar, exportar o rish para Downloads). Depois:
-     copiar `~/storage/downloads/rish` e `rish_shizuku.dex` para `~/.controle-ir/rish/` (chmod 700 no rish,
-     400 no .dex), empacotar, publicar e `atualizar_sistema`, e testar `tela` (estado → ver → abrir
-     com.android.settings). O pacote novo leva junto o recorte da `foto`: **perguntar ao usuário antes** (ele
-     pediu para só subir o recorte quando pedir).
+  1. Agente de tela: `tela` instalada, falta o Shizuku. O usuário está configurando (opções do desenvolvedor,
+     Depuração USB + "Depuração USB (Configurações de segurança)" do Xiaomi + Depuração sem fio, parear e
+     Iniciar, exportar o rish para Download). Depois: copiar `~/storage/downloads/rish` e `rish_shizuku.dex`
+     para `~/.controle-ir/rish/` (chmod 700 no rish, 400 no .dex) e testar `tela` (estado → ver → abrir
+     com.android.settings).
+  4. Termômetro: calibrar com uma temperatura real (termômetro ou visor do ar estabilizado) e testar o
+     ouvido do ar com ligar/desligar de verdade (pedir ao usuário antes de desligar o ar).
   2. Autorizações: o usuário liberou na organização, mas a conversa antiga continuou com `org_ask_ceiling`
      (provavelmente a regra é lida no início da conversa). Conferir numa conversa nova.
   3. Foto de perto do visor do ar do quarto (1–1,5 m) para ler os dígitos.

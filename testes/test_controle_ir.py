@@ -654,6 +654,20 @@ class TestCapacidades(unittest.TestCase):
         self.assertEqual(r["status"], "ok")
         self.assertIn("armazenamento_livre_gb", r["resultado"])
 
+    def test_descobrir_rede_embutida_e_classifica_sem_rede(self):
+        import importlib.util
+        nomes = {c["nome"]: c["estado"] for c in self.s.capacidades()["capacidades"]}
+        self.assertEqual(nomes.get("descobrir_rede"), "ativa")
+        caminho = Path(__file__).resolve().parent.parent / "controle-ir" / "capacidades" / "descobrir_rede" / "principal.py"
+        spec = importlib.util.spec_from_file_location("descobrir_rede_principal", caminho)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertEqual(mod.classificar([554])[0], "câmera IP provável")
+        self.assertEqual(mod.classificar([53, 9000], e_gateway=True)[0], "roteador")
+        self.assertEqual(mod.classificar([8001])[0], "TV (Samsung/Tizen provável)")
+        self.assertEqual(mod.classificar([], gree=True)[0], "ar-condicionado (Gree)")
+        self.assertEqual(mod.classificar([])[0], "não identificado")
+
     def test_proposta_so_roda_depois_de_aprovada_e_reaprova_se_mudar(self):
         r = self.s.propor_capacidade("eco", **self.ECO)
         self.assertEqual(r["status"], "aguardando_aprovacao")

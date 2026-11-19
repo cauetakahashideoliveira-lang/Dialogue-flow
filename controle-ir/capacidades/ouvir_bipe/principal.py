@@ -97,6 +97,48 @@ def filtrar_janela(bipes, envio_s, antes=0.6, depois=3.5):
     return out
 
 
+def comparar_ruido(amostras, envio_s, taxa=TAXA, pos_espera=2.0, faixa=(60.0, 1500.0), limiar_db=3.0):
+    """Ouvido do ar: compara o ruído de ventilador/motor (faixa grave) antes e depois do envio. Ligar o ar deixa o
+    cômodo mais barulhento; desligar, mais silencioso. Devolve antes_db, depois_db, diferenca_db, veredito
+    (mais_alto | mais_baixo | sem_mudanca) e os tons dominantes (zumbidos) de cada trecho; None sem dados."""
+    import numpy as np
+    x = np.asarray(amostras, dtype=np.float32)
+    ini_antes, fim_antes = 0.5, envio_s - 0.2
+    ini_depois = envio_s + pos_espera
+    if envio_s is None or fim_antes - ini_antes < 0.8 or x.size / taxa - ini_depois < 1.5:
+        return None
+
+    def espectro(a, b):
+        trecho = x[int(a * taxa):int(b * taxa)]
+        n = 4096
+        if trecho.size < n:
+            return None, None
+        janela = np.hanning(n).astype(np.float32)
+        quadros = [np.abs(np.fft.rfft(trecho[i:i + n] * janela)) ** 2 for i in range(0, trecho.size - n + 1, n // 2)]
+        return np.mean(quadros, axis=0), np.fft.rfftfreq(n, 1.0 / taxa)
+
+    pa, f = espectro(ini_antes, fim_antes)
+    pd, _ = espectro(ini_depois, x.size / taxa)
+    if pa is None or pd is None:
+        return None
+    m = (f >= faixa[0]) & (f <= faixa[1])
+    antes = 10 * np.log10(float(pa[m].sum()) + 1e-20)
+    depois = 10 * np.log10(float(pd[m].sum()) + 1e-20)
+
+    def tons(p):
+        pm, fm = p[m], f[m]
+        base = np.median(pm) + 1e-20
+        idx = [i for i in range(1, pm.size - 1) if pm[i] > pm[i - 1] and pm[i] >= pm[i + 1] and pm[i] > 10 * base]
+        idx = sorted(idx, key=lambda i: -pm[i])[:3]
+        return [round(float(fm[i])) for i in idx]
+
+    dif = depois - antes
+    veredito = "mais_alto" if dif >= limiar_db else ("mais_baixo" if dif <= -limiar_db else "sem_mudanca")
+    return {"antes_db": round(antes, 1), "depois_db": round(depois, 1), "diferenca_db": round(dif, 1),
+            "veredito": veredito, "tons_antes_hz": tons(pa), "tons_depois_hz": tons(pd),
+            "janelas_s": [round(ini_antes, 1), round(fim_antes, 1), round(ini_depois, 1), round(x.size / taxa, 1)]}
+
+
 def comparar(bipes, ref, tolerancia=0.05):
     """Bipes que batem com a frequência de referência (±5 %)."""
     if not ref:
@@ -134,7 +176,7 @@ def decodificar():
     return np.frombuffer(r.stdout, dtype=np.int16).astype(np.float32) / 32768.0
 
 
-def analisar(aparelho=None, salvar_referencia=False, manter_audio=False, envio_em=None):
+def analisar(aparelho=None, salvar_referencia=False, manter_audio=False, envio_em=None, esperado=None):
     est = ler_json(ESTADO, {})
     if envio_em:
         est["envio_em"] = float(envio_em)
@@ -174,11 +216,19 @@ def analisar(aparelho=None, salvar_referencia=False, manter_audio=False, envio_e
             os.remove(AUDIO)
         except OSError:
             pass
-    if ref:
-        veredito = "confirmado" if batem else "nao_confirmado"
+    ruido = comparar_ruido(x, envio_s) if envio_s is not None else None
+    if ref and batem:
+        veredito = "confirmado"
+    elif esperado and ruido and ruido["veredito"] == esperado:
+        veredito = "confirmado_pelo_ruido"
+    elif esperado and ruido and ruido["veredito"] not in ("sem_mudanca", esperado):
+        veredito = "ruido_contrario"
+    elif ref:
+        veredito = "nao_confirmado"
     else:
         veredito = "bipe_ouvido_sem_referencia" if bipes else "nada_ouvido"
     return {"veredito": veredito, "aparelho": aparelho, "referencia": ref, "bipes": bipes[:5],
+            "ruido": ruido, "esperado": esperado,
             "envio_no_audio_s": round(envio_s, 2) if envio_s is not None else None,
             "sons_fora_da_janela": len(todos) - len(bipes),
             "batem_com_referencia": batem[:3], "duracao_audio_s": round(x.size / TAXA, 1),
@@ -191,10 +241,10 @@ def main():
     a = json.loads(sys.stdin.read() or "{}")
     acao = a.get("acao")
     if acao == "gravar":
-        out = gravar(max(2, min(int(a.get("segundos", 7)), 20)))
+        out = gravar(max(2, min(int(a.get("segundos", 7)), 30)))
     elif acao == "analisar":
         out = analisar(a.get("aparelho"), bool(a.get("salvar_referencia")), bool(a.get("manter_audio")),
-                       a.get("envio_em"))
+                       a.get("envio_em"), a.get("esperado"))
     else:
         out = {"erro": "acao deve ser gravar ou analisar"}
     print(json.dumps(out, ensure_ascii=False))

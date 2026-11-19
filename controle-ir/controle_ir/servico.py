@@ -217,6 +217,8 @@ class Servico:
                         "permitir_servico": permitir_servico}]
         resultados = []
         escuta = self._comecar_escuta() if ouvir and not simular else None
+        # o que o ruído do ar deve fazer: ligar → cômodo mais barulhento; desligar → mais silencioso
+        esperado = None if (macro or repetir_ultimo) else {True: "mais_alto", False: "mais_baixo"}.get(ligar)
         t_envio = None
         with self.trava_envio:
             for i, ped in enumerate(pedidos):
@@ -241,14 +243,14 @@ class Servico:
             out = {"aparelho": a["nome"], "macro": macro, "passos": resultados,
                    "status": "sinal_enviado" if all(r["status"] == "sinal_enviado" for r in resultados) else "parcial"}
         if escuta is not None:
-            out["ouvido"] = self._terminar_escuta(escuta, a["nome"], t_envio)
+            out["ouvido"] = self._terminar_escuta(escuta, a["nome"], t_envio, esperado)
         return out
 
     # ------------------------------------------------------------- confirmação pelo microfone
     def _ambiente_cap(self) -> dict:
         return {"CONTROLE_IR_DIR": str(self.pasta)}
 
-    def _comecar_escuta(self, segundos: int = 5) -> dict:
+    def _comecar_escuta(self, segundos: int = 11, pre: float = 3.0) -> dict:
         """Começa a gravar antes do envio (capacidade ouvir_bipe). Nunca impede o envio: falha vira aviso."""
         try:
             r = self.reg.executar("ouvir_bipe", {"acao": "gravar", "segundos": segundos}, self._ambiente_cap())
@@ -257,15 +259,17 @@ class Servico:
         res = r.get("resultado") or {}
         if r.get("status") != "ok" or res.get("erro"):
             return {"erro": res.get("erro") or r.get("erro") or r.get("status")}
-        time.sleep(1.0)  # o Termux:API leva um instante para o microfone gravar de fato
+        time.sleep(pre)  # ~0,5 s para o microfone começar + trecho "antes" para comparar o ruído do ar
         return {"ok": True}
 
-    def _terminar_escuta(self, escuta: dict, nome: str, t_envio: float | None) -> dict:
+    def _terminar_escuta(self, escuta: dict, nome: str, t_envio: float | None, esperado: str | None = None) -> dict:
         if escuta.get("erro") or t_envio is None:
             return {"veredito": "sem_escuta", "erro": escuta.get("erro") or "nada foi enviado"}
         try:
-            r = self.reg.executar("ouvir_bipe", {"acao": "analisar", "aparelho": nome, "envio_em": t_envio,
-                                                 "manter_audio": True}, self._ambiente_cap())
+            args = {"acao": "analisar", "aparelho": nome, "envio_em": t_envio, "manter_audio": True}
+            if esperado:
+                args["esperado"] = esperado
+            r = self.reg.executar("ouvir_bipe", args, self._ambiente_cap())
         except ErroCapacidade as e:
             return {"veredito": "sem_escuta", "erro": str(e)}
         return r.get("resultado") if r.get("status") == "ok" else {"veredito": "sem_escuta", "erro": r}

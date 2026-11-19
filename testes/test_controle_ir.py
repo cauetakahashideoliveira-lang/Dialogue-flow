@@ -1193,6 +1193,27 @@ class TestOuvirBipe(unittest.TestCase):
         self.assertEqual(r["ouvido"]["veredito"], "sem_escuta")  # sem Termux:API aqui: avisa, não falha
         self.assertNotIn("ouvido", s.controlar("ar do quarto", definir={"temperatura": 23}))
 
+    def test_ouvido_do_ar_compara_ruido_antes_e_depois(self):
+        import numpy as np
+        rng = np.random.default_rng(5)
+        T = 16000
+
+        def sala(antes, depois, seg=11, envio=3.0):
+            x = rng.normal(0, antes, T * seg).astype(np.float32)
+            i = int((envio + 1.0) * T)  # o ventilador muda ~1 s depois do comando
+            x[i:] = rng.normal(0, depois, x.size - i)
+            t = np.arange(x.size - i) / T
+            if depois > antes:
+                x[i:] += 3 * depois * np.sin(2 * np.pi * 438 * t)  # zumbido do motor
+            return x
+
+        r = self.m.comparar_ruido(sala(0.003, 0.03), 3.0)
+        self.assertEqual(r["veredito"], "mais_alto")
+        self.assertTrue(any(abs(f - 438) <= 8 for f in r["tons_depois_hz"]), r["tons_depois_hz"])
+        self.assertEqual(self.m.comparar_ruido(sala(0.03, 0.003), 3.0)["veredito"], "mais_baixo")
+        self.assertEqual(self.m.comparar_ruido(sala(0.01, 0.01), 3.0)["veredito"], "sem_mudanca")
+        self.assertIsNone(self.m.comparar_ruido(sala(0.01, 0.01, seg=3, envio=1.0), 1.0))  # pouco áudio antes/depois
+
     def test_comparar_com_referencia(self):
         bipes = [{"freq_hz": 2700}, {"freq_hz": 4000}]
         self.assertEqual(self.m.comparar(bipes, {"freq_hz": 2750}), [{"freq_hz": 2700}])
@@ -1292,6 +1313,44 @@ class TestTela(unittest.TestCase):
     def test_tela_embutida_e_ativa(self):
         s, _ = novo_servico(com_base=False)
         self.assertEqual({c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}.get("tela"), "ativa")
+
+
+class TestTermometro(unittest.TestCase):
+    """Temperatura do ar pela bateria: confiança conforme carga/consumo/variação, e tendência."""
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        caminho = Path(__file__).resolve().parent.parent / "controle-ir" / "capacidades" / "termometro" / "principal.py"
+        spec = importlib.util.spec_from_file_location("termometro_principal", caminho)
+        cls.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.m)
+
+    def test_parado_da_confianca_alta(self):
+        a = [{"temperature": 27.0, "plugged": "UNPLUGGED", "current": -60000},
+             {"temperature": 27.2, "plugged": "UNPLUGGED", "current": -55000}]
+        r = self.m.avaliar(a, 2.0)
+        self.assertEqual((r["ar_estimado_c"], r["confianca"], r["motivos"]), (25.1, "alta", []))
+
+    def test_em_uso_ou_na_tomada_baixa_confianca(self):
+        uso = [{"temperature": 33.0, "plugged": "UNPLUGGED", "current": 357000}] * 2
+        self.assertEqual(self.m.avaliar(uso, 2.0)["confianca"], "media")
+        tomada = [{"temperature": 35.0, "plugged": "PLUGGED_AC", "current": 900000},
+                  {"temperature": 36.0, "plugged": "PLUGGED_AC", "current": 900000}]
+        r = self.m.avaliar(tomada, 2.0)
+        self.assertEqual(r["confianca"], "baixa")
+        self.assertEqual(len(r["motivos"]), 3)
+        self.assertIn("erro", self.m.avaliar([{}], 2.0))
+
+    def test_tendencia(self):
+        agora = time.time()
+        h = [{"t": agora - 1800 + i * 600, "ar_estimado_c": 26.0 - i * 0.5, "confianca": "alta"} for i in range(4)]
+        self.assertAlmostEqual(self.m.tendencia(h), -3.0, places=1)  # caindo 0,5 °C a cada 10 min
+        self.assertIsNone(self.m.tendencia(h[:2]))
+
+    def test_termometro_embutido_e_ativo(self):
+        s, _ = novo_servico(com_base=False)
+        self.assertEqual({c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}.get("termometro"), "ativa")
 
 if __name__ == "__main__":
     unittest.main()

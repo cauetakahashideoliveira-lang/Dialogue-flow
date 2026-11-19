@@ -149,7 +149,7 @@
    },
    "pressao": {
     "type": "integer",
-    "description": "grade: ms de cada toque (padrão 8)"
+    "description": "grade: ms de cada toque (padrão 12)"
    },
    "conferir": {
     "type": "boolean",

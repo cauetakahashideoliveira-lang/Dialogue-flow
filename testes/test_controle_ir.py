@@ -2171,7 +2171,7 @@ for linha in sys.stdin:
         self.assertEqual(r["vazias"], 1, r)
         self.assertTrue(r["conferido"], r)
         log = self.registro.read_text()
-        self.assertIn("leitor toquesv 8:8 83 686 1049 2362", log)  # casa (0,0) e o botão 8, leva rápida e vigiada
+        self.assertIn("leitor toquesv 8:12 83 686 1049 2362", log)  # casa (0,0) e o botão 8, leva rápida e vigiada
         self.assertNotIn("refeitos", r)
 
     def test_grade_16x16_blocos_e_correcao_de_duvida(self):

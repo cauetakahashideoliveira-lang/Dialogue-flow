@@ -632,6 +632,24 @@ def _ler_grade(aj, reg, n, k):
     return (g if len(g) == n else None), duv, desc
 
 
+def _teclado_parado(reg, ate=1.5):
+    """O teclado depois de um deslize: duas leituras iguais seguidas (a fileira ainda pode estar rolando)."""
+    novo, prev, fim = None, None, time.time() + ate
+    while time.time() < fim:
+        novo = teclado_da_grade(elementos(dump_ui(), limite=300), reg)
+        pos = [t[0] for t in novo] if novo else None
+        if pos and pos == prev:
+            break
+        prev = pos
+        time.sleep(0.1)
+    return novo
+
+
+# modelos do teclado já guardados no leitor: {chave: (token do leitor, páginas, total, geometria)}. Jogo seguinte do
+# mesmo app com o mesmo teclado na 1ª página → não relê nem desliza (economiza ~3 s por partida no 16x16).
+_TECLADOS = {}
+
+
 def _modelos_do_teclado(aj, reg, els, n=None, tec=None):
     """Guarda os modelos de todas as páginas do teclado (desliza a fileira se ela rola) e volta à 1ª página.
     Devolve (páginas [(primeiro_simbolo_0based, botões)], total de símbolos, geometria do deslize)."""
@@ -646,6 +664,14 @@ def _modelos_do_teclado(aj, reg, els, n=None, tec=None):
     x0, x1 = x0 + m, x1 - m
     y = tec[0][1]
     rola = not dado and any(e.get("rolavel") and abs(e["y"] - y) < 60 for e in els)
+    if rola:  # a fileira pode estar numa página do meio (deixada assim): volta até a 1ª
+        for _ in range(3):
+            _injetar(f"deslizar {x0} {y} {x1} {y} 450")
+            calma(100, 1200)
+            antes = tec
+            tec = _teclado_parado(reg) or tec
+            if [t[0] for t in tec] == [t[0] for t in antes]:
+                break
     paginas, total = [], 0
     for _ in range(4):
         topo = min(t[1] - t[3] // 2 for t in tec)
@@ -659,14 +685,7 @@ def _modelos_do_teclado(aj, reg, els, n=None, tec=None):
             break
         _injetar(f"deslizar {x1} {y} {x0} {y} 450")  # próxima página do teclado
         calma(100, 1200)
-        novo, prev, fim = None, None, time.time() + 1.5
-        while time.time() < fim:  # a fileira ainda pode estar rolando: duas leituras iguais seguidas
-            novo = teclado_da_grade(elementos(dump_ui(), limite=300), reg)
-            pos = [t[0] for t in novo] if novo else None
-            if pos and pos == prev:
-                break
-            prev = pos
-            time.sleep(0.1)
+        novo = _teclado_parado(reg)
         if not novo or [t[0] for t in novo] == [t[0] for t in tec]:
             break  # não mudou: não há outra página
         tec = novo
@@ -741,7 +760,16 @@ def grade(a):
         return {"erro": "não achei a grade e o teclado do jogo", **({"antes": antes} if antes and antes.get("erro") else {}),
                 **({"reflexos": usados} if usados else {})}
     t1 = time.time()
-    paginas, total, geo = _modelos_do_teclado(aj, reg, els, n_pedido, a.get("teclado"))
+    chave = (n_pedido, tuple(int(v) for v in reg), tuple(tuple(int(v) for v in t) for t in tec))
+    guardado = _TECLADOS.get(chave)
+    if guardado and guardado[0] == aj.token and not a.get("teclado"):
+        _, paginas, total, geo = guardado
+        tempos["teclado"] = "guardado"
+    else:
+        paginas, total, geo = _modelos_do_teclado(aj, reg, els, n_pedido, a.get("teclado"))
+        if total and (not n_pedido or total >= n_pedido):
+            _TECLADOS.clear()
+            _TECLADOS[chave] = (aj.token, paginas, total, geo)
     n = n_pedido or total
     if total < n:
         return {"erro": f"o teclado tem {total} símbolos e a grade precisa de {n}"}
@@ -773,6 +801,7 @@ def grade(a):
     sol = resolver_grade([[max(v, 0) for v in ln] for ln in g]) if not any(v < 0 for ln in g for v in ln) else None
     tempos["resolver"] = round(time.time() - t2, 2)
     if not sol:
+        _TECLADOS.pop(chave, None)  # modelos talvez ruins: a próxima vez relê o teclado
         return {**out, "erro": "a grade lida não tem solução (leitura duvidosa)", "grade": texto(g),
                 **({"duvidas": [f"{i},{j}" for (i, j) in duv]} if duv else {}), "tempos": tempos}
     vazias = [(i, j) for i in range(n) for j in range(n) if g[i][j] == 0]
@@ -781,7 +810,7 @@ def grade(a):
     janela = (eventos() or (0, 0, None))[2]
     _ULTIMA["janela"] = janela  # as coordenadas acabaram de ser lidas desta tela
     t3 = time.time()
-    intervalo, pressao = float(a.get("intervalo", 0.008)), int(a.get("pressao", 8))
+    intervalo, pressao = float(a.get("intervalo", 0.008)), int(a.get("pressao", 12))
     passos, pagina = _plano(vazias, sol, reg, paginas, geo, 0, intervalo, pressao)
     r2 = sequencia({"passos": passos, "ver_depois": "nada"})
     tempos["preencher"] = round(time.time() - t3, 2)

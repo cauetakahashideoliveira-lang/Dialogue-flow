@@ -1,7 +1,7 @@
 # Graph Report - Dialogue-flow  (2026-11-19)
 
 ## Corpus Check
-- 57 files · ~75,384 words
+- 57 files · ~75,503 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 7 file(s) not represented in the graph (top: (none) 3, .ir 3, .gz 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 157,587 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `444207bc`
+- Built from commit: `beff1748`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

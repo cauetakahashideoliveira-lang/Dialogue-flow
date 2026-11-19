@@ -1,17 +1,21 @@
 # Estado atual da instalação (19/11/2026)
 
 ## Resumo (fim do dia 19/11)
-- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.21** (19/11
+- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.22** (19/11
   de manhã), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
   Controle IR").
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz. Catálogo: base + ampliado (Flipper-IRDB completa) = 9.380
   perfis, 94.407 sinais únicos, 1.776 marcas. (Termux precisou de `apt update && apt full-upgrade` no início.)
 - **Capacidades instaladas:** estado_celular, diagnostico_rede, descobrir_rede, ouvir_bipe (+ `controlar(ouvir=true)`),
   foto (com recorte por alvo), termometro, tela, sono e sonar (sono e sonar ainda sem teste no aparelho).
-- **Shizuku** 13.x por depuração sem fio, `rish` em `~/.controle-ir/rish/`. Tela: **ver e abrir apps funcionam**;
-  tocar/digitar/teclas ficam bloqueados pela Xiaomi ("Failure calling service input: Failed transaction") até ligar
-  "Depuração USB (Configurações de segurança)" e reiniciar o Shizuku. Depois de reiniciar o celular, tocar em Iniciar
-  no Shizuku de novo.
+- **Shizuku** 13.x por depuração sem fio, `rish` em `~/.controle-ir/rish/`, "Depuração USB (Configurações de
+  segurança)" ligada (`persist.security.adbinput=1`). Tela **completa desde a 1.0.22**: ver, abrir, tocar, deslizar.
+  Depois de reiniciar o celular, tocar em Iniciar no Shizuku de novo. Se o usuário voltar para o chat no meio de uma
+  navegação, o gesto cai no app do Claude: para sequências, um único `executar_comando` (am start → dump → tap) é
+  mais seguro, conferindo o pacote em primeiro plano antes de tocar.
+- **Bateria (tela da Xiaomi, 19/11):** saúde **100%**, 4 ciclos, fabricada em jul/2026, primeiro uso nov/2026;
+  **Carregamento inteligente ligado**, **Proteção da bateria (limite fixo de 80%) desligada**. O usuário decidiu
+  manter a bateria entre 20% e 80%. Modo de energia atual: "Ultimate".
 - **Pacotes no Termux:** numpy 2.5.5, ffmpeg 9.0.2, nmap 7.993. Espelho de pacotes: oficial
   `packages-cf.termux.dev` (cópia do antigo em `~/.controle-ir/sources.list.antes`).
 - **Permissões do Android dadas:** microfone e câmera do Termux:API.
@@ -24,9 +28,8 @@
   graphify e o numpy nas sessões na nuvem) aberto contra a padrão.
 
 ## Pendências (próxima conversa)
-1. **Shizuku — falta o toque:** ligar "Depuração USB (Configurações de segurança)" (pede conta Xiaomi) e tocar em
-   Iniciar no Shizuku; testar `tela tocar` (ex.: Configurações → Bateria) e depois usar pelo Gênio. Com o Shizuku dá
-   para ler `dumpsys battery`/`batterystats` (capacidade real da bateria).
+1. **Agente de tela:** usar pelo Gênio; ideia: `abrir` aceitar intent (ex.: `android.intent.action.POWER_USAGE_SUMMARY`
+   abre a Bateria direto) e uma ação de sequência que confere o app em primeiro plano antes de cada toque.
 2. **Testar sono e sonar** (instalados na 1.0.20): o sonar parado e mexendo o braço; uma noite do laboratório do sono.
 3. **Autorizações:** numa conversa nova, rodar algo simples no celular e ver se ainda pede aprovação.
 4. **Termômetro:** calibrar com uma temperatura real. **Ouvido do ar:** testar ligar/desligar de verdade (pedir
@@ -38,6 +41,10 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 (manhã) — Toque pelo Shizuku (1.0.22):** mesmo com a opção de segurança ligada, o `input` dava "Failed
+  transaction": o system_server recusa a saída de `cmd` apontando para a memória compartilhada ou para o cano do app.
+  Com stdin `/dev/null` e saída em `/data/local/tmp` (copiada depois para a pasta de troca) passou. Teste real:
+  `am start` da Bateria → dump → toque em "Proteção da bateria" → leitura dos interruptores.
 - **19/11 (manhã) — Shizuku e agente de tela:** Shizuku 13 instalado e iniciado por depuração sem fio; `rish`
   exportado para Download/shizuku (o Android não deixa usar a raiz de Download) e copiado para
   `~/.controle-ir/rish/` (PKG → com.termux, .dex 400). O cano do rish cortava saídas (PNG com 28 KB de 317 KB, `id`

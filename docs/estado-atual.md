@@ -36,6 +36,11 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Skill `/god-mode`** (`.claude/skills/god-mode/`): adaptação do G0DM0D3 (elder-plinius, AGPL-3.0) com
+  AutoTune de 20 contextos (+ português), aprendizado por notas, STM, pontuação neutra, `perguntar` e `comparar`
+  (OpenRouter ou servidor local) com síntese pelo Claude. Ficaram de fora os prompts de jailbreak, a diretiva
+  "nunca recuse" e o Parseltongue. Sem `OPENROUTER_API_KEY` no ambiente ainda: o usuário configura nas
+  Configurações do ambiente se quiser usar `perguntar`/`comparar`. 18 testes em `testes/test_god_mode.py`.
 - **19/11 — Visor do ar do quarto apagado pelo conector** (`x_luz`, 23:49 no relógio do celular): o último estado
   era 16 °C/frio/automática, o mesmo do quadro do `x_luz`, então só o visor mudou. Usuário: "deu certo". Estado
   registrado no celular (`registrar_estado`: ligado, visor desligado).

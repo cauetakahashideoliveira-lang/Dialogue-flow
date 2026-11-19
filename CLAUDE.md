@@ -27,3 +27,6 @@
   os dados (`widgets`, `memoria`, `eventos`) ficam no banco do artefato (ferramenta ArtifactData).
 - Pedidos de aprovação do conector vêm da regra da organização no claude.ai (`org_ask_ceiling`); não tente
   contornar. Ferramentas novas do conector só aparecem em conversas novas (lista fixa por conversa).
+- **`/god-mode`** (`.claude/skills/god-mode/`, adaptação AGPL do G0DM0D3): AutoTune, notas, STM, `perguntar` e
+  `comparar` vários modelos (OpenRouter com `OPENROUTER_API_KEY` ou servidor local) com síntese pelo Claude. Sem
+  os prompts de jailbreak nem o Parseltongue do original. Não confundir com `/godmode` (capacidade máxima).

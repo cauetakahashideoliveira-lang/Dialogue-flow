@@ -16,6 +16,7 @@ capacidade volta a exigir aprovação. ``propor`` nunca executa nada.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -52,6 +53,22 @@ def _manifesto(pasta: Path) -> dict:
     if not (pasta / m.get("executar", "")).is_file() or Path(m["executar"]).suffix not in (".py", ".sh"):
         raise ErroCapacidade(f"{pasta.name}: 'executar' deve apontar para um .py ou .sh da pasta")
     m.setdefault("entrada", {})
+    return m
+
+
+_MODULOS: dict[str, object] = {}
+
+
+def modulo_embutido(pasta: Path, nome: str):
+    """Capacidade embutida carregada dentro do serviço (uma vez só): mantém abertos recursos caros entre as
+    chamadas — ex.: o leitor rápido da tela. Só para as embutidas (as do usuário rodam isoladas, em subprocesso)."""
+    m = _MODULOS.get(nome)
+    if m is None:
+        spec = importlib.util.spec_from_file_location(f"cap_{nome}_em_processo", Path(pasta) / "principal.py")
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        m.EM_PROCESSO = True
+        _MODULOS[nome] = m
     return m
 
 
@@ -156,6 +173,14 @@ class Registro:
                                  f"controle-ir capacidade aprovar {nome}")
         m = _manifesto(pasta)
         self._validar(m["entrada"], args)
+        if origem == "embutida" and m.get("em_processo"):  # rápido: sem abrir processo novo a cada chamada
+            t0 = time.monotonic()
+            try:
+                dados = modulo_embutido(pasta, nome).executar(dict(args))
+                return {"capacidade": nome, "status": "ok", "segundos": round(time.monotonic() - t0, 2),
+                        "resultado": dados}
+            except Exception as e:  # noqa: BLE001 — cai para o modo antigo (subprocesso)
+                self._ultimo_erro_em_processo = str(e)[:200]
         script = pasta / m["executar"]
         cmd = [sys.executable, str(script)] if script.suffix == ".py" else [shutil.which("sh") or "sh", str(script)]
         env = dict(os.environ, **(ambiente or {}))

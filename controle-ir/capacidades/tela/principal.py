@@ -8,6 +8,7 @@ após a leitura: no POCO (Shizuku 13, Android 16) o cano do rish cortava saídas
 (a captura PNG chegava com 28 KB de 317 KB e o `id` voltava vazio).
 """
 import base64
+import hashlib
 import json
 import os
 import re
@@ -15,6 +16,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import unicodedata
 import xml.etree.ElementTree as ET
@@ -38,6 +40,9 @@ BLOQUEADOS_PADRAO = [
     "com.azure.authenticator", "com.google.android.apps.authenticator2", "com.authy", "br.gov.meugovbr",
 ]
 TECLAS = {"voltar": 4, "inicio": 3, "recentes": 187, "enter": 66, "apagar": 67}
+JAVA_FONTE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "java", "controleir", "Tela.java")
+# True quando o módulo roda dentro do serviço do controle-ir: aí o leitor rápido (Java) fica aberto entre as chamadas
+EM_PROCESSO = False
 
 
 # --------------------------------------------------------------------------- funções puras (testadas)
@@ -117,6 +122,144 @@ class SemShizuku(RuntimeError):
     pass
 
 
+# --------------------------------------------------------------------------- leitor rápido (Java pelo Shizuku)
+def _jar():
+    """O leitor compilado (ecj + dx do Termux; compila na 1ª vez e quando o fonte muda). None se não der."""
+    try:
+        with open(JAVA_FONTE, "rb") as f:
+            fonte = f.read()
+    except OSError:
+        return None
+    os.makedirs(TMP, exist_ok=True)
+    jar = os.path.join(TMP, f"controle-tela-{hashlib.sha256(fonte).hexdigest()[:12]}.jar")
+    if os.path.exists(jar):
+        return jar
+    if not (shutil.which("ecj") and shutil.which("dx")) and shutil.which("pkg"):
+        subprocess.run(["pkg", "install", "-y", "ecj", "dx"], capture_output=True, timeout=300, check=False)
+    if not (shutil.which("ecj") and shutil.which("dx")):
+        return None
+    trab = os.path.join(TMP, f"compilar-{os.getpid()}")
+    shutil.rmtree(trab, ignore_errors=True)
+    try:
+        os.makedirs(os.path.join(trab, "src", "controleir"))
+        os.makedirs(os.path.join(trab, "dex", "controleir"))
+        shutil.copy(JAVA_FONTE, os.path.join(trab, "src", "controleir", "Tela.java"))
+        subprocess.run(["ecj", "-d", os.path.join(trab, "cls"), os.path.join(trab, "src", "controleir", "Tela.java")],
+                       capture_output=True, timeout=180, check=False)
+        cls = os.path.join(trab, "cls", "controleir")
+        for c in os.listdir(cls) if os.path.isdir(cls) else []:
+            shutil.copy(os.path.join(cls, c), os.path.join(trab, "dex", "controleir", c))
+        subprocess.run(["dx", "--dex", f"--output={jar}.tmp", os.path.join(trab, "dex")],
+                       capture_output=True, timeout=180, check=False)
+        if not os.path.exists(jar + ".tmp"):
+            return None
+        for velho in os.listdir(TMP):
+            if velho.startswith("controle-tela-") and velho.endswith(".jar"):
+                _apagar(os.path.join(TMP, velho))
+        os.replace(jar + ".tmp", jar)
+        return jar
+    finally:
+        shutil.rmtree(trab, ignore_errors=True)
+
+
+class Ajudante:
+    """Processo do leitor (app_process como shell) aberto pelo rish e falado pela entrada padrão; respostas em
+    arquivos na pasta de troca. Se não subir, fica de lado por 60 s e tudo segue pelo caminho antigo."""
+
+    def __init__(self):
+        self.proc, self.token, self.n, self.falhou_em = None, None, 0, 0.0
+        self.trava = threading.Lock()
+
+    def _vivo(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def _matar(self):
+        if self.proc is not None:
+            try:
+                self.proc.stdin.close()
+                self.proc.kill()
+                self.proc.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        self.proc = None
+
+    def _iniciar(self):
+        if time.time() - self.falhou_em < 60 or not os.path.exists(RISH):
+            return False
+        jar = _jar()
+        if not jar:
+            self.falhou_em = time.time()
+            return False
+        pasta = _pasta_troca()
+        copia = os.path.join(pasta, os.path.basename(jar))
+        shutil.copy(jar, copia)
+        self.token = f"{os.getpid()}x{time.monotonic_ns() % 10 ** 9}"
+        destino = TMP_SHELL + "/controle-tela.jar"
+        self.proc = subprocess.Popen(["sh", RISH], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL, env=dict(os.environ, RISH_APPLICATION_ID="com.termux"))
+        linha = (f"cp {shlex.quote(copia)} {destino} && export CLASSPATH={destino} && exec app_process /system/bin "
+                 f"controleir.Tela {shlex.quote(pasta)} {self.token}\n")
+        try:
+            self.proc.stdin.write(linha.encode())
+            self.proc.stdin.flush()
+        except OSError:
+            self._matar()
+        pronto = os.path.join(pasta, f"pronto-{self.token}")
+        fim = time.time() + 10
+        while self._vivo() and time.time() < fim:
+            if os.path.exists(pronto):
+                _apagar(pronto, copia)
+                return True
+            time.sleep(0.02)
+        _apagar(copia)
+        self._matar()
+        self.falhou_em = time.time()
+        return False
+
+    def pedir(self, comando, timeout=15.0):
+        with self.trava:
+            if not self._vivo() and not self._iniciar():
+                return None
+            self.n += 1
+            ident = f"{self.token}-{self.n}"
+            arq = os.path.join(_pasta_troca(), ident + ".r")
+            try:
+                self.proc.stdin.write(f"{ident} {comando}\n".encode())
+                self.proc.stdin.flush()
+            except (OSError, ValueError):
+                self._matar()
+                return None
+            fim = time.time() + timeout
+            while time.time() < fim:
+                if os.path.exists(arq):
+                    try:
+                        with open(arq, encoding="utf-8", errors="replace") as f:
+                            return f.read()
+                    finally:
+                        _apagar(arq)
+                if not self._vivo():
+                    break
+                time.sleep(0.005)
+            self._matar()
+            return None
+
+
+AJUDANTE = Ajudante()
+
+
+def _ajudante():
+    return AJUDANTE if EM_PROCESSO else None
+
+
+def _injetar(comando):
+    """Toque/tecla/texto pelo leitor (injeção direta). False: use o caminho antigo (input pelo shell)."""
+    a = _ajudante()
+    if not a:
+        return False
+    r = a.pedir(comando, 15)
+    return r is not None and r.strip() == "ok"
+
+
 def _pasta_troca():
     try:
         os.makedirs(COMPARTILHADA, exist_ok=True)
@@ -145,7 +288,20 @@ def _apagar(*caminhos):
 
 
 def rish(cmd, timeout=20):
-    """Roda `cmd` como usuário shell pelo Shizuku. Devolve (stdout, stderr, código), lidos de arquivos."""
+    """Roda `cmd` como usuário shell pelo Shizuku. Devolve (stdout, stderr, código), lidos de arquivos.
+    Dentro do serviço, vai pelo leitor rápido já aberto (sem abrir outra conexão com o Shizuku: ~0,3 s a menos)."""
+    a = _ajudante()
+    if a:  # saídas em arquivos da área do shell: o HyperOS recusa `input` com saída num cano (provado no POCO)
+        t = shlex.quote(f"{TMP_SHELL}/cir-{os.getpid()}-{time.monotonic_ns()}")
+        embrulho = (f"( {cmd} ) < /dev/null > {t}.out 2> {t}.err; rc=$?; cat {t}.out; cat {t}.err >&2; "
+                    f"rm -f {t}.out {t}.err; exit $rc")
+        r = a.pedir(f"shell {embrulho.encode().hex()} {int(timeout * 1000)}", timeout + 5)
+        if r is not None and "\n" in r:
+            cab, resto = r.split("\n", 1)
+            partes = cab.split(" ")
+            if len(partes) == 2 and partes[0].lstrip("-").isdigit() and partes[1].isdigit():
+                n = int(partes[1])
+                return resto[:n], resto[n:], int(partes[0])
     if not os.path.exists(RISH):
         raise SemShizuku("rish não instalado: exporte os arquivos no app Shizuku (Usar o Shizuku em aplicativos de "
                          "terminal → Exportar) e peça ao Claude para copiá-los")
@@ -190,6 +346,11 @@ def _bloqueio_de_toque(err, cod):
 
 
 def foco():
+    a = _ajudante()
+    if a:
+        r = a.pedir("foco", 6)
+        if r and not r.startswith("ERRO") and r.strip():
+            return r.strip()
     out, _, _ = rish("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'")
     return app_em_foco(out)
 
@@ -208,6 +369,11 @@ def bloqueados():
 
 
 def dump_ui():
+    a = _ajudante()
+    if a:  # leitura direta da acessibilidade: ~0,05 s, sem esperar a tela parar
+        x = a.pedir("dump", 10)
+        if x and x.startswith("<?xml") and "<node" in x:
+            return x
     arq = os.path.join(_pasta_troca(), f"ui-{os.getpid()}.xml")
     for _ in range(2):
         try:
@@ -289,6 +455,12 @@ def observar(com_elementos=True, com_imagem=True):
     pasta = _pasta_troca()
     nome = f"obs-{os.getpid()}-{time.monotonic_ns()}"
     xml, png = os.path.join(pasta, nome + ".xml"), os.path.join(pasta, nome + ".png")
+    if _ajudante():
+        texto = dump_ui() if com_elementos else ""
+        partes = [f"screencap -p {shlex.quote(png)}"] if com_imagem else []
+        partes += ["dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'", "dumpsys power | grep -m1 mWakefulness="]
+        info, _, _ = rish("\n".join(partes), timeout=30)
+        return texto, (png if com_imagem else None), info
     partes = []
     if com_elementos:
         partes.append(f"(uiautomator dump {shlex.quote(xml)} > /dev/null 2>&1) &")
@@ -365,6 +537,8 @@ def _linhas_do_passo(p):
         v = [int(n) for n in p["deslizar"]]
         return [f"input swipe {v[0]} {v[1]} {v[2]} {v[3]} {v[4] if len(v) > 4 else 300} || exit 3"]
     if "digitar" in p:
+        if _ajudante():
+            return None  # pelo leitor: vai no campo em foco, com acentos
         texto, _ = escapar_input_text(str(p["digitar"]))
         return [f"input text {shlex.quote(texto)} || exit 3"] if texto else []
     if "tecla" in p:
@@ -425,6 +599,16 @@ def sequencia(a):
         bloco = []
         if erro:
             return {**erro, "feitos": feitos}
+        if "digitar" in p:
+            app = foco()
+            if bloqueado(app, bloqueados()):
+                return {"erro": "recusado: o app em foco está na lista de bloqueados (banco/pagamento/senha)",
+                        "foco": app, "feitos": feitos}
+            if not _injetar("texto " + str(p["digitar"]).encode().hex()):
+                texto, _ = escapar_input_text(str(p["digitar"]))
+                bloco = [f"input text {shlex.quote(texto)} || exit 3"] if texto else []
+            feitos += 1
+            continue
         if "tocar" in p:
             alvo = achar(elementos(dump_ui()), p["tocar"])
             if not alvo:
@@ -467,32 +651,38 @@ def agir(a):
             x, y = alvo["x"], alvo["y"]
         if x is None or y is None:
             return {"erro": "informe x e y, ou texto"}
-        out, err, cod = rish(f"input tap {int(x)} {int(y)}")
-        if _bloqueio_de_toque(out + err, cod):
-            return {"erro": _bloqueio_de_toque(out + err, cod)}
+        if not _injetar(f"tocar {int(x)} {int(y)}"):
+            out, err, cod = rish(f"input tap {int(x)} {int(y)}")
+            if _bloqueio_de_toque(out + err, cod):
+                return {"erro": _bloqueio_de_toque(out + err, cod)}
         res = {"feito": f"toque em {int(x)},{int(y)}", "elemento": compactos([alvo])[0] if alvo else None}
     elif acao == "digitar":
-        texto, aviso = escapar_input_text(a.get("texto", ""))
-        if not texto:
-            return {"erro": "nada para digitar"}
-        out, err, cod = rish("input text " + shlex.quote(texto))
-        if _bloqueio_de_toque(out + err, cod):
-            return {"erro": _bloqueio_de_toque(out + err, cod)}
-        res = {"feito": f"digitado ({len(a.get('texto', ''))} caracteres)", "aviso": aviso}
+        if _injetar("texto " + str(a.get("texto", "")).encode().hex()):  # com acentos, no campo em foco
+            res = {"feito": f"digitado ({len(a.get('texto', ''))} caracteres)"}
+        else:
+            texto, aviso = escapar_input_text(a.get("texto", ""))
+            if not texto:
+                return {"erro": "nada para digitar"}
+            out, err, cod = rish("input text " + shlex.quote(texto))
+            if _bloqueio_de_toque(out + err, cod):
+                return {"erro": _bloqueio_de_toque(out + err, cod)}
+            res = {"feito": f"digitado ({len(a.get('texto', ''))} caracteres)", "aviso": aviso}
     elif acao == "tecla":
         cod = TECLAS.get(normalizar(a.get("tecla")))
         if cod is None:
             return {"erro": f"tecla deve ser uma de: {', '.join(TECLAS)}"}
-        out, err, rc = rish(f"input keyevent {cod}")
-        if _bloqueio_de_toque(out + err, rc):
-            return {"erro": _bloqueio_de_toque(out + err, rc)}
+        if not _injetar(f"tecla {cod}"):
+            out, err, rc = rish(f"input keyevent {cod}")
+            if _bloqueio_de_toque(out + err, rc):
+                return {"erro": _bloqueio_de_toque(out + err, rc)}
         res = {"feito": f"tecla {a['tecla']}"}
     elif acao == "deslizar":
         if None in (a.get("x"), a.get("y"), a.get("x2"), a.get("y2")):
             return {"erro": "informe x, y, x2, y2"}
-        out, err, cod = rish(f"input swipe {int(a['x'])} {int(a['y'])} {int(a['x2'])} {int(a['y2'])} 350")
-        if _bloqueio_de_toque(out + err, cod):
-            return {"erro": _bloqueio_de_toque(out + err, cod)}
+        if not _injetar(f"deslizar {int(a['x'])} {int(a['y'])} {int(a['x2'])} {int(a['y2'])} 350"):
+            out, err, cod = rish(f"input swipe {int(a['x'])} {int(a['y'])} {int(a['x2'])} {int(a['y2'])} 350")
+            if _bloqueio_de_toque(out + err, cod):
+                return {"erro": _bloqueio_de_toque(out + err, cod)}
         res = {"feito": "deslizou"}
     elif acao == "abrir":
         pac = a.get("pacote") or ""
@@ -512,8 +702,8 @@ def agir(a):
     return res
 
 
-def main():
-    a = json.loads(sys.stdin.read() or "{}")
+def executar(a):
+    """Ponto de entrada: o serviço chama direto (EM_PROCESSO) e o modo antigo passa por main()."""
     acao = a.get("acao")
     try:
         if acao == "estado":
@@ -530,7 +720,11 @@ def main():
         r = {"erro": str(e), "precisa": "shizuku"}
     except subprocess.TimeoutExpired:
         r = {"erro": "o comando na tela demorou demais (o celular pode estar travado ou com a tela apagada)"}
-    print(json.dumps(r, ensure_ascii=False))
+    return r
+
+
+def main():
+    print(json.dumps(executar(json.loads(sys.stdin.read() or "{}")), ensure_ascii=False))
 
 
 if __name__ == "__main__":

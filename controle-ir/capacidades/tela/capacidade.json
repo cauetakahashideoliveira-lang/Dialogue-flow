@@ -80,5 +80,6 @@
    "acao"
   ],
   "additionalProperties": false
- }
+ },
+ "em_processo": true
 }

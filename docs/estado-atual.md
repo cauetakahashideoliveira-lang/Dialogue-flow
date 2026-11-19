@@ -41,6 +41,12 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Leitor de tela rápido (1.0.32):** `capacidades/tela/java/controleir/Tela.java`, compilado no celular
+  (ecj + dx do Termux, na 1ª vez) e rodando pelo Shizuku (app_process): lê a acessibilidade direto (30–180 ms contra
+  2,5–8 s do `uiautomator dump`, que espera a tela parar), injeta toques/teclas e digita com acento; também roda os
+  comandos de shell sem reabrir o rish (~0,3 s a menos cada). A capacidade tela roda dentro do serviço (`em_processo`)
+  para o leitor ficar aberto; desconecta da acessibilidade após 60 s parado e encerra após 5 min. Sem ele, tudo segue
+  pelo caminho antigo.
 - **19/11 — Agente de tela mais rápido (1.0.30):** `acao=sequencia` com `passos` (vários toques, digitar,
   teclas, esperas e `esperar_texto` numa chamada; os passos sem leitura de tela vão num só script ao Shizuku);
   `ver` faz dump + captura + foco + tela acesa numa viagem; ações respondem só o app (ver_depois=elementos|imagem

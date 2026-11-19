@@ -1635,7 +1635,7 @@ class TestTelaPorArquivo(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         rish = self.tmp / "rish" / "rish"
         rish.parent.mkdir()
-        rish.write_text('[ "$1" = "-c" ] && shift && exec sh -c "$1"\n')  # imita o rish: roda como "shell"
+        rish.write_text('if [ "$1" = "-c" ]; then shift; exec sh -c "$1"; else exec sh; fi\n')  # imita o rish
         bin_ = self.tmp / "bin"
         bin_.mkdir()
         (bin_ / "uiautomator").write_text(f'cat > "$2" <<\'FIM\'\n{TestTela.XML}\nFIM\necho "UI hierchary dumped to: $2"\n')
@@ -1741,6 +1741,78 @@ class TestTelaPorArquivo(unittest.TestCase):
         self.assertEqual(self._sobras(), [])
         r2 = self.m.agir({"acao": "tecla", "tecla": "voltar"})  # sem ver_depois: resposta curta
         self.assertEqual(set(r2), {"feito", "app"})
+
+    def _leitor_falso(self, quebrado=False):
+        """app_process falso: fala o protocolo do Tela.java (linhas na entrada, respostas em PASTA/ID.r)."""
+        ap = self.tmp / "bin" / "app_process"
+        ap.write_text(f"""#!{sys.executable}
+import os, subprocess, sys
+pasta, token = sys.argv[3], sys.argv[4]
+if {quebrado!r}:
+    sys.exit(1)
+open(os.path.join(pasta, "pronto-" + token), "w").close()
+xml = {TestTela.XML!r}
+reg = os.environ["REGISTRO_INPUT"]
+for linha in sys.stdin:
+    p = linha.split()
+    if not p:
+        continue
+    ident, cmd = p[0], p[1]
+    if cmd == "dump":
+        r = xml
+    elif cmd == "foco":
+        r = "com.android.settings"
+    elif cmd == "shell":
+        pr = subprocess.run(["sh", "-c", bytes.fromhex(p[2]).decode()], capture_output=True, text=True)
+        r = f"{{pr.returncode}} {{len(pr.stdout)}}\\n" + pr.stdout + pr.stderr
+    elif cmd == "texto":
+        open(reg, "a").write("leitor texto " + bytes.fromhex(p[2]).decode() + "\\n")
+        r = "ok"
+    else:
+        open(reg, "a").write("leitor " + " ".join(p[1:]) + "\\n")
+        r = "ok"
+    tmp = os.path.join(pasta, ident + ".tmp")
+    open(tmp, "w").write(r)
+    os.replace(tmp, os.path.join(pasta, ident + ".r"))
+    if cmd == "sair":
+        break
+""")
+        ap.chmod(0o755)
+        jar = self.tmp / "falso.jar"
+        jar.write_bytes(b"jar")
+        self.m._jar = lambda: str(jar)
+        self.m.EM_PROCESSO = True
+        self.m.AJUDANTE = self.m.Ajudante()
+        self.addCleanup(self.m.AJUDANTE._matar)
+
+    def test_leitor_rapido_aberto_entre_chamadas(self):
+        self._leitor_falso()
+        aberturas = []
+        popen = subprocess.Popen
+        with mock.patch.object(self.m.subprocess, "Popen", side_effect=lambda *a, **k: (aberturas.append(a), popen(*a, **k))[1]):
+            self.assertTrue(self.m.dump_ui().startswith("<?xml"))
+            self.assertEqual(self.m.foco(), "com.android.settings")
+            self.assertEqual(self.m.rish("echo oi; echo ruim >&2; exit 2"), ("oi\n", "ruim\n", 2))
+            r = self.m.agir({"acao": "tocar", "texto": "bluetooth"})
+            self.assertEqual(r["feito"], "toque em 220,450")
+            self.m.agir({"acao": "digitar", "texto": "olá, mundo"})
+            rs = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [5, 6]}, {"digitar": "ação"}, {"tecla": "voltar"}]})
+            self.assertIn("3 passos", rs.get("feito", ""), rs)
+        self.assertEqual(len(aberturas), 1)  # um só processo do leitor para tudo
+        log = self.registro.read_text()
+        self.assertIn("leitor tocar 220 450", log)  # toque injetado, sem o input do shell
+        self.assertIn("leitor texto olá, mundo", log)  # com acento
+        self.assertIn("leitor texto ação", log)
+        self.assertIn("input tap 5 6", log)  # na sequência, os toques em série vão num script de shell
+        self.assertEqual([p for p in self._sobras() if not p.startswith("pronto")], [])
+
+    def test_leitor_que_nao_sobe_cai_no_caminho_antigo(self):
+        self._leitor_falso(quebrado=True)
+        self.assertTrue(self.m.dump_ui().startswith("<?xml"))  # uiautomator falso do caminho antigo
+        r = self.m.agir({"acao": "tocar", "texto": "bluetooth"})
+        self.assertEqual(r["feito"], "toque em 220,450")
+        self.assertIn("input tap 220 450", self.registro.read_text())
+        self.assertGreater(self.m.AJUDANTE.falhou_em, 0)  # não tenta de novo a toda hora
 
     def test_captura_por_arquivo(self):
         if not shutil.which("ffmpeg"):

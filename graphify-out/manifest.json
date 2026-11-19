@@ -1,266 +1,362 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795047075.8444312,
-    "seen": 1795047113.978496,
-    "ast_hash": "df94030ef2b64084e5d0cd8d36d29d18",
+    "mtime": 1795053944.3690064,
+    "seen": 1795056158.8513925,
+    "ast_hash": "2ac638caadfe4ee27275046ec48aa2a2",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
-    "mtime": 1795041817.7279956,
-    "seen": 1795042204.3354058,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.851394,
     "ast_hash": "2c313e61f363d73c8bc33f0a9e352196",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/aparelhos.py": {
-    "mtime": 1795041251.883962,
-    "seen": 1795041721.7101681,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.8513956,
     "ast_hash": "ee70de41d34e2ac7afcfaee7038a6142",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/catalogo.py": {
-    "mtime": 1795015633.8262827,
-    "seen": 1795041721.7101696,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.851399,
     "ast_hash": "f663f17f7f72ef3d2bf1b48b8afa022b",
     "semantic_hash": "f663f17f7f72ef3d2bf1b48b8afa022b"
   },
   "controle-ir/controle_ir/cli.py": {
-    "mtime": 1795047075.8371124,
-    "seen": 1795047113.9785047,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.8514004,
     "ast_hash": "e8411f74dac6da2820a4248d6eba26be",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/controle.py": {
-    "mtime": 1795015633.8262827,
-    "seen": 1795041721.7101727,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.8514016,
     "ast_hash": "17b53200ab4b8d11077f7a5844a55aff",
     "semantic_hash": "17b53200ab4b8d11077f7a5844a55aff"
   },
   "controle-ir/controle_ir/descoberta.py": {
-    "mtime": 1795042187.4695473,
-    "seen": 1795042204.335414,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.851403,
     "ast_hash": "250e1fa142cb3e28f0e40304dd44e735",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/emissor.py": {
-    "mtime": 1795015633.8262827,
-    "seen": 1795041721.7101755,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.851404,
     "ast_hash": "a2b9fdc5275336fc88170fdea43baa6a",
     "semantic_hash": "a2b9fdc5275336fc88170fdea43baa6a"
   },
   "controle-ir/controle_ir/formatos.py": {
-    "mtime": 1795015633.8262827,
-    "seen": 1795041721.710177,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.851407,
     "ast_hash": "91ccb5e9b53ecfb24d8263f1b519395a",
     "semantic_hash": "91ccb5e9b53ecfb24d8263f1b519395a"
   },
   "controle-ir/controle_ir/mcp.py": {
-    "mtime": 1795045819.8973122,
-    "seen": 1795045933.3696084,
-    "ast_hash": "b3448038a6499658fbde9bd423153f8c",
+    "mtime": 1795053944.3649158,
+    "seen": 1795056158.8514087,
+    "ast_hash": "8ffe0defc30e861a295f5f65772d53a5",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/protocolos.py": {
-    "mtime": 1795015633.8262827,
-    "seen": 1795041721.7101793,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.8514102,
     "ast_hash": "ceadbcf302a63e7b7c41276752c154c5",
     "semantic_hash": "ceadbcf302a63e7b7c41276752c154c5"
   },
   "controle-ir/controle_ir/servico.py": {
-    "mtime": 1795045819.8969998,
-    "seen": 1795045933.3696108,
-    "ast_hash": "0eb96e2376b597a750dcbc27ed71e202",
+    "mtime": 1795053118.3898318,
+    "seen": 1795056158.8514118,
+    "ast_hash": "efcd57a4ae9e70c99b453efd33510d37",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/servidor.py": {
-    "mtime": 1795045205.8243654,
-    "seen": 1795045276.5142436,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.851413,
     "ast_hash": "334611ba6a39066a45a9941379428a1b",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/sinais.py": {
-    "mtime": 1795015633.8262827,
-    "seen": 1795041721.710183,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.851414,
     "ast_hash": "5fc5fa2345befcdd1da36166029629bb",
     "semantic_hash": "5fc5fa2345befcdd1da36166029629bb"
   },
   "controle-ir/controle_ir/tunel.py": {
-    "mtime": 1795015633.8262827,
-    "seen": 1795041721.710184,
-    "ast_hash": "cf0f935de907b6245aedfa6cbacc21cf",
-    "semantic_hash": "cf0f935de907b6245aedfa6cbacc21cf"
+    "mtime": 1795049556.5864322,
+    "seen": 1795056158.8514152,
+    "ast_hash": "f37070525211589459cdb2e18288fe4f",
+    "semantic_hash": ""
   },
   "controle-ir/controle_ir/vocabulario.py": {
-    "mtime": 1795015633.8262827,
-    "seen": 1795041721.7101855,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.8514163,
     "ast_hash": "d38e4efacee01fad6f65a628c24b10d7",
     "semantic_hash": "d38e4efacee01fad6f65a628c24b10d7"
   },
   "controle-ir/dados/origem.json": {
-    "mtime": 1795015633.8588328,
-    "seen": 1795041721.710187,
+    "mtime": 1795047157.7581568,
+    "seen": 1795056158.8514173,
     "ast_hash": "60460a62d7f954e6223f31b43b81e74e",
     "semantic_hash": "60460a62d7f954e6223f31b43b81e74e"
   },
   "controle-ir/instalar.sh": {
-    "mtime": 1795047075.8378508,
-    "seen": 1795047113.978525,
+    "mtime": 1795047157.7581568,
+    "seen": 1795056158.8514192,
     "ast_hash": "d6ff4707c6445a9045d97172efc27540",
     "semantic_hash": ""
   },
   "ferramentas/construir_catalogo.py": {
-    "mtime": 1795015633.8948328,
-    "seen": 1795041721.7101898,
+    "mtime": 1795047157.7775168,
+    "seen": 1795056158.8514202,
     "ast_hash": "a72b7185020b819a3347838bc5be26aa",
     "semantic_hash": "a72b7185020b819a3347838bc5be26aa"
   },
   "ferramentas/empacotar.sh": {
-    "mtime": 1795015633.9015548,
-    "seen": 1795041721.710191,
+    "mtime": 1795047157.7778814,
+    "seen": 1795056158.851421,
     "ast_hash": "2333872112bdd146515e4318dae4b00e",
     "semantic_hash": "2333872112bdd146515e4318dae4b00e"
   },
   "ferramentas/verificar_cliente_mcp.py": {
-    "mtime": 1795015633.9015548,
-    "seen": 1795041721.7101936,
+    "mtime": 1795047157.7778814,
+    "seen": 1795056158.8514237,
     "ast_hash": "7412aa1ac0ae2377aea28c4b62ac429f",
     "semantic_hash": "7412aa1ac0ae2377aea28c4b62ac429f"
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1795047075.8382978,
-    "seen": 1795047113.9785316,
-    "ast_hash": "d8615fca9913fd1f8e14ce4278d50be2",
+    "mtime": 1795053908.0331197,
+    "seen": 1795056158.851425,
+    "ast_hash": "e966fb6849e4c4a504d1f7e869a4b82e",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795047111.5128555,
-    "seen": 1795047113.9785347,
+    "mtime": 1795047157.7275045,
+    "seen": 1795056158.8514278,
     "ast_hash": "dcee1866bea5b5cee09ef94bfa9a77d9",
     "semantic_hash": ""
   },
   "controle-ir/LICENCAS/Flipper-IRDB-CC0.txt": {
-    "mtime": 1795015633.8261502,
-    "seen": 1795041721.710199,
+    "mtime": 1795047157.7280018,
+    "seen": 1795056158.8514304,
     "ast_hash": "473a7959b44c2f42c375d904305b6307",
     "semantic_hash": ""
   },
   "controle-ir/LICENCAS/LEIA-ME.md": {
-    "mtime": 1795015633.8262205,
-    "seen": 1795041721.7102005,
+    "mtime": 1795047157.7280526,
+    "seen": 1795056158.8514314,
     "ast_hash": "d929a2297e7b073605d645a0700b806b",
     "semantic_hash": "d929a2297e7b073605d645a0700b806b"
   },
   "controle-ir/LICENCAS/SmartIR-MIT.txt": {
-    "mtime": 1795015633.8262205,
-    "seen": 1795041721.7102017,
+    "mtime": 1795047157.7280526,
+    "seen": 1795056158.851433,
     "ast_hash": "88cf957db27eda18f70b8068a0048f4f",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/painel.html": {
-    "mtime": 1795015633.8262827,
-    "seen": 1795041721.7102034,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.851434,
     "ast_hash": "84117035f3104e2c838f7b22b04095d7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795045903.6336086,
-    "seen": 1795045933.3696256,
-    "ast_hash": "170ae4450211e16e8b0e4e883db90f02",
+    "mtime": 1795056057.1416206,
+    "seen": 1795056158.8514268,
+    "ast_hash": "5d443f510e510d2ef81b293ccf650ecd",
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795047111.513574,
-    "seen": 1795047113.9785476,
-    "ast_hash": "1762cbd3f2d8f878bc95727b167956c1",
+    "mtime": 1795055648.6695964,
+    "seen": 1795056158.8514414,
+    "ast_hash": "3305c307c51e27f1d330dc25ff397812",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
-    "mtime": 1795040895.360911,
-    "seen": 1795041721.7101924,
+    "mtime": 1795047157.7778814,
+    "seen": 1795056158.8514225,
     "ast_hash": "3f36a8e34f263ae659f33951370b670f",
     "semantic_hash": "3f36a8e34f263ae659f33951370b670f"
   },
   "docs/aparelhos/README.md": {
-    "mtime": 1795042926.6828191,
-    "seen": 1795042928.4270387,
+    "mtime": 1795047157.7773502,
+    "seen": 1795056158.851435,
     "ast_hash": "1b23e57dd0b9a895fa998b930dcb9076",
     "semantic_hash": ""
   },
   "docs/aparelhos/escritorio/ar-do-escritorio.md": {
-    "mtime": 1795040895.3606803,
-    "seen": 1795041721.7102058,
+    "mtime": 1795047157.7774165,
+    "seen": 1795056158.8514364,
     "ast_hash": "59c231d1d2f0540df2581f2f67d0664c",
     "semantic_hash": "59c231d1d2f0540df2581f2f67d0664c"
   },
   "docs/aparelhos/laboratorio/ar-condicionado-laboratorio.md": {
-    "mtime": 1795040895.360783,
-    "seen": 1795041721.710207,
+    "mtime": 1795047157.7774723,
+    "seen": 1795056158.8514373,
     "ast_hash": "7c2a8bc963ad7b2f6e4fcc35c9a7e58e",
     "semantic_hash": "7c2a8bc963ad7b2f6e4fcc35c9a7e58e"
   },
   "docs/aparelhos/quarto/ar-do-quarto.md": {
-    "mtime": 1795040895.360911,
-    "seen": 1795041721.710208,
-    "ast_hash": "31dab3196dfd26aa1904dbe2acb17e4f",
-    "semantic_hash": "31dab3196dfd26aa1904dbe2acb17e4f"
+    "mtime": 1795052094.7573853,
+    "seen": 1795056158.8514388,
+    "ast_hash": "594233ffbdedee9ff2345c8d7b26be57",
+    "semantic_hash": ""
   },
   "docs/aparelhos/quarto/tv-do-quarto.md": {
-    "mtime": 1795040895.360911,
-    "seen": 1795041721.7102091,
+    "mtime": 1795047157.7775168,
+    "seen": 1795056158.8514404,
     "ast_hash": "25a043ec5f7e279a548e37f49b0f40dc",
     "semantic_hash": "25a043ec5f7e279a548e37f49b0f40dc"
   },
   ".claude/hooks/godmode-tracker.js": {
-    "mtime": 1795040895.3469431,
-    "seen": 1795041721.710128,
+    "mtime": 1795047157.7270267,
+    "seen": 1795056158.8513584,
     "ast_hash": "3c558413f1a5001ad2df5cde8de73d78",
     "semantic_hash": ""
   },
   ".claude/settings.json": {
-    "mtime": 1795040895.3469431,
-    "seen": 1795041721.7101521,
-    "ast_hash": "771b770dfdce835d5c2928c7e57c1a95",
+    "mtime": 1795056057.1056206,
+    "seen": 1795056158.8513687,
+    "ast_hash": "d443d1ea87c30f3c988c104cf8b869ee",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/diagnostico_rede/capacidade.json": {
-    "mtime": 1795043849.9681165,
-    "seen": 1795044742.236786,
+    "mtime": 1795047157.7280903,
+    "seen": 1795056158.8513749,
     "ast_hash": "5802c4087486bee7b3b099aa11529833",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/diagnostico_rede/principal.py": {
-    "mtime": 1795043849.973758,
-    "seen": 1795044742.2367883,
+    "mtime": 1795047157.7281146,
+    "seen": 1795056158.8513765,
     "ast_hash": "f75c7909a34bb3c64b0962a6906253f3",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/estado_celular/capacidade.json": {
-    "mtime": 1795043849.9751518,
-    "seen": 1795044742.2367895,
+    "mtime": 1795047157.7281146,
+    "seen": 1795056158.851378,
     "ast_hash": "5af76f67f2f9822daa358344ae829a1d",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/estado_celular/principal.py": {
-    "mtime": 1795043849.9764376,
-    "seen": 1795044742.2367904,
+    "mtime": 1795047157.7281828,
+    "seen": 1795056158.8513792,
     "ast_hash": "dfa1ccf155bafbebad5d98a61e66f3c7",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/capacidades.py": {
-    "mtime": 1795044586.3306692,
-    "seen": 1795044742.236797,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.8513973,
     "ast_hash": "148978949abdfe2a358575fb655907dd",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/execucao.py": {
-    "mtime": 1795045819.8964849,
-    "seen": 1795045933.3696058,
+    "mtime": 1795047157.7282243,
+    "seen": 1795056158.8514056,
     "ast_hash": "6589d6af368a99810066160007017e36",
     "semantic_hash": ""
   },
   "docs/modo-deus.md": {
-    "mtime": 1795045903.6328137,
-    "seen": 1795045933.3696415,
-    "ast_hash": "68d7461759863ae82c0af4d7fa4569dc",
+    "mtime": 1795055657.9695969,
+    "seen": 1795056158.8514423,
+    "ast_hash": "82fa17612640f909d1ce1d5095feed5b",
+    "semantic_hash": ""
+  },
+  ".claude/hooks/session-start.sh": {
+    "mtime": 1795056117.5816243,
+    "seen": 1795056158.8513653,
+    "ast_hash": "676fc157c1c7f19088a25d65d2f75879",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/descobrir_rede/capacidade.json": {
+    "mtime": 1795048449.1165473,
+    "seen": 1795056158.8513708,
+    "ast_hash": "32662c5b883941f6f85a3b53f38139b9",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/descobrir_rede/principal.py": {
+    "mtime": 1795048815.1851902,
+    "seen": 1795056158.8513722,
+    "ast_hash": "c7a3d8c4df732a6e073d0e354c4f4426",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/foto/capacidade.json": {
+    "mtime": 1795052049.720524,
+    "seen": 1795056158.85138,
+    "ast_hash": "46a66d7535427e49d4e626787b43e8c3",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/foto/principal.py": {
+    "mtime": 1795052049.7118616,
+    "seen": 1795056158.8513813,
+    "ast_hash": "d227ef69ab8adec98d50fcf93a5102bd",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/ouvir_bipe/capacidade.json": {
+    "mtime": 1795053110.7655542,
+    "seen": 1795056158.8513823,
+    "ast_hash": "1ac72b06123c43b18ff6ebf12489c382",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/ouvir_bipe/principal.py": {
+    "mtime": 1795053110.754151,
+    "seen": 1795056158.8513834,
+    "ast_hash": "f41cd8b5b8b2e4cd058c72c75d9c3ab5",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/sonar/capacidade.json": {
+    "mtime": 1795053889.2574918,
+    "seen": 1795056158.8513846,
+    "ast_hash": "868d39444356df0bd22b0793b6cbdaf1",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/sonar/principal.py": {
+    "mtime": 1795053908.018757,
+    "seen": 1795056158.8513856,
+    "ast_hash": "1aa0f3a0b77386898517041841c2f1c5",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/sono/capacidade.json": {
+    "mtime": 1795053802.7075553,
+    "seen": 1795056158.8513863,
+    "ast_hash": "76cc5768b04c614956dced0a31d17e18",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/sono/principal.py": {
+    "mtime": 1795053858.9580815,
+    "seen": 1795056158.8513875,
+    "ast_hash": "9b24f44ae7481e2005509c1de6be961f",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/tela/capacidade.json": {
+    "mtime": 1795052266.9881482,
+    "seen": 1795056158.8513882,
+    "ast_hash": "91a023d33bec058ec45800a9df415b4f",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/tela/principal.py": {
+    "mtime": 1795052327.533399,
+    "seen": 1795056158.8513892,
+    "ast_hash": "6998e0e3c0963c2921b0c85a11a8b176",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/termometro/capacidade.json": {
+    "mtime": 1795053076.2077503,
+    "seen": 1795056158.8513901,
+    "ast_hash": "eebccb79f1894691fb833b9864da2df4",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/termometro/principal.py": {
+    "mtime": 1795053083.7319598,
+    "seen": 1795056158.851391,
+    "ast_hash": "22cdf1c4aab8bd4d211279798d3c5edc",
+    "semantic_hash": ""
+  },
+  "artefatos/central-da-casa.html": {
+    "mtime": 1795055116.1215649,
+    "seen": 1795056158.8514285,
+    "ast_hash": "50b57d17609ef4b6b577297c9cedcbb5",
     "semantic_hash": ""
   }
 }

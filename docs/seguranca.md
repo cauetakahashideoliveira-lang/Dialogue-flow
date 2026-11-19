@@ -113,8 +113,8 @@ claude.ai ──OAuth 2.1 + PKCE──▶ Painel (Worker) ──chamada assinada
   painel”) e `TestPainel` (assinatura, horário, corpo trocado, chave errada, repetição; servidor recusando o
   direto quando “só pelo painel”).
 - **Limites:** o tráfego das ferramentas passa pelo Worker (conta Cloudflare = raiz de confiança, com 2FA). O
-  conector antigo (URL do ngrok) continua aceito até você ligar “só pelo painel”. Escopos por missão ficam para
-  depois (hoje o escopo é o estado do painel: desarmado/armado/emergência).
+  conector antigo (URL do ngrok) continua aceito até você ligar “só pelo painel”. Sem escopos por missão, por
+  decisão do dono (autonomia geral quando armado).
 
 #### Planejado (próximas etapas)
 
@@ -151,6 +151,10 @@ atualizações aceitas só com o hash aprovado no painel, hash do código em exe
 aprovado, segredos fora do alcance do shell, Central da Casa sem `executar_comando` em widgets automáticos.
 
 ## 5. Decisões do dono
+
+**Decidido em 19/11:** autonomia geral. Armado (com a digital, na Central de Controle) = o Claude tem tudo, sem
+escopos por missão; a digital diária é a autorização. Nome geral: Central de Controle. Painel em repositório
+único (este), com o merge do dono como aprovação de mudanças. Conector antigo removido do claude.ai.
 
 1. **Hospedar o painel na Cloudflare** (grátis; precisa de uma conta sua). Recomendado.
 2. **Quem pode alterar o painel:** repositório separado, só seu (recomendado: o agente não tem acesso), ou este.

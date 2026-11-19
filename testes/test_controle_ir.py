@@ -1129,5 +1129,47 @@ class TestTunel(unittest.TestCase):
                 return False
         self.assertFalse(vivo(pid_neto))
 
+
+class TestOuvirBipe(unittest.TestCase):
+    """Detecção de bipe (tom curto e puro) em áudio sintético; sem microfone."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            raise unittest.SkipTest("numpy ausente")
+        import importlib.util
+        caminho = Path(__file__).resolve().parent.parent / "controle-ir" / "capacidades" / "ouvir_bipe" / "principal.py"
+        spec = importlib.util.spec_from_file_location("ouvir_bipe_principal", caminho)
+        cls.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.m)
+
+    def _ruido(self, seg=4):
+        import numpy as np
+        return np.random.default_rng(7).normal(0, 0.05, 16000 * seg).astype(np.float32)
+
+    def test_acha_bipe_no_ruido(self):
+        import numpy as np
+        x = self._ruido()
+        t = np.arange(int(0.15 * 16000)) / 16000
+        x[32000:32000 + t.size] += 0.3 * np.sin(2 * np.pi * 2730 * t)
+        b = self.m.detectar_bipes(x)
+        self.assertEqual(len(b), 1)
+        self.assertAlmostEqual(b[0]["freq_hz"], 2730, delta=60)
+        self.assertAlmostEqual(b[0]["inicio_s"], 2.0, delta=0.05)
+
+    def test_ruido_e_tom_continuo_nao_sao_bipe(self):
+        import numpy as np
+        self.assertEqual(self.m.detectar_bipes(self._ruido()), [])
+        x = self._ruido()
+        x += 0.3 * np.sin(2 * np.pi * 1500 * np.arange(x.size) / 16000)  # zumbido longo (ventilador, motor)
+        self.assertEqual(self.m.detectar_bipes(x), [])
+
+    def test_comparar_com_referencia(self):
+        bipes = [{"freq_hz": 2700}, {"freq_hz": 4000}]
+        self.assertEqual(self.m.comparar(bipes, {"freq_hz": 2750}), [{"freq_hz": 2700}])
+        self.assertEqual(self.m.comparar(bipes, None), [])
+
 if __name__ == "__main__":
     unittest.main()

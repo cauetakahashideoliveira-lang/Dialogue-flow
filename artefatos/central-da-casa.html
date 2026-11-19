@@ -1,0 +1,489 @@
+<title>Central da Casa</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: cabeçalho de status + grade de cartões por cômodo (ar, TV, câmera, termômetro, sono) + assistente */
+:root {
+  --bg: #eef3f4; --surface: #ffffff; --surface-2: #f5f8f9; --ink: #13232a; --muted: #5a6c74; --line: #d6dfe2;
+  --accent: #0d7682; --accent-ink: #ffffff; --accent-soft: #d8eef0; --warm: #b8552f;
+  --ok: #2c7a4d; --warn: #9a6a12; --crit: #ad3535;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c1417; --surface: #142026; --surface-2: #10191d; --ink: #e4edf0; --muted: #91a3aa; --line: #23343b;
+  --accent: #46b6c1; --accent-ink: #062126; --accent-soft: #15353a; --warm: #e0835c;
+  --ok: #5cc28a; --warn: #e2b15a; --crit: #ef7b7b; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0c1417; --surface: #142026; --surface-2: #10191d; --ink: #e4edf0; --muted: #91a3aa; --line: #23343b;
+  --accent: #46b6c1; --accent-ink: #062126; --accent-soft: #15353a; --warm: #e0835c;
+  --ok: #5cc28a; --warn: #e2b15a; --crit: #ef7b7b; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 18px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: 28px; }
+h2 { font-size: 18px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.sub { color: var(--muted); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); font-size: 13px; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: var(--ok); } .dot.crit { background: var(--crit); } .dot.warn { background: var(--warn); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 16px; align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.cap { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.readout { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.temp { font-family: var(--mono); font-weight: 700; font-size: 44px; font-variant-numeric: tabular-nums; line-height: 1; }
+.temp small { font-size: 18px; color: var(--muted); font-weight: 500; }
+.step { display: flex; gap: 8px; }
+button, .chip { font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); padding: 8px 12px; min-height: 40px; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, .chip:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .55; cursor: progress; }
+.round { width: 44px; height: 44px; padding: 0; font-size: 22px; font-family: var(--mono); }
+.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.danger { color: var(--crit); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { min-height: 32px; padding: 4px 10px; font-size: 13px; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); font-weight: 600; }
+.label { font-size: 12px; color: var(--muted); }
+.msg { font-size: 13px; color: var(--muted); min-height: 1.2em; }
+.msg.ok { color: var(--ok); } .msg.crit { color: var(--crit); } .msg.warn { color: var(--warn); }
+.tvpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-width: 220px; }
+.tvpad button { min-height: 38px; padding: 4px; }
+.photo { width: 100%; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); aspect-ratio: 3/4; object-fit: cover; }
+.ph { display: grid; place-items: center; aspect-ratio: 4/3; border-radius: 10px; border: 1px dashed var(--line); color: var(--muted); font-size: 13px; text-align: center; padding: 12px; }
+.big { font-family: var(--mono); font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+svg text { fill: var(--muted); font-family: var(--mono); font-size: 10px; }
+.assist { grid-column: 1 / -1; }
+textarea { width: 100%; box-sizing: border-box; min-height: 64px; resize: vertical; font: inherit; color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.answer { white-space: pre-wrap; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-height: 2.5em; }
+.log { font-family: var(--mono); font-size: 12px; color: var(--muted); display: grid; gap: 2px; }
+.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.note { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { button { transition: border-color .15s, background .15s; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Central da Casa</h1>
+      <div class="sub">Ares, TV, câmera, termômetro e sono — tudo pelo celular Controle IR</div>
+    </div>
+    <span class="pill" id="status"><span class="dot" id="statusDot"></span><span id="statusTxt">Conectando ao celular…</span></span>
+  </div>
+
+  <div class="grid" id="grid">
+    <section class="card" id="tvCard">
+      <header><h2>TV do quarto</h2><span class="cap">Samsung · IR 38 kHz</span></header>
+      <div class="row">
+        <button class="primary" data-tv='{"definir":{"energia":"ligado"}}'>Ligar</button>
+        <button data-tv='{"definir":{"energia":"desligado"}}'>Desligar</button>
+        <button data-tv='{"ajustar":{"volume":-1}}' aria-label="Volume menos">Vol −</button>
+        <button data-tv='{"ajustar":{"volume":1}}' aria-label="Volume mais">Vol +</button>
+        <button data-tv='{"teclas":["mudo_alternar"],"permitir_alternancia":true}'>Mudo</button>
+      </div>
+      <div class="row">
+        <button data-tv='{"teclas":["netflix"]}'>Netflix</button>
+        <button data-tv='{"teclas":["prime_video"]}'>Prime Video</button>
+        <button data-tv='{"teclas":["inicio"]}'>Início</button>
+        <button data-tv='{"teclas":["voltar"]}'>Voltar</button>
+      </div>
+      <div class="tvpad" aria-label="Setas">
+        <span></span><button data-tv='{"teclas":["cima"]}' aria-label="Cima">▲</button><span></span>
+        <button data-tv='{"teclas":["esquerda"]}' aria-label="Esquerda">◀</button><button data-tv='{"teclas":["ok"]}'>OK</button><button data-tv='{"teclas":["direita"]}' aria-label="Direita">▶</button>
+        <span></span><button data-tv='{"teclas":["baixo"]}' aria-label="Baixo">▼</button><span></span>
+      </div>
+      <div class="msg" id="tvMsg"></div>
+    </section>
+
+    <section class="card">
+      <header><h2>Ver o ar do quarto</h2><span class="cap">câmera traseira</span></header>
+      <div class="ph" id="fotoBox">Tire uma foto para ver o visor do ar. A foto é apagada no celular logo depois.</div>
+      <div class="row"><button class="primary" id="fotoBtn">Tirar foto</button><span class="msg" id="fotoMsg"></span></div>
+    </section>
+
+    <section class="card">
+      <header><h2>Temperatura do quarto</h2><span class="cap">pela bateria</span></header>
+      <div class="readout"><div class="temp" id="tAr">--<small> °C</small></div>
+        <dl class="kv"><dt>Bateria</dt><dd id="tBat">–</dd><dt>Confiança</dt><dd id="tConf">–</dd><dt>Tendência</dt><dd id="tTend">–</dd></dl></div>
+      <svg id="tGraf" viewBox="0 0 320 90" width="100%" height="90" role="img" aria-label="Histórico da temperatura"><text x="8" y="50">Toque em Ver histórico</text></svg>
+      <div class="row"><button class="primary" id="tBtn">Medir agora</button><button id="tHist">Ver histórico</button></div>
+      <div class="note">Mais certo com o celular parado, fora da tomada e com a tela apagada.</div>
+      <div class="msg" id="tMsg"></div>
+    </section>
+
+    <section class="card">
+      <header><h2>Laboratório do sono</h2><span class="cap">áudio apagado na hora</span></header>
+      <dl class="kv"><dt>Noite</dt><dd id="sNoite">–</dd><dt>Trechos medidos</dt><dd id="sTrechos">–</dd><dt>Roncos</dt><dd id="sRoncos">–</dd><dt>Barulhos</dt><dd id="sBarulhos">–</dd></dl>
+      <svg id="sGraf" viewBox="0 0 320 110" width="100%" height="110" role="img" aria-label="Roncos e temperatura por hora"><text x="8" y="55">Roncos por hora aparecem aqui de manhã</text></svg>
+      <div class="row">
+        <button class="primary" id="sIniciar">Começar a noite</button>
+        <button id="sEstado">Atualizar</button>
+        <button id="sRel">Relatório</button>
+        <button class="danger" id="sParar">Parar</button>
+      </div>
+      <div class="row" id="sConfirma" hidden>
+        <span class="note">O microfone vai ouvir o quarto por 8 h, em trechos de 1 min a cada 5 min. Confirmar?</span>
+        <button class="primary" id="sSim">Sim, começar</button><button id="sNao">Cancelar</button>
+      </div>
+      <div class="msg" id="sMsg"></div>
+    </section>
+
+    <section class="card assist">
+      <header><h2>Assistente</h2><span class="cap">Claude · fale ou digite</span></header>
+      <label class="label" for="pedido">O que você quer na casa?</label>
+      <textarea id="pedido" placeholder="Ex.: deixa o quarto em 23 graus no frio e liga a Netflix na TV"></textarea>
+      <div class="row">
+        <button class="primary" id="enviar">Enviar</button>
+        <button id="mic" hidden>🎙️ Falar</button>
+        <button id="parar" hidden>Parar</button>
+        <label class="switch" id="vozWrap" hidden><input type="checkbox" id="voz" checked> responder em voz</label>
+      </div>
+      <div class="answer" id="resposta">Peça qualquer coisa sobre os ares, a TV, a temperatura ou a foto do ar.</div>
+      <div class="log" id="acoes"></div>
+    </section>
+  </div>
+  <div class="note">Os comandos saem pelo emissor infravermelho do celular; a confirmação física é sua (ou pela câmera e pelo som). Se a sua organização exigir, o claude.ai pede a aprovação de cada comando.</div>
+</div>
+
+<script>
+const SERVER = "Controle master";
+const AC_LABEL = { "ar do quarto": "Quarto", "ar do escritório": "Escritório", "ar condicionado laboratório": "Laboratório" };
+const MODOS = { frio: "Frio", automatico: "Auto", desumidificar: "Seco", ventilar: "Ventilar", calor: "Calor" };
+const VENT = { baixa: "Baixa", media: "Média", alta: "Alta", automatica: "Auto" };
+let mcp = null, sample = null, dict = null, tts = null;
+const state = { aparelhos: [], acs: {} };
+const $ = (id) => document.getElementById(id);
+
+function erroTexto(e) {
+  const c = e && e.code;
+  if (c === "approval_required") return "Precisa da sua aprovação no claude.ai (regra da organização). Toque de novo e aprove.";
+  if (c === "not_in_manifest") return "Esta página não está liberada para o conector. Abra Permissões do artefato e permita o Controle master.";
+  if (c === "server_not_connected") return "Adicione o conector Controle master em claude.ai → Configurações → Conectores.";
+  if (c === "needs_reauth") return "Reconecte o Controle master em claude.ai → Configurações → Conectores.";
+  if (c === "blocked_by_policy") return "A política da organização bloqueia esta ferramenta.";
+  if (c === "server_unavailable" || c === "upstream_error") return "O celular não respondeu. Confira se o Controle IR está ligado (atalho Ligar).";
+  if (c === "tool_error") { const p = e.result && e.result.structuredContent; return (p && p.erro) || e.message || "O celular recusou o pedido."; }
+  return (e && e.message) || "Falhou.";
+}
+function msg(el, txt, tipo) { el.textContent = txt || ""; el.className = "msg" + (tipo ? " " + tipo : ""); }
+async function chamar(tool, input) {
+  if (!mcp) throw { code: "capability_disabled", message: "Conector indisponível nesta visualização." };
+  const r = await mcp.callTool(SERVER, tool, input);
+  const p = r.payload;
+  if (p && typeof p === "object" && p.erro) throw { code: "tool_error", message: p.erro };
+  if (p && typeof p === "object" && p.resultado && p.resultado.erro) throw { code: "tool_error", message: p.resultado.erro };
+  if (p && typeof p === "object" && p.status === "tempo_esgotado") throw { code: "tool_error", message: "O celular demorou demais para responder." };
+  return r;
+}
+async function controlar(input) {
+  const r = await chamar("controlar", input);
+  try { await mcp.invalidate(SERVER, "opcoes"); } catch (_) {}
+  return r.payload || {};
+}
+function resumoEnvio(p) {
+  if (!p) return "Enviado.";
+  if (p.status === "sinal_enviado") {
+    const rot = (p.enviados || []).map((e) => e.rotulo).filter(Boolean).join(" · ");
+    let t = "Sinal enviado" + (rot ? ": " + rot : ".");
+    if (p.ouvido) t += " · som: " + (p.ouvido.veredito || "?").replace(/_/g, " ");
+    return t;
+  }
+  if (p.status === "precisa_confirmacao") return "Precisa confirmar: " + (p.motivo || p.observacao || "");
+  return p.status ? p.status.replace(/_/g, " ") : "Enviado.";
+}
+
+/* ---------------- status do celular ---------------- */
+function renderStatus(p) {
+  const v = p && p.servidor && p.servidor.versao;
+  $("statusDot").className = "dot " + (p && p.emissor && p.emissor.disponivel ? "ok" : "warn");
+  $("statusTxt").textContent = v ? `Celular online · v${v} · ${(p.aparelhos_salvos || []).length} aparelhos` : "Celular respondeu";
+  state.aparelhos = (p && p.aparelhos_salvos) || [];
+  for (const a of state.aparelhos) if (a.categoria === "ar_condicionado") montarAr(a);
+}
+function statusErro(e) {
+  $("statusDot").className = "dot crit";
+  $("statusTxt").textContent = erroTexto(e);
+}
+
+/* ---------------- cartões dos ares ---------------- */
+function montarAr(a) {
+  if (state.acs[a.nome]) return;
+  const id = "ac" + Object.keys(state.acs).length;
+  const el = document.createElement("section");
+  el.className = "card";
+  el.innerHTML = `
+    <header><h2>Ar · ${AC_LABEL[a.nome] || a.nome}</h2><span class="cap">${a.perfil} · IR 38 kHz</span></header>
+    <div class="readout"><div class="temp"><span id="${id}t">--</span><small> °C</small></div>
+      <div class="step"><button class="round" id="${id}m" aria-label="Menos 1 grau">−</button><button class="round" id="${id}p" aria-label="Mais 1 grau">+</button></div></div>
+    <div><div class="label">Modo</div><div class="chips" id="${id}modo"></div></div>
+    <div><div class="label">Ventilação</div><div class="chips" id="${id}vent"></div></div>
+    <div class="row"><button class="primary" id="${id}lig">Ligar com isso</button><button id="${id}des">Desligar</button>
+      <label class="switch"><input type="checkbox" id="${id}ouv"> confirmar pelo som</label></div>
+    <div class="row" id="${id}extra"></div>
+    <div class="msg" id="${id}msg"></div>
+    <div class="note" id="${id}ult"></div>`;
+  $("grid").insertBefore(el, $("tvCard"));
+  const ac = { nome: a.nome, id, temp: 24, modo: "frio", vent: "automatica", min: 16, max: 30 };
+  state.acs[a.nome] = ac;
+  const desenhar = () => {
+    $(id + "t").textContent = ac.temp;
+    for (const b of $(id + "modo").children) b.setAttribute("aria-pressed", String(b.dataset.v === ac.modo));
+    for (const b of $(id + "vent").children) b.setAttribute("aria-pressed", String(b.dataset.v === ac.vent));
+  };
+  ac.desenhar = desenhar;
+  $(id + "m").onclick = () => { ac.temp = Math.max(ac.min, ac.temp - 1); desenhar(); };
+  $(id + "p").onclick = () => { ac.temp = Math.min(ac.max, ac.temp + 1); desenhar(); };
+  const enviar = async (btn, input) => {
+    btn.disabled = true; msg($(id + "msg"), "Enviando…");
+    try { const p = await controlar(input); msg($(id + "msg"), resumoEnvio(p), "ok"); }
+    catch (e) { msg($(id + "msg"), erroTexto(e), "crit"); }
+    finally { btn.disabled = false; }
+  };
+  $(id + "lig").onclick = (ev) => {
+    const input = { aparelho: ac.nome, ligar: true, definir: { temperatura: ac.temp, modo: ac.modo, ventilacao: ac.vent } };
+    if ($(id + "ouv").checked) input.ouvir = true;
+    enviar(ev.currentTarget, input);
+  };
+  $(id + "des").onclick = (ev) => {
+    const input = { aparelho: ac.nome, ligar: false };
+    if ($(id + "ouv").checked) input.ouvir = true;
+    enviar(ev.currentTarget, input);
+  };
+  mcp.watchTool(SERVER, "opcoes", { aparelho: a.nome }, (evt) => {
+    if (evt.type !== "data") { msg($(id + "msg"), erroTexto(evt.error), "warn"); return; }
+    const o = evt.result.payload || {};
+    const ec = (o.estado_completo && o.estado_completo.parametros) || {};
+    if (ec.temperatura) { ac.min = ec.temperatura.min; ac.max = ec.temperatura.max; }
+    const u = o.ultima_configuracao_completa || {};
+    if (u.temperatura) ac.temp = Number(u.temperatura);
+    if (u.modo) ac.modo = u.modo;
+    if (u.ventilacao) ac.vent = u.ventilacao;
+    const chips = (box, lista, nomes, campo) => {
+      box.innerHTML = "";
+      for (const v of lista || []) {
+        const b = document.createElement("button");
+        b.className = "chip"; b.dataset.v = v; b.textContent = nomes[v] || v;
+        b.onclick = () => { ac[campo] = v; desenhar(); };
+        box.appendChild(b);
+      }
+    };
+    chips($(id + "modo"), ec.modo, MODOS, "modo");
+    chips($(id + "vent"), ec.ventilacao, VENT, "vent");
+    const ex = $(id + "extra"); ex.innerHTML = "";
+    for (const c of (o.comandos || []).filter((c) => c.chave !== "energia_desligar")) {
+      const b = document.createElement("button");
+      b.textContent = c.rotulo.replace(/\s*\(.*\)$/, "");
+      b.title = c.rotulo;
+      b.onclick = (ev) => enviar(ev.currentTarget, { aparelho: ac.nome, teclas: [c.chave], permitir_alternancia: c.tipo === "alternar" });
+      ex.appendChild(b);
+    }
+    const ue = o.ultimo_envio || {};
+    $(id + "ult").textContent = ue.energia ? `Último envio: ${ue.energia}${ue.temperatura ? ", " + ue.temperatura + " °C" : ""}${ue.modo ? ", " + ue.modo : ""}` : "";
+    desenhar();
+  });
+}
+
+/* ---------------- TV ---------------- */
+document.querySelectorAll("[data-tv]").forEach((b) => {
+  b.onclick = async () => {
+    b.disabled = true; msg($("tvMsg"), "Enviando…");
+    try { const p = await controlar(Object.assign({ aparelho: "tv do quarto" }, JSON.parse(b.dataset.tv))); msg($("tvMsg"), resumoEnvio(p), "ok"); }
+    catch (e) { msg($("tvMsg"), erroTexto(e), "crit"); }
+    finally { b.disabled = false; }
+  };
+});
+
+/* ---------------- câmera ---------------- */
+$("fotoBtn").onclick = async () => {
+  const b = $("fotoBtn"); b.disabled = true; msg($("fotoMsg"), "Fotografando…");
+  try {
+    const r = await chamar("executar_capacidade", { nome: "foto", argumentos: { camera: "traseira", alvo: "ar do quarto" } });
+    const img = (r.content || []).find((c) => c.type === "image");
+    if (!img) throw { message: "A câmera não devolveu imagem." };
+    const box = $("fotoBox");
+    const el = document.createElement("img");
+    el.className = "photo"; el.alt = "Foto do ar do quarto"; el.src = `data:${img.mimeType};base64,${img.data}`;
+    box.replaceWith(el); el.id = "fotoBox";
+    const res = (r.payload && r.payload.resultado) || {};
+    msg($("fotoMsg"), `Foto das ${res.quando || "agora"}`, "ok");
+  } catch (e) { msg($("fotoMsg"), erroTexto(e), "crit"); }
+  finally { b.disabled = false; }
+};
+
+/* ---------------- termômetro ---------------- */
+function graficoLinha(svg, pts, cor) {
+  svg.innerHTML = "";
+  if (pts.length < 2) { svg.innerHTML = `<text x="8" y="50">Poucas leituras ainda</text>`; return; }
+  const W = 320, H = 90, pl = 30, pr = 8, pt = 8, pb = 18;
+  const ys = pts.map((p) => p.y), xs = pts.map((p) => p.x);
+  let y0 = Math.floor(Math.min(...ys) - 0.5), y1 = Math.ceil(Math.max(...ys) + 0.5);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs) || x0 + 1;
+  const sx = (x) => pl + (W - pl - pr) * (x - x0) / ((x1 - x0) || 1);
+  const sy = (y) => pt + (H - pt - pb) * (1 - (y - y0) / ((y1 - y0) || 1));
+  const d = pts.map((p, i) => (i ? "L" : "M") + sx(p.x).toFixed(1) + " " + sy(p.y).toFixed(1)).join(" ");
+  const hora = (t) => new Date(t * 1000).toTimeString().slice(0, 5);
+  svg.innerHTML = `
+    <line x1="${pl}" y1="${sy(y0)}" x2="${W - pr}" y2="${sy(y0)}" stroke="var(--line)"/>
+    <line x1="${pl}" y1="${sy(y1)}" x2="${W - pr}" y2="${sy(y1)}" stroke="var(--line)" stroke-dasharray="3 3"/>
+    <text x="2" y="${sy(y1) + 4}">${y1}°</text><text x="2" y="${sy(y0) + 4}">${y0}°</text>
+    <text x="${pl}" y="${H - 4}">${hora(x0)}</text><text x="${W - pr}" y="${H - 4}" text-anchor="end">${hora(x1)}</text>
+    <path d="${d} L${sx(x1)} ${sy(y0)} L${sx(x0)} ${sy(y0)} Z" fill="${cor}" fill-opacity="0.12" stroke="none"/>
+    <path d="${d}" fill="none" stroke="${cor}" stroke-width="2"/>
+    <circle cx="${sx(pts[pts.length - 1].x)}" cy="${sy(pts[pts.length - 1].y)}" r="3.5" fill="${cor}"/>`;
+}
+function mostrarLeitura(r) {
+  if (!r) return;
+  $("tAr").innerHTML = `${r.ar_estimado_c ?? "--"}<small> °C</small>`;
+  $("tBat").textContent = r.bateria_c != null ? r.bateria_c + " °C" : "–";
+  $("tConf").textContent = r.confianca ? r.confianca + (r.motivos && r.motivos.length ? " (" + r.motivos[0] + ")" : "") : "–";
+  const td = r.tendencia_c_por_hora;
+  $("tTend").textContent = td == null ? "–" : (td > 0 ? "+" : "") + td + " °C/h";
+}
+$("tBtn").onclick = async () => {
+  const b = $("tBtn"); b.disabled = true; msg($("tMsg"), "Medindo por 15 s…");
+  try { const r = await chamar("executar_capacidade", { nome: "termometro", argumentos: { acao: "ler", segundos: 15 } });
+    mostrarLeitura((r.payload || {}).resultado); msg($("tMsg"), "Medido.", "ok"); }
+  catch (e) { msg($("tMsg"), erroTexto(e), "crit"); }
+  finally { b.disabled = false; }
+};
+$("tHist").onclick = async () => {
+  const b = $("tHist"); b.disabled = true; msg($("tMsg"), "Lendo o histórico…");
+  try {
+    const r = await chamar("executar_capacidade", { nome: "termometro", argumentos: { acao: "historico", n: 120 } });
+    const h = ((r.payload || {}).resultado || {}).leituras || [];
+    const ok = h.filter((l) => l.confianca !== "baixa" && l.ar_estimado_c != null);
+    graficoLinha($("tGraf"), ok.map((l) => ({ x: l.t, y: l.ar_estimado_c })), "var(--accent)");
+    if (h.length) mostrarLeitura(Object.assign({}, h[h.length - 1], { tendencia_c_por_hora: ((r.payload || {}).resultado || {}).tendencia_c_por_hora }));
+    msg($("tMsg"), `${h.length} leituras (${ok.length} confiáveis)`, "ok");
+  } catch (e) { msg($("tMsg"), erroTexto(e), "crit"); }
+  finally { b.disabled = false; }
+};
+
+/* ---------------- sono ---------------- */
+async function sono(acao, extra) {
+  const r = await chamar("executar_capacidade", { nome: "sono", argumentos: Object.assign({ acao }, extra || {}) });
+  return (r.payload || {}).resultado || {};
+}
+function graficoSono(svg, porHora) {
+  svg.innerHTML = "";
+  if (!porHora || !porHora.length) { svg.innerHTML = `<text x="8" y="55">Sem dados da noite ainda</text>`; return; }
+  const W = 320, H = 110, pl = 8, pr = 8, pt = 10, pb = 20, n = porHora.length;
+  const bw = (W - pl - pr) / n, max = Math.max(1, ...porHora.map((h) => h.roncos));
+  let s = "";
+  porHora.forEach((h, i) => {
+    const alt = (H - pt - pb) * h.roncos / max, x = pl + i * bw + 2;
+    s += `<rect x="${x.toFixed(1)}" y="${(H - pb - alt).toFixed(1)}" width="${(bw - 4).toFixed(1)}" height="${alt.toFixed(1)}" rx="3" fill="var(--warm)" fill-opacity="0.75"/>`;
+    s += `<text x="${(x + (bw - 4) / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${h.hora.slice(0, 2)}h</text>`;
+  });
+  const temps = porHora.map((h, i) => ({ i, t: h.ar_c })).filter((p) => p.t != null);
+  if (temps.length > 1) {
+    const t0 = Math.min(...temps.map((p) => p.t)) - 0.5, t1 = Math.max(...temps.map((p) => p.t)) + 0.5;
+    const d = temps.map((p, k) => (k ? "L" : "M") + (pl + p.i * bw + bw / 2).toFixed(1) + " " + (pt + (H - pt - pb) * (1 - (p.t - t0) / (t1 - t0))).toFixed(1)).join(" ");
+    s += `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2"/><text x="${W - pr}" y="${pt + 2}" text-anchor="end">${t1.toFixed(0)}°</text>`;
+  }
+  svg.innerHTML = s;
+}
+function mostrarSono(r) {
+  $("sNoite").textContent = r.sessao ? r.sessao + (r.ativo ? " · em andamento" : "") : "–";
+  $("sTrechos").textContent = r.trechos ?? r.trechos_medidos ?? "–";
+  $("sRoncos").textContent = r.roncos != null ? r.roncos + (r.ronco_pct_do_ouvido != null ? ` (${r.ronco_pct_do_ouvido}% do tempo ouvido)` : "") : (r.ultimo ? r.ultimo.roncos : "–");
+  $("sBarulhos").textContent = r.barulhos ?? (r.ultimo ? r.ultimo.barulhos : "–");
+  if (r.por_hora) graficoSono($("sGraf"), r.por_hora);
+}
+const btnSono = (id, fn) => { $(id).onclick = async () => { const b = $(id); b.disabled = true;
+  try { await fn(); } catch (e) { msg($("sMsg"), erroTexto(e), "crit"); } finally { b.disabled = false; } }; };
+$("sIniciar").onclick = () => { $("sConfirma").hidden = false; };
+$("sNao").onclick = () => { $("sConfirma").hidden = true; };
+btnSono("sSim", async () => { const r = await sono("iniciar", { horas: 8 }); $("sConfirma").hidden = true;
+  msg($("sMsg"), r.iniciado ? `Noite começou · até ${r.ate} · ${r.trechos}` : (r.erro || "Não iniciou"), r.iniciado ? "ok" : "warn"); });
+btnSono("sEstado", async () => { const r = await sono("estado"); mostrarSono(r); msg($("sMsg"), r.ativo ? "Medindo agora." : "Nenhuma noite em andamento.", "ok"); });
+btnSono("sRel", async () => { const r = await sono("relatorio"); if (r.erro) { msg($("sMsg"), r.erro, "warn"); return; } mostrarSono(r);
+  msg($("sMsg"), r.hora_com_mais_ronco ? `Mais ronco por volta das ${r.hora_com_mais_ronco}. ${r.nota}` : r.nota || "", "ok"); });
+btnSono("sParar", async () => { const r = await sono("parar"); msg($("sMsg"), r.parado ? "Noite encerrada." : "Nada para parar.", "ok"); });
+
+/* ---------------- assistente ---------------- */
+function contextoCasa() {
+  const linhas = state.aparelhos.map((a) => `- "${a.nome}" (${a.categoria}, perfil ${a.perfil}; parâmetros: ${(a.parametros || []).join(", ")})`);
+  return linhas.join("\n") || "- (lista ainda carregando)";
+}
+const ferramentas = [
+  { name: "controlar", description: "Envia um comando infravermelho a um aparelho salvo e devolve o que foi enviado. Ar-condicionado: definir {temperatura, modo (frio|automatico|desumidificar|ventilar|calor), ventilacao (baixa|media|alta|automatica)} com ligar=true, ou ligar=false para desligar. TV: definir {energia: ligado|desligado}, ajustar {volume: ±n}, teclas [netflix, prime_video, inicio, voltar, ok, cima, baixo, esquerda, direita].",
+    inputSchema: { type: "object", properties: { aparelho: { type: "string" }, ligar: { type: "boolean" }, definir: { type: "object" }, ajustar: { type: "object" }, teclas: { type: "array", items: { type: "string" } } }, required: ["aparelho"] },
+    execute: async (inp) => { const input = { aparelho: String(inp.aparelho) };
+      for (const k of ["ligar", "definir", "ajustar", "teclas"]) if (inp[k] !== undefined) input[k] = inp[k];
+      logAcao("→ " + input.aparelho + " " + JSON.stringify(Object.assign({}, input, { aparelho: undefined })));
+      try { const p = await controlar(input); const t = resumoEnvio(p); logAcao("  " + t); return { status: p.status, resumo: t, estado: p.estado_presumido }; }
+      catch (e) { const t = erroTexto(e); logAcao("  ✗ " + t); throw new Error(t); } } },
+  { name: "medir_temperatura", description: "Mede a temperatura do quarto pela bateria do celular (15 s). Devolve ar_estimado_c, confianca e tendência.",
+    execute: async () => { logAcao("→ termômetro"); const r = await chamar("executar_capacidade", { nome: "termometro", argumentos: { acao: "ler", segundos: 15 } });
+      const x = (r.payload || {}).resultado || {}; mostrarLeitura(x); return { ar_estimado_c: x.ar_estimado_c, confianca: x.confianca, tendencia_c_por_hora: x.tendencia_c_por_hora }; } },
+];
+function logAcao(t) { const d = document.createElement("div"); d.textContent = t; $("acoes").appendChild(d); }
+let ctl = null;
+async function perguntar() {
+  const texto = $("pedido").value.trim();
+  if (!texto || !sample) return;
+  $("enviar").disabled = true; $("parar").hidden = false; $("acoes").innerHTML = "";
+  $("resposta").textContent = "Pensando…";
+  ctl = new AbortController();
+  const prompt = `Você é o assistente da casa do usuário e fala português do Brasil. Use as ferramentas para agir de verdade; não invente aparelhos.
+Aparelhos salvos:
+${contextoCasa()}
+Regras: para ar-condicionado mande temperatura, modo e ventilação juntos (16–30 °C no quarto). Se o pedido for vago (ex.: "deixa fresquinho"), escolha algo sensato (frio, 23 °C, ventilação automática) e diga o que escolheu. Depois de agir, responda em 1–3 frases curtas dizendo o que foi enviado; a confirmação física é do usuário.
+Pedido: ${texto}`;
+  try {
+    const { text } = await sample(prompt, { tools: ferramentas, modelTier: "quick", signal: ctl.signal,
+      onText: ({ text }) => { $("resposta").textContent = text; } });
+    $("resposta").textContent = text;
+    if (tts && $("voz").checked && text) tts.speak(text.slice(0, 1900), { language: "pt-BR" }).catch(() => {});
+  } catch (e) {
+    $("resposta").textContent = e.text || "";
+    const c = e.code;
+    if (c !== "cancelled") logAcao(c === "not_granted" ? "Você recusou o uso do Claude nesta página." : c === "rate_limited" ? "Muitos pedidos agora; espere um pouco." : c === "tools_unavailable" ? "O assistente não pode usar ferramentas nesta visualização." : (e.message || "Falhou."));
+  } finally { $("enviar").disabled = false; $("parar").hidden = true; }
+}
+$("enviar").onclick = perguntar;
+$("pedido").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) perguntar(); });
+$("parar").onclick = () => { if (ctl) ctl.abort(); if (tts) tts.stop(); };
+
+/* ---------------- inicialização ---------------- */
+(async () => {
+  const cl = window.claude;
+  if (!cl || !cl.use) { statusErro({ message: "Abra esta página no claude.ai para controlar a casa." }); return; }
+  [mcp, sample, dict, tts] = await Promise.all(["mcp", "sample", "dictation", "tts"].map((n) => cl.use(n).catch(() => null)));
+  if (!sample) { $("enviar").disabled = true; $("resposta").textContent = "O assistente não está disponível nesta visualização."; }
+  if (tts) $("vozWrap").hidden = false;
+  if (dict) {
+    $("mic").hidden = false;
+    let base = "";
+    dict.onPartial(({ text }) => { $("pedido").value = (base + " " + text).trim(); });
+    dict.onFinal(({ text }) => { base = (base + " " + text).trim(); $("pedido").value = base; });
+    dict.onState(({ state: st }) => { $("mic").textContent = st === "listening" ? "⏹ Parar de ouvir" : "🎙️ Falar";
+      if (st === "idle" && base) { perguntar(); base = ""; } });
+    $("mic").onclick = () => {
+      if ($("mic").textContent.startsWith("⏹")) { dict.stop().catch(() => {}); return; }
+      base = ""; $("pedido").value = "";
+      dict.start().catch((e) => { if (e && e.code === "not_granted") $("mic").hidden = true; });
+    };
+  }
+  if (!mcp) { statusErro({ message: "Conector indisponível nesta visualização." }); return; }
+  mcp.watchTool(SERVER, "consultar", {}, (evt) => {
+    if (evt.type === "data") renderStatus(evt.result.payload);
+    else statusErro(evt.error);
+  }, { refetchInterval: 120000 });
+})();
+</script>

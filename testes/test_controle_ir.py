@@ -1352,5 +1352,103 @@ class TestTermometro(unittest.TestCase):
         s, _ = novo_servico(com_base=False)
         self.assertEqual({c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}.get("termometro"), "ativa")
 
+
+def _carregar_cap(nome):
+    import importlib.util
+    caminho = Path(__file__).resolve().parent.parent / "controle-ir" / "capacidades" / nome / "principal.py"
+    spec = importlib.util.spec_from_file_location(f"{nome}_principal", caminho)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestSono(unittest.TestCase):
+    """Laboratório do sono: roncos no ritmo da respiração, sem confundir fala, batida e silêncio."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            raise unittest.SkipTest("numpy ausente")
+        cls.m = _carregar_cap("sono")
+
+    def _base(self, seg=60, a=0.003):
+        import numpy as np
+        return np.random.default_rng(2).normal(0, a, 16000 * seg).astype(np.float32)
+
+    def test_ronco_ritmado(self):
+        import numpy as np
+        x = self._base()
+        t = np.arange(16000) / 16000
+        som = sum(np.sin(2 * np.pi * 110 * k * t) / k for k in range(1, 6)) * np.sin(np.pi * t) ** 2 * 0.08
+        for i in range(10):
+            j = int((2 + 4 * i) * 16000)
+            x[j:j + t.size] += som
+        r = self.m.analisar_trecho(x)
+        self.assertEqual((r["roncos"], r["ritmo_s"]), (10, 4.0))
+
+    def test_fala_batida_silencio(self):
+        import numpy as np
+        y = self._base()
+        t = np.arange(int(1.2 * 16000)) / 16000
+        for c in (5, 13, 30, 41):  # voz aguda, sem ritmo de respiração
+            j = c * 16000
+            y[j:j + t.size] += 0.05 * sum(np.sin(2 * np.pi * 230 * k * t) for k in range(3, 12)) * np.sin(np.pi * t / 1.2) ** 2
+        self.assertEqual(self.m.analisar_trecho(y)["roncos"], 0)
+        z = self._base()
+        z[320000:320300] += 0.8
+        r = self.m.analisar_trecho(z)
+        self.assertEqual((r["roncos"], r["barulhos"]), (0, 1))
+        self.assertEqual(self.m.analisar_trecho(self._base())["roncos"], 0)
+
+    def test_resumo_por_hora(self):
+        t0 = time.mktime((2026, 11, 19, 1, 0, 0, 0, 0, -1))
+        linhas = [{"t": t0 + i * 600, "duracao_s": 60, "roncos": 5 if i < 3 else 0, "ronco_s": 4.0 if i < 3 else 0,
+                   "barulhos": 1, "nivel_db": -45.0, "ar_estimado_c": 24.0 - i * 0.2} for i in range(9)]
+        r = self.m.resumir(linhas)
+        self.assertEqual((r["trechos"], r["roncos"], r["barulhos"]), (9, 15, 9))
+        self.assertEqual(r["hora_com_mais_ronco"], "01:00")
+        self.assertEqual([h["hora"] for h in r["por_hora"]], ["01:00", "02:00"])
+        self.assertIn("erro", self.m.resumir([]))
+
+
+class TestSonar(unittest.TestCase):
+    """Sonar: detecta o tom (suporte) e o desvio Doppler de quem se mexe."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            raise unittest.SkipTest("numpy ausente")
+        cls.m = _carregar_cap("sonar")
+
+    def test_movimento_na_segunda_metade(self):
+        import numpy as np
+        T, f = 48000, 19000
+        t = np.arange(T * 10) / T
+        rng = np.random.default_rng(4)
+        x = 0.2 * np.sin(2 * np.pi * f * t) + rng.normal(0, 0.002, t.size)
+        fase = 2 * np.pi * np.cumsum(f + 60 * np.sin(2 * np.pi * 0.8 * t)) / T
+        x = x + np.where(t >= 5, 0.02 * np.sin(fase), 0)
+        r = self.m.analisar_sonar(x.astype(np.float32), f)
+        self.assertTrue(r["suporte"])
+        linha = r["linha_do_tempo_meio_s"]
+        self.assertEqual(sum(linha[:8]), 0)  # parado na 1ª metade
+        self.assertGreaterEqual(sum(linha[10:]), 8)  # mexendo na 2ª
+        self.assertFalse(self.m.analisar_sonar(rng.normal(0, 0.002, t.size).astype(np.float32), f)["suporte"])
+
+    def test_tom_sem_estalo(self):
+        tom = self.m.gerar_tom(19000, 2.0)
+        self.assertEqual(tom.dtype.name, "int16")
+        self.assertLess(abs(int(tom[0])), 50)
+        self.assertLess(abs(int(tom[-1])), 50)
+
+    def test_novas_capacidades_ativas(self):
+        s, _ = novo_servico(com_base=False)
+        nomes = {c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}
+        self.assertEqual((nomes.get("sono"), nomes.get("sonar")), ("ativa", "ativa"))
+
 if __name__ == "__main__":
     unittest.main()

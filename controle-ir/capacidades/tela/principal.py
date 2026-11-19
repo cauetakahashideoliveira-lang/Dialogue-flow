@@ -642,6 +642,8 @@ def _modelos_do_teclado(aj, reg, els, n=None, tec=None):
         return [], 0, None
     x0 = min(t[0] - t[2] // 2 for t in tec)
     x1 = max(t[0] + t[2] // 2 for t in tec)
+    m = max(100, (x1 - x0) // 10)  # longe das bordas: deslize que começa na borda é o gesto "voltar" do Android
+    x0, x1 = x0 + m, x1 - m
     y = tec[0][1]
     rola = not dado and any(e.get("rolavel") and abs(e["y"] - y) < 60 for e in els)
     paginas, total = [], 0
@@ -655,14 +657,21 @@ def _modelos_do_teclado(aj, reg, els, n=None, tec=None):
         total += len(tec)
         if not rola or (n and total >= n):
             break
-        _injetar(f"deslizar {x1 - 20} {y} {x0 + 20} {y} 450")  # próxima página do teclado
+        _injetar(f"deslizar {x1} {y} {x0} {y} 450")  # próxima página do teclado
         calma(100, 1200)
-        novo = teclado_da_grade(elementos(dump_ui(), limite=300), reg)
+        novo, prev, fim = None, None, time.time() + 1.5
+        while time.time() < fim:  # a fileira ainda pode estar rolando: duas leituras iguais seguidas
+            novo = teclado_da_grade(elementos(dump_ui(), limite=300), reg)
+            pos = [t[0] for t in novo] if novo else None
+            if pos and pos == prev:
+                break
+            prev = pos
+            time.sleep(0.1)
         if not novo or [t[0] for t in novo] == [t[0] for t in tec]:
             break  # não mudou: não há outra página
         tec = novo
     for _ in range(len(paginas) - 1):  # volta à primeira página
-        _injetar(f"deslizar {x0 + 20} {y} {x1 - 20} {y} 450")
+        _injetar(f"deslizar {x0} {y} {x1} {y} 450")
         calma(100, 1200)
     return paginas, total, (x0, x1, y)
 
@@ -687,7 +696,7 @@ def _plano(casas, sol, reg, paginas, geo, pagina_atual, intervalo, pressao):
     for p in ordem:
         while atual != p and geo:
             x0, x1, y = geo
-            d = [x1 - 20, y, x0 + 20, y, 450] if p > atual else [x0 + 20, y, x1 - 20, y, 450]
+            d = [x1, y, x0, y, 450] if p > atual else [x0, y, x1, y, 450]
             passos += [{"calma": 0.3}, {"deslizar": d, "confiar": True}, {"calma": 0.8}]
             atual += 1 if p > atual else -1
         passos.append({"tocar": por_pagina[p], "intervalo": intervalo, "pressao": pressao, "confiar": True})

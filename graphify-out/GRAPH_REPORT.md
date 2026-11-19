@@ -1,17 +1,17 @@
 # Graph Report - Dialogue-flow  (2026-11-19)
 
 ## Corpus Check
-- 70 files · ~115,832 words
+- 70 files · ~115,894 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 8 file(s) not represented in the graph (top: (none) 3, .ir 3, .gz 1)
 
 ## Summary
-- 1499 nodes · 3596 edges · 73 communities (46 shown, 27 thin omitted)
+- 1499 nodes · 3597 edges · 73 communities (46 shown, 27 thin omitted)
 - Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 280 edges (avg confidence: 0.87)
 - Token cost: 157,587 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f71d0e23`
+- Built from commit: `05de56c7`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -99,14 +99,14 @@
 10. `normalizar()` - 26 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `ampliar_catalogo()`  [INFERRED]
-  docs/estado-atual.md → controle-ir/controle_ir/cli.py
-- `3b. Gateway OAuth na borda (1.0.26, implementada)` --references--> `TestPainel`  [INFERRED]
-  docs/seguranca.md → testes/test_controle_ir.py
 - `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `Catalogo`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/catalogo.py
+- `3b. Gateway OAuth na borda (1.0.26, implementada)` --references--> `TestPainel`  [INFERRED]
+  docs/seguranca.md → testes/test_controle_ir.py
 - `variante()` --implements--> `Variante Gree a partir da captura real (troca só os bits)`  [INFERRED]
   ferramentas/gree_variante.py → docs/aparelhos/quarto/ar-do-quarto.md
+- `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `ampliar_catalogo()`  [INFERRED]
+  docs/estado-atual.md → controle-ir/controle_ir/cli.py
 - `Arquivos .ir com os sinais adicionados pelo usuário (formato Flipper)` --conceptually_related_to--> `ler_flipper()`  [INFERRED]
   docs/aparelhos/README.md → controle-ir/controle_ir/formatos.py
 
@@ -312,16 +312,16 @@ Nodes (7): js(), rodar(), analisar_sonar(), gerar_tom(), main(), testar(), volum
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `TestTelaPorArquivo` connect `TestTelaPorArquivo` to `test_controle_ir.py`?**
-  _High betweenness centrality (0.051) - this node is a cross-community bridge._
+- **Why does `Servico` connect `Servico` to `cli.py`, `servico.py`, `novo_servico`, `ErroUso`, `painel.py`, `Controlador`, `criar_servidor`, `.controlar`, `Servico`, `Execucao`, `ServidorMCP`, `ar do quarto (ar-condicionado Gree GWH09KF)`, `Registro`, `servidor.py`?**
+  _High betweenness centrality (0.059) - this node is a cross-community bridge._
 - **Are the 5 inferred relationships involving `Servico` (e.g. with `ServidorMCP` and `criar_servidor()`) actually correct?**
   _`Servico` has 5 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Versão do servidor (celular 1.0.4, repositório 1.0.5)` to the rest of the system?**
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `index.js` be split into smaller, more focused modules?**
   _Cohesion score 0.09830508474576272 - nodes in this community are weakly interconnected._
-- **Why does `Servico` connect `Servico` to `cli.py`, `servico.py`, `novo_servico`, `ErroUso`, `painel.py`, `Controlador`, `criar_servidor`, `.controlar`, `Servico`, `Execucao`, `ServidorMCP`, `ar do quarto (ar-condicionado Gree GWH09KF)`, `Registro`, `servidor.py`?**
-  _High betweenness centrality (0.035) - this node is a cross-community bridge._
+- **Why does `TestTelaPorArquivo` connect `TestTelaPorArquivo` to `test_controle_ir.py`?**
+  _High betweenness centrality (0.044) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `Descoberta` (e.g. with `Catalogo` and `ErroEmissor`) actually correct?**
   _`Descoberta` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **Should `TestPainel` be split into smaller, more focused modules?**

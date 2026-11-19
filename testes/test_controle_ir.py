@@ -1166,6 +1166,18 @@ class TestOuvirBipe(unittest.TestCase):
         x += 0.3 * np.sin(2 * np.pi * 1500 * np.arange(x.size) / 16000)  # zumbido longo (ventilador, motor)
         self.assertEqual(self.m.detectar_bipes(x), [])
 
+    def test_fala_clique_e_artefato_baixo_nao_sao_bipe(self):
+        import numpy as np
+        rng = np.random.default_rng(3)
+        x = rng.normal(0, 0.01, 16000 * 4).astype(np.float32)
+        t = np.arange(int(0.3 * 16000)) / 16000
+        x[16000:16000 + t.size] += 0.3 * sum(np.sin(2 * np.pi * 180 * k * t) / k for k in range(1, 30))  # voz
+        x[40000:40080] += 0.9  # clique
+        self.assertEqual(self.m.detectar_bipes(x), [])
+        q = rng.normal(0, 1e-4, 16000 * 4).astype(np.float32)  # sala muda + tonzinho de compressão (−57 dBFS)
+        q[20000:20800] += 0.002 * np.sin(2 * np.pi * 2300 * np.arange(800) / 16000)
+        self.assertEqual(self.m.detectar_bipes(q), [])
+
     def test_comparar_com_referencia(self):
         bipes = [{"freq_hz": 2700}, {"freq_hz": 4000}]
         self.assertEqual(self.m.comparar(bipes, {"freq_hz": 2750}), [{"freq_hz": 2700}])

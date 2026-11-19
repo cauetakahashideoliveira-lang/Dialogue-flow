@@ -28,14 +28,16 @@ import java.lang.reflect.Method;
  * cada vez; aqui a conexão com a acessibilidade fica aberta e a leitura é imediata. Os toques são injetados direto
  * (sem abrir o processo `input` a cada toque) e o texto vai pelo campo em foco (acentos funcionam).
  *
- * Comandos: ping | dump | foco | tocar X Y [ms] | deslizar X1 Y1 X2 Y2 [ms] | tecla CODIGO | texto HEX | sair.
- * Sem uso por 60 s, desconecta da acessibilidade (bateria; apps que estranham automação ligada).
+ * Comandos: ping | dump | foco | tocar X Y [ms] | deslizar X1 Y1 X2 Y2 [ms] | tecla CODIGO | texto HEX |
+ * shell HEX (roda um comando como shell, sem abrir outra conexão com o Shizuku) | sair.
+ * Sem uso por 60 s, desconecta da acessibilidade (bateria; apps que estranham automação ligada); sem uso por 5 min,
+ * encerra (o controle-ir abre de novo quando precisar).
  */
 public class Tela {
     static UiAutomation ua;
     static HandlerThread fio;
     static volatile long ultimoUso = 0;
-    static final long OCIOSO_MS = 60000;
+    static final long OCIOSO_MS = 60000, FIM_MS = 300000;
 
     public static void main(String[] args) throws Exception {
         try {  // a acessibilidade cria Handlers no laço principal: ele precisa existir (como no uiautomator)
@@ -45,13 +47,16 @@ public class Tela {
         }
         final String pasta = args.length > 0 ? args[0] : "/sdcard/Download/.controle-ir-tela";
         String token = args.length > 1 ? args[1] : "x";
+        ultimoUso = System.currentTimeMillis();
         new File(pasta, "pronto-" + token).createNewFile();
         Thread vigia = new Thread() {
             public void run() {
                 while (true) {
                     try { Thread.sleep(5000); } catch (InterruptedException e) { return; }
                     synchronized (Tela.class) {
-                        if (ua != null && System.currentTimeMillis() - ultimoUso > OCIOSO_MS) desconectar();
+                        long parado = System.currentTimeMillis() - ultimoUso;
+                        if (ua != null && parado > OCIOSO_MS) desconectar();
+                        if (parado > FIM_MS) System.exit(0);
                     }
                 }
             }
@@ -91,10 +96,15 @@ public class Tela {
     static String executar(String[] p) throws Exception {
         String c = p.length > 1 ? p[1] : "";
         if (c.equals("ping") || c.equals("sair")) return "ok";
+        if (c.equals("shell")) return shell(deHex(p.length > 2 ? p[2] : ""), p.length > 3 ? i(p[3]) : 30000);
         UiAutomation u = conectar();
         if (c.equals("dump")) return dump(u);
         if (c.equals("foco")) {
-            AccessibilityNodeInfo r = u.getRootInActiveWindow();
+            AccessibilityNodeInfo r = null;
+            for (int t = 0; t < 4 && r == null; t++) {
+                r = u.getRootInActiveWindow();
+                if (r == null) SystemClock.sleep(60);
+            }
             return r == null || r.getPackageName() == null ? "" : r.getPackageName().toString();
         }
         if (c.equals("tocar")) {
@@ -114,6 +124,38 @@ public class Tela {
     }
 
     static int i(String s) { return Integer.parseInt(s); }
+
+    // ------------------------------------------------------------------ comandos de shell (screencap, dumpsys…)
+    /** Resposta: "rc tamanho_saida\n" + saída + erros (a saída e os erros vêm separados pelo tamanho). */
+    static String shell(String cmd, int limiteMs) throws Exception {
+        final Process pr = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
+        pr.getOutputStream().close();
+        final java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(), err = new java.io.ByteArrayOutputStream();
+        Thread a = copiar(pr.getInputStream(), out), b = copiar(pr.getErrorStream(), err);
+        long fim = System.currentTimeMillis() + limiteMs;
+        int rc = -1;
+        while (true) {
+            try { rc = pr.exitValue(); break; } catch (IllegalThreadStateException e) { /* ainda rodando */ }
+            if (System.currentTimeMillis() > fim) { pr.destroy(); rc = 124; break; }
+            SystemClock.sleep(5);
+        }
+        a.join(2000);
+        b.join(2000);
+        String so = out.toString("UTF-8");
+        return rc + " " + so.length() + "\n" + so + err.toString("UTF-8");
+    }
+
+    static Thread copiar(final java.io.InputStream in, final java.io.ByteArrayOutputStream dest) {
+        Thread t = new Thread() {
+            public void run() {
+                byte[] buf = new byte[65536];
+                int n;
+                try { while ((n = in.read(buf)) > 0) dest.write(buf, 0, n); } catch (Exception e) { /* fim */ }
+            }
+        };
+        t.start();
+        return t;
+    }
 
     // ------------------------------------------------------------------ conexão com a acessibilidade
     static UiAutomation conectar() throws Exception {

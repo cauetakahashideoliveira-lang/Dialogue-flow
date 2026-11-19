@@ -783,6 +783,17 @@ class TestPainel(unittest.TestCase):
         self.assertEqual(post(corpo, {"X-Painel-Assinatura": self.assinar_req(corpo)}), 200)
 
 
+class TestImagensAninhadas(unittest.TestCase):
+    def test_imagem_dentro_de_sequencia_vira_anexo(self):
+        from controle_ir.mcp import _extrair_imagens
+        d = {"capacidade": "tela", "resultado": {"feito": "2 passos", "tela": {"app": "x",
+             "_imagem": {"mime": "image/jpeg", "base64": "QUJD"}}}}
+        imgs = _extrair_imagens(d)
+        self.assertEqual([i["data"] for i in imgs], ["QUJD"])
+        self.assertNotIn("_imagem", json.dumps(d))  # o base64 não vai no texto
+        self.assertEqual(d["resultado"]["tela"]["imagens_anexadas"], 1)
+
+
 class TestObservador(unittest.TestCase):
     """O que a Central mostra em "Agora no celular": tarefas, capacidades, câmera/microfone (AppOps)."""
 

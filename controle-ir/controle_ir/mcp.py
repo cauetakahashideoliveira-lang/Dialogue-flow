@@ -406,14 +406,25 @@ class ServidorMCP:
 
 
 def _extrair_imagens(dados) -> list[dict]:
-    """Uma capacidade pode devolver {"_imagem": {"base64", "mime"}} (ou "_imagens": [...]) no resultado: a imagem
-    sai como conteúdo de imagem do MCP, para o Claude enxergar, e o base64 some do texto."""
+    """Uma capacidade pode devolver {"_imagem": {"base64", "mime"}} (ou "_imagens": [...]) em qualquer nível do
+    resultado (ex.: resultado.tela._imagem numa sequência): a imagem sai como conteúdo de imagem do MCP, para o
+    Claude enxergar, e o base64 some do texto."""
     res = dados.get("resultado") if isinstance(dados, dict) else None
     if not isinstance(res, dict):
         return []
-    brutas = ([res.pop("_imagem")] if "_imagem" in res else []) + list(res.pop("_imagens", None) or [])
-    imagens = [{"type": "image", "data": i["base64"], "mimeType": i.get("mime") or "image/jpeg"}
-               for i in brutas if isinstance(i, dict) and i.get("base64")]
-    if imagens:
-        res["imagens_anexadas"] = len(imagens)
+    imagens = []
+
+    def varrer(d, nivel=0):
+        if not isinstance(d, dict) or nivel > 4:
+            return
+        brutas = ([d.pop("_imagem")] if "_imagem" in d else []) + list(d.pop("_imagens", None) or [])
+        novas = [{"type": "image", "data": i["base64"], "mimeType": i.get("mime") or "image/jpeg"}
+                 for i in brutas if isinstance(i, dict) and i.get("base64")]
+        if novas:
+            d["imagens_anexadas"] = len(novas)
+            imagens.extend(novas)
+        for v in list(d.values()):
+            varrer(v, nivel + 1)
+
+    varrer(res)
     return imagens

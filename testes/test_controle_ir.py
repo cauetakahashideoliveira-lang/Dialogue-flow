@@ -2531,5 +2531,26 @@ class TestPiloto(unittest.TestCase):
         self.assertEqual(len(tocados), 1)  # mesma pergunta não é respondida duas vezes
         self.assertTrue((self.tmp / "rodadas.jsonl").exists())
 
+    def test_leitura_rasgada_espera_as_opcoes_novas(self):
+        url = self._servidor_sse(["2"])
+        q1 = self.tela()
+        rasgada = self.tela(pergunta="Quantos lados tem um hexágono?")  # pergunta nova, botões ainda da anterior
+        q2 = self.tela(pergunta="Quantos lados tem um hexágono?", ops=("5", "6", "7", "8"))
+        seq = [q1] * 3 + [rasgada] * 3 + [q2] * 80
+        tocados, escolhas = [], []
+
+        def elementos():
+            return seq.pop(0) if len(seq) > 1 else seq[0]
+        f = {"aguardar": lambda c, ms: (time.sleep(0.01), c + 1)[1], "elementos": elementos,
+             "tocar": lambda x, y: tocados.append((x, y)), "bloqueado": lambda app: False}
+        p = self.m.Piloto(f)
+        p.iniciar({"cerebros": ["local"], "local_url": url, "duracao": 10, "conferir": False})
+        fim = time.time() + 4
+        while len(tocados) < 2 and time.time() < fim:
+            time.sleep(0.02)
+        p.encerrar()
+        escolhas = [r["escolha"] for r in p.estado(20)["ultimas"] if r.get("total_ms") is not None]
+        self.assertEqual(escolhas, ["Canberra", "6"])  # nada respondido com as opções velhas
+
 if __name__ == "__main__":
     unittest.main()

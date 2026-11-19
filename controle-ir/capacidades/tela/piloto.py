@@ -352,7 +352,7 @@ class Piloto:
         f, cfg = self.f, self.cfg
         prazo = max(0.3, min(float(cfg.get("prazo", 2.0)), 20))
         ignorar = tuple(cfg.get("ignorar") or ()) + IGNORAR
-        ultima, contador = None, 0
+        ultima, contador, rasgada_desde = None, 0, None
         fim = time.time() + max(10, min(float(cfg.get("duracao", 600)), 3600))
         self.estado_txt = "olhando"
         while not self.parar.is_set() and time.time() < fim:
@@ -373,6 +373,24 @@ class Piloto:
                 pergunta, opcoes = q
                 chave = chave_quiz(pergunta, opcoes)
                 if chave == ultima:
+                    continue
+                # leitura rasgada: a acessibilidade atualiza em partes (a pergunta muda antes dos botões). Pergunta e
+                # opções têm de mudar JUNTAS em relação à última respondida; se só uma mudou, espera o próximo quadro
+                # (até 400 ms — duas perguntas seguidas podem ter as mesmas opções de verdade).
+                if ultima and rasgada_desde is None:
+                    p_ant, o_ant = ultima.split(" || ", 1)
+                    p_agora, o_agora = chave.split(" || ", 1)
+                    if (p_ant == p_agora) != (o_ant == o_agora):
+                        rasgada_desde = time.time()
+                        continue
+                elif rasgada_desde is not None and time.time() - rasgada_desde < 0.4:
+                    p_ant, o_ant = ultima.split(" || ", 1)
+                    p_agora, o_agora = chave.split(" || ", 1)
+                    if (p_ant == p_agora) != (o_ant == o_agora):
+                        continue
+                rasgada_desde = None
+                q2 = quiz_da_tela(f["elementos"](), ignorar)  # confirmação: duas leituras iguais seguidas
+                if not q2 or chave_quiz(*q2) != chave:
                     continue
                 t_lido = time.time()
                 idx, fonte, seg, erros = self.cerebros.decidir(pergunta, opcoes, prazo)

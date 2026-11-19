@@ -5,6 +5,17 @@
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
+- **19/11 — PENDENTE (continuar numa conversa nova):**
+  1. Agente de tela: capacidade `tela` pronta no GitHub (commit bb75d15), **não instalada**. O usuário está
+     configurando o Shizuku (opções do desenvolvedor, Depuração USB + "Depuração USB (Configurações de
+     segurança)" do Xiaomi + Depuração sem fio, parear e Iniciar, exportar o rish para Downloads). Depois:
+     copiar `~/storage/downloads/rish` e `rish_shizuku.dex` para `~/.controle-ir/rish/` (chmod 700 no rish,
+     400 no .dex), empacotar, publicar e `atualizar_sistema`, e testar `tela` (estado → ver → abrir
+     com.android.settings). O pacote novo leva junto o recorte da `foto`: **perguntar ao usuário antes** (ele
+     pediu para só subir o recorte quando pedir).
+  2. Autorizações: o usuário liberou na organização, mas a conversa antiga continuou com `org_ask_ceiling`
+     (provavelmente a regra é lida no início da conversa). Conferir numa conversa nova.
+  3. Foto de perto do visor do ar do quarto (1–1,5 m) para ler os dígitos.
 - **19/11 — confirmação automática (1.0.16–1.0.17 no celular):** numpy 2.5.5 e ffmpeg 9.0.2 instalados; espelho
   de pacotes trocado do `mirrors.cqupt.edu.cn` (55 KB/s) para o oficial `packages-cf.termux.dev` (6 MB/s; cópia
   em `~/.controle-ir/sources.list.antes`). Microfone e câmera do Termux:API liberados pelo usuário.

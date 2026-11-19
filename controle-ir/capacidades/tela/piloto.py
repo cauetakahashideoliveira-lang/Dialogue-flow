@@ -137,38 +137,37 @@ class Conexao:
             self.trava.release()
 
     def _post(self, caminho, corpo, cabecalhos, ao_texto):
-        if True:
-            for tentativa in range(2):
-                try:
-                    if self.c is None:
-                        self._abrir()
-                    self.c.request("POST", caminho, body=json.dumps(corpo).encode(), headers=cabecalhos)
-                    r = self.c.getresponse()
-                    if r.status != 200:
-                        txt = r.read()[:300].decode(errors="replace")
-                        raise RuntimeError(f"HTTP {r.status}: {txt}")
-                    while True:
-                        linha = r.readline()
-                        if not linha:
-                            break
-                        linha = linha.decode(errors="replace").strip()
-                        if not linha.startswith("data:"):
-                            continue
-                        dado = linha[5:].strip()
-                        if dado == "[DONE]":
-                            break
-                        try:
-                            ev = json.loads(dado)
-                        except ValueError:
-                            continue
-                        pedaco = _texto_do_evento(ev)
-                        if pedaco:
-                            ao_texto(pedaco)
-                    return
-                except (OSError, http.client.HTTPException):
-                    self.fechar()
-                    if tentativa:
-                        raise
+        for tentativa in range(2):
+            try:
+                if self.c is None:
+                    self._abrir()
+                self.c.request("POST", caminho, body=json.dumps(corpo).encode(), headers=cabecalhos)
+                r = self.c.getresponse()
+                if r.status != 200:
+                    txt = r.read()[:300].decode(errors="replace")
+                    raise RuntimeError(f"HTTP {r.status}: {txt}")
+                while True:
+                    linha = r.readline()
+                    if not linha:
+                        break
+                    linha = linha.decode(errors="replace").strip()
+                    if not linha.startswith("data:"):
+                        continue
+                    dado = linha[5:].strip()
+                    if dado == "[DONE]":
+                        break
+                    try:
+                        ev = json.loads(dado)
+                    except ValueError:
+                        continue
+                    pedaco = _texto_do_evento(ev)
+                    if pedaco:
+                        ao_texto(pedaco)
+                return
+            except (OSError, http.client.HTTPException):
+                self.fechar()
+                if tentativa:
+                    raise
 
     def aquecer(self):
         with self.trava:
@@ -211,9 +210,15 @@ class Cerebros:
         self.memoria = carregar_memoria()
 
     def aquecer(self):
+        """Abre as conexões e, no modelo local, processa a política uma vez (fica no cache: a 1ª pergunta de
+        verdade não paga os ~2 s de aquecimento)."""
         for c in (self.api, self.local):
             if c:
                 threading.Thread(target=c.aquecer, daemon=True).start()
+        if self.local:
+            ops = [{"texto": "sim"}, {"texto": "não"}]
+            threading.Thread(target=self._local, args=("Aquecimento: responda 1.", ops, queue.Queue(), time.time()),
+                             daemon=True).start()
 
     def _api(self, pergunta, opcoes, fila, t0):
         chave = ler_chave()

@@ -156,7 +156,7 @@ def rish(cmd, timeout=20):
     remoto = (f"mkdir -p {shlex.quote(pasta)}; ( {cmd} ) > {shlex.quote(saida)} 2> {shlex.quote(erros)}; "
               f"echo $? > {shlex.quote(codigo)}")
     try:
-        r = subprocess.run(["sh", RISH, "-c", remoto], capture_output=True, timeout=timeout, env=env)
+        r = subprocess.run(["sh", RISH, "-c", remoto], capture_output=True, timeout=timeout, env=env, check=False)
         out, err, rc = _ler(saida), _ler(erros), _ler(codigo)
     finally:
         _apagar(saida, erros, codigo)
@@ -172,8 +172,10 @@ def rish(cmd, timeout=20):
 
 
 def _bloqueio_de_toque(err, cod):
-    """A Xiaomi bloqueia `input` sem a opção 'Depuração USB (Configurações de segurança)'."""
-    if "INJECT_EVENTS" in err or "SecurityException" in err:
+    """A Xiaomi bloqueia `input` sem a opção 'Depuração USB (Configurações de segurança)'. `err`: saída + erros."""
+    # no HyperOS o bloqueio aparece como "cmd: Failure calling service input: Failed transaction (2147483646)"
+    if any(t in err for t in ("INJECT_EVENTS", "SecurityException", "Failure calling service input",
+                              "Failed transaction")):
         return ("a Xiaomi bloqueou o toque: ligue 'Depuração USB (Configurações de segurança)' nas Opções do "
                 "desenvolvedor e toque em Iniciar de novo no Shizuku")
     if cod != 0:
@@ -228,7 +230,7 @@ def captura(largura):
             return None, None
         for q in (6, 10, 16):
             subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", png, "-vf", f"scale='min({largura},iw)':-2",
-                            "-q:v", str(q), jpg], capture_output=True, timeout=30)
+                            "-q:v", str(q), jpg], capture_output=True, timeout=30, check=False)
             if os.path.exists(jpg) and os.path.getsize(jpg) <= 110_000:
                 break
         if not os.path.exists(jpg):
@@ -273,32 +275,32 @@ def agir(a):
             x, y = alvo["x"], alvo["y"]
         if x is None or y is None:
             return {"erro": "informe x e y, ou texto"}
-        _, err, cod = rish(f"input tap {int(x)} {int(y)}")
-        if _bloqueio_de_toque(err, cod):
-            return {"erro": _bloqueio_de_toque(err, cod)}
+        out, err, cod = rish(f"input tap {int(x)} {int(y)}")
+        if _bloqueio_de_toque(out + err, cod):
+            return {"erro": _bloqueio_de_toque(out + err, cod)}
         res = {"feito": f"toque em {int(x)},{int(y)}", "elemento": alvo}
     elif acao == "digitar":
         texto, aviso = escapar_input_text(a.get("texto", ""))
         if not texto:
             return {"erro": "nada para digitar"}
-        _, err, cod = rish("input text " + shlex.quote(texto))
-        if _bloqueio_de_toque(err, cod):
-            return {"erro": _bloqueio_de_toque(err, cod)}
+        out, err, cod = rish("input text " + shlex.quote(texto))
+        if _bloqueio_de_toque(out + err, cod):
+            return {"erro": _bloqueio_de_toque(out + err, cod)}
         res = {"feito": f"digitado ({len(a.get('texto', ''))} caracteres)", "aviso": aviso}
     elif acao == "tecla":
         cod = TECLAS.get(normalizar(a.get("tecla")))
         if cod is None:
             return {"erro": f"tecla deve ser uma de: {', '.join(TECLAS)}"}
-        _, err, rc = rish(f"input keyevent {cod}")
-        if _bloqueio_de_toque(err, rc):
-            return {"erro": _bloqueio_de_toque(err, rc)}
+        out, err, rc = rish(f"input keyevent {cod}")
+        if _bloqueio_de_toque(out + err, rc):
+            return {"erro": _bloqueio_de_toque(out + err, rc)}
         res = {"feito": f"tecla {a['tecla']}"}
     elif acao == "deslizar":
         if None in (a.get("x"), a.get("y"), a.get("x2"), a.get("y2")):
             return {"erro": "informe x, y, x2, y2"}
-        _, err, cod = rish(f"input swipe {int(a['x'])} {int(a['y'])} {int(a['x2'])} {int(a['y2'])} 350")
-        if _bloqueio_de_toque(err, cod):
-            return {"erro": _bloqueio_de_toque(err, cod)}
+        out, err, cod = rish(f"input swipe {int(a['x'])} {int(a['y'])} {int(a['x2'])} {int(a['y2'])} 350")
+        if _bloqueio_de_toque(out + err, cod):
+            return {"erro": _bloqueio_de_toque(out + err, cod)}
         res = {"feito": "deslizou"}
     elif acao == "abrir":
         pac = a.get("pacote") or ""

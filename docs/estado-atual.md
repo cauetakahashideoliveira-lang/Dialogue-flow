@@ -1,13 +1,17 @@
 # Estado atual da instalação (19/11/2026)
 
 ## Resumo (fim do dia 19/11)
-- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.18** no ar
-  desde 22:54. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar Controle IR").
+- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.21** (19/11
+  de manhã), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
+  Controle IR").
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz. Catálogo: base + ampliado (Flipper-IRDB completa) = 9.380
   perfis, 94.407 sinais únicos, 1.776 marcas. (Termux precisou de `apt update && apt full-upgrade` no início.)
 - **Capacidades instaladas:** estado_celular, diagnostico_rede, descobrir_rede, ouvir_bipe (+ `controlar(ouvir=true)`),
-  foto (com recorte por alvo), termometro, tela (falta o Shizuku). **No GitHub, não instaladas:** sono e sonar
-  (1.0.19, commit 5f07335).
+  foto (com recorte por alvo), termometro, tela, sono e sonar (sono e sonar ainda sem teste no aparelho).
+- **Shizuku** 13.x por depuração sem fio, `rish` em `~/.controle-ir/rish/`. Tela: **ver e abrir apps funcionam**;
+  tocar/digitar/teclas ficam bloqueados pela Xiaomi ("Failure calling service input: Failed transaction") até ligar
+  "Depuração USB (Configurações de segurança)" e reiniciar o Shizuku. Depois de reiniciar o celular, tocar em Iniciar
+  no Shizuku de novo.
 - **Pacotes no Termux:** numpy 2.5.5, ffmpeg 9.0.2, nmap 7.993. Espelho de pacotes: oficial
   `packages-cf.termux.dev` (cópia do antigo em `~/.controle-ir/sources.list.antes`).
 - **Permissões do Android dadas:** microfone e câmera do Termux:API.
@@ -16,16 +20,14 @@
 - **Conector:** os pedidos de aprovação vêm da regra da organização no claude.ai (`org_ask_ceiling`), não do
   projeto nem do celular. O usuário liberou em 19/11; conferir numa conversa nova.
 - **Repositório:** a branch padrão é `claude/ir-control-poco-setup-u46urr` (não existe `main`). O trabalho de 19/11
-  está na branch `ccr-045ba202-fbl2x4` (37 commits à frente da padrão). 91 testes. PR #5 (hook que instala o
+  está na branch `ccr-045ba202-fbl2x4` (bem à frente da padrão). 113 testes (com os 18 da god-mode). PR #5 (hook que instala o
   graphify e o numpy nas sessões na nuvem) aberto contra a padrão.
 
 ## Pendências (próxima conversa)
-1. **Shizuku** (o usuário ativa em 20/11; foi o que mais o interessou): opções do desenvolvedor, Depuração USB +
-   "Depuração USB (Configurações de segurança)" do Xiaomi + Depuração sem fio, parear e Iniciar, exportar o rish
-   para Download. Depois: copiar `~/storage/downloads/rish` e `rish_shizuku.dex` para `~/.controle-ir/rish/`
-   (chmod 700 no rish, 400 no .dex), testar `tela` (estado → ver → abrir com.android.settings) e usar pelo Gênio.
-2. **Instalar a 1.0.19** (sono e sonar) com `atualizar_sistema` (uma aprovação) e testar o sonar (parado, depois
-   mexendo o braço) e uma noite do laboratório do sono.
+1. **Shizuku — falta o toque:** ligar "Depuração USB (Configurações de segurança)" (pede conta Xiaomi) e tocar em
+   Iniciar no Shizuku; testar `tela tocar` (ex.: Configurações → Bateria) e depois usar pelo Gênio. Com o Shizuku dá
+   para ler `dumpsys battery`/`batterystats` (capacidade real da bateria).
+2. **Testar sono e sonar** (instalados na 1.0.20): o sonar parado e mexendo o braço; uma noite do laboratório do sono.
 3. **Autorizações:** numa conversa nova, rodar algo simples no celular e ver se ainda pede aprovação.
 4. **Termômetro:** calibrar com uma temperatura real. **Ouvido do ar:** testar ligar/desligar de verdade (pedir
    antes de desligar o ar). O Gree do quarto não deu bipe audível em 3 tentativas.
@@ -36,6 +38,13 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 (manhã) — Shizuku e agente de tela:** Shizuku 13 instalado e iniciado por depuração sem fio; `rish`
+  exportado para Download/shizuku (o Android não deixa usar a raiz de Download) e copiado para
+  `~/.controle-ir/rish/` (PKG → com.termux, .dex 400). O cano do rish cortava saídas (PNG com 28 KB de 317 KB, `id`
+  vazio): a **1.0.20** troca tudo por arquivo em `Download/.controle-ir-tela` (oculta, `.nomedia`, apagado na hora) e
+  a **1.0.21** reconhece o bloqueio de toque do HyperOS. Ver a tela (captura + 34 elementos) e abrir as
+  Configurações funcionaram. O túnel caiu duas vezes durante a configuração (reconectou sozinho uma vez; na outra,
+  `controle-ir desligar; pkill ngrok; controle-ir ligar`).
 - **19/11 (manhã) — Noite com o serviço ligado sem uso:** o servidor ficou no ar desde 18/11 22:54, sem reiniciar
   (o HyperOS não derrubou), e o usuário viu **gasto mínimo de bateria**. De manhã: 49%, descarregando, 26,6 °C,
   CPU parada (carga 0). Decisão do usuário: **pode ficar ligado o tempo todo** (antes ligava só para usar).

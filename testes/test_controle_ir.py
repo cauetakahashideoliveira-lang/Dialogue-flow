@@ -1336,8 +1336,10 @@ class TestTelaPorArquivo(unittest.TestCase):
         bin_ = self.tmp / "bin"
         bin_.mkdir()
         (bin_ / "uiautomator").write_text(f'cat > "$2" <<\'FIM\'\n{TestTela.XML}\nFIM\necho "UI hierchary dumped to: $2"\n')
-        (bin_ / "input").write_text('if [ -n "$BLOQUEAR_INPUT" ]; then echo "java.lang.SecurityException: Injecting '
+        (bin_ / "input").write_text('if [ "$BLOQUEAR_INPUT" = 1 ]; then echo "java.lang.SecurityException: Injecting '
                                     'to another application requires INJECT_EVENTS permission" >&2; exit 1; fi\n'
+                                    'if [ "$BLOQUEAR_INPUT" = 2 ]; then echo "cmd: Failure calling service input: '
+                                    'Failed transaction (2147483646)"; exit 2; fi\n'
                                     'echo "input $*" >> "$REGISTRO_INPUT"\n')
         for f in bin_.iterdir():
             f.chmod(0o755)
@@ -1366,9 +1368,10 @@ class TestTelaPorArquivo(unittest.TestCase):
         r = self.m.agir({"acao": "tocar", "texto": "bluetooth"})
         self.assertEqual(r["feito"], "toque em 220,450")
         self.assertIn("input tap 220 450", self.registro.read_text())
-        with mock.patch.dict(os.environ, {"BLOQUEAR_INPUT": "1"}):
-            r = self.m.agir({"acao": "tecla", "tecla": "voltar"})
-        self.assertIn("Configurações de segurança", r["erro"])
+        for modo in ("1", "2"):  # SecurityException (MIUI) e "Failed transaction" (HyperOS 3 no POCO)
+            with mock.patch.dict(os.environ, {"BLOQUEAR_INPUT": modo}):
+                r = self.m.agir({"acao": "tecla", "tecla": "voltar"})
+            self.assertIn("Configurações de segurança", r["erro"], modo)
         self.assertEqual(self._sobras(), [])
 
     def test_captura_por_arquivo(self):

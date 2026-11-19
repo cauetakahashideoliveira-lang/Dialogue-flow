@@ -11,6 +11,7 @@ import android.os.SystemClock;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.io.BufferedReader;
@@ -32,6 +33,9 @@ import java.lang.reflect.Method;
  * Comandos: ping | dump | foco | estado (pacote em foco e tela acesa, sem shell) | tocar X Y [ms] |
  * toques PAUSA_MS X1 Y1 X2 Y2… (vários toques num pedido só) | deslizar X1 Y1 X2 Y2 [ms] | tecla CODIGO | texto HEX |
  * calma QUIETO_MS LIMITE_MS (espera a tela parar de mudar; responde "ok MS" ou "tempo MS") |
+ * eventos (contadores de janelas novas e de mudanças, e a última janela: "J M pacote|classe|texto") |
+ * toquesv PAUSA_MS X1 Y1… (como toques, mas para se surgir uma janela nova: "parou K pacote|classe|texto") |
+ * aguardar M LIMITE_MS (espera o contador de mudanças sair de M; responde o contador atual) |
  * shell HEX (roda um comando como shell, sem abrir outra conexão com o Shizuku) |
  * foto LARGURA LIMITE_BYTES CAMINHO [X Y L A] (JPEG reduzido direto da acessibilidade, sem PNG nem ffmpeg) | sair.
  * Sem uso por 60 s, desconecta da acessibilidade (bateria; apps que estranham automação ligada); sem uso por 5 min,
@@ -41,6 +45,9 @@ public class Tela {
     static UiAutomation ua;
     static HandlerThread fio;
     static volatile long ultimoUso = 0;
+    // reflexos: contadores atualizados pelos eventos da acessibilidade (no fio dela, sem a trava dos comandos)
+    static volatile int janelas = 0, mudancas = 0;
+    static volatile String ultimaJanela = "||";
     static final long OCIOSO_MS = 60000, FIM_MS = 300000;
 
     public static void main(String[] args) throws Exception {
@@ -117,6 +124,25 @@ public class Tela {
             }
             return "ok";
         }
+        if (c.equals("eventos")) return janelas + " " + mudancas + " " + ultimaJanela;
+        if (c.equals("toquesv")) {
+            int pausa = Math.max(0, Math.min(i(p[2]), 5000));
+            int base = janelas, feitos = 0;
+            for (int k = 3; k + 1 < p.length; k += 2) {
+                if (k > 3 && pausa > 0) SystemClock.sleep(pausa);
+                if (janelas != base) return "parou " + feitos + " " + ultimaJanela;
+                tocar(u, i(p[k]), i(p[k + 1]), 30);
+                feitos++;
+            }
+            SystemClock.sleep(Math.max(pausa, 30));  // o efeito do último toque também conta
+            return janelas != base ? "parou " + feitos + " " + ultimaJanela : "ok";
+        }
+        if (c.equals("aguardar")) {
+            int m = i(p[2]);
+            long fim = SystemClock.uptimeMillis() + Math.max(10, Math.min(i(p[3]), 30000));
+            while (mudancas == m && SystemClock.uptimeMillis() < fim) SystemClock.sleep(10);
+            return String.valueOf(mudancas);
+        }
         if (c.equals("calma")) {
             long t0 = SystemClock.uptimeMillis();
             try {
@@ -143,6 +169,12 @@ public class Tela {
     }
 
     static int i(String s) { return Integer.parseInt(s); }
+
+    static String limpo(CharSequence cs, int max) {
+        if (cs == null) return "";
+        String t = cs.toString().replace('|', '/').replace('\n', ' ').replace('\r', ' ');
+        return t.length() > max ? t.substring(0, max) : t;
+    }
 
     static String foco(UiAutomation u) {
         AccessibilityNodeInfo r = null;
@@ -239,6 +271,17 @@ public class Tela {
                     | AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
             u.setServiceInfo(info);
         }
+        u.setOnAccessibilityEventListener(new UiAutomation.OnAccessibilityEventListener() {
+            public void onAccessibilityEvent(AccessibilityEvent e) {
+                mudancas++;
+                if (e.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                    String t = "";
+                    if (e.getText() != null && !e.getText().isEmpty() && e.getText().get(0) != null) t = e.getText().get(0).toString();
+                    ultimaJanela = limpo(e.getPackageName(), 80) + "|" + limpo(e.getClassName(), 120) + "|" + limpo(t, 80);
+                    janelas++;
+                }
+            }
+        });
         ua = u;
         return u;
     }

@@ -1753,6 +1753,7 @@ if {quebrado!r}:
 open(os.path.join(pasta, "pronto-" + token), "w").close()
 xml = {TestTela.XML!r}
 reg = os.environ["REGISTRO_INPUT"]
+cont = 0
 for linha in sys.stdin:
     p = linha.split()
     if not p:
@@ -1768,6 +1769,18 @@ for linha in sys.stdin:
     elif cmd == "calma":
         open(reg, "a").write("leitor " + " ".join(p[1:]) + "\\n")
         r = "ok 3"
+    elif cmd == "eventos":
+        cont += 1
+        r = f"0 {{cont}} com.android.settings|com.android.settings.Principal|"
+    elif cmd == "toquesv":
+        open(reg, "a").write("leitor " + " ".join(p[1:]) + "\\n")
+        parar = os.path.join(os.path.dirname(reg), "parar.txt")
+        r = "ok"
+        if os.path.exists(parar):
+            r = "parou 1 " + open(parar).read().strip()
+            os.remove(parar)
+    elif cmd == "aguardar":
+        r = str(int(p[2]) + 1)
     elif cmd == "shell":
         pr = subprocess.run(["sh", "-c", bytes.fromhex(p[2]).decode()], capture_output=True, text=True)
         r = f"{{pr.returncode}} {{len(pr.stdout)}}\\n" + pr.stdout + pr.stderr
@@ -1860,6 +1873,40 @@ for linha in sys.stdin:
         r = self.m.agir({"acao": "sequencia", "passos": [{"repetir": [{"repetir": [{"repetir": [{"repetir": [
             {"repetir": [{"tocar": [1, 1]}]}]}]}]}]}]})
         self.assertIn("aninhados", r["erro"])
+
+    def test_reflexo_para_quando_surge_outra_janela(self):
+        self._leitor_falso()
+        (self.tmp / "parar.txt").write_text("com.anuncios|com.anuncios.AdActivity|Anúncio")
+        r = self.m.agir({"acao": "sequencia", "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}, {"tocar": [9, 9]}]})
+        self.assertIn("janela nova", r["interrompido"])
+        self.assertIn("AdActivity", r["interrompido"])
+        self.assertIn("depois de 1 de 3 toques", r["interrompido"])
+        self.assertNotIn(" 9 9", self.registro.read_text())  # o passo seguinte não saiu
+        self.assertIn("tela", r)  # e já vem o que está na tela para decidir de novo
+
+    def test_reflexo_segue_se_e_a_mesma_tela(self):
+        self._leitor_falso()
+        (self.tmp / "parar.txt").write_text("com.android.settings|com.android.settings.Principal|")
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}]})
+        self.assertNotIn("interrompido", r)
+        log = self.registro.read_text()
+        self.assertIn("leitor toquesv 50 1 1 2 2 3 3", log)
+        self.assertIn("leitor toquesv 50 2 2 3 3", log)  # retomou de onde parou
+
+    def test_reflexo_por_texto_e_espera_de_mudanca(self):
+        self._leitor_falso()
+        r = self.m.agir({"acao": "sequencia", "parar_se": ["bluetooth"], "ver_depois": "nada",
+                         "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}]})
+        self.assertIn("Bluetooth", r["interrompido"])
+        self.assertEqual(r["elemento"]["x"], 220)
+        self.assertNotIn(" 3 3", self.registro.read_text())  # parou depois do 1º pedaço de 2 toques
+        t = time.time()
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [{"esperar_mudanca": 0.3}]})
+        self.assertGreaterEqual(time.time() - t, 0.25)  # nada mudou: esperou o prazo e seguiu
+        self.assertIn("1 passos", r["feito"])
+        self.assertTrue(self.m.janela_nova("a|A|", "b|B|"))
+        self.assertFalse(self.m.janela_nova("a|A|", "a|A|outro"))
+        self.assertFalse(self.m.janela_nova("a|A|", "teclado|android.inputmethodservice.SoftInputWindow|"))
 
     def test_leitor_recusa_app_bloqueado(self):
         foco = self.tmp / "foco.txt"

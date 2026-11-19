@@ -1,7 +1,7 @@
 {
  "nome": "tela",
  "titulo": "Agente de tela (ver e tocar no celular)",
- "descricao": "Vê e opera a tela do celular pelo Shizuku, sem root. CICLO RÁPIDO: toda ação (tocar/digitar/tecla/deslizar/sequencia) espera a tela assentar e devolve só o que MUDOU desde a última olhada (ver_depois='mudancas', padrão com o leitor rápido: entrou/saiu/mudou com o valor anterior; tela nova → lista inteira); ver_depois='imagem' inclui a captura, 'nada' só o app. acao=sequencia com 'passos' faz tudo numa chamada, injetado direto (ms por toque): {tocar:[x,y]|[[x,y],...]|'texto', intervalo:s, segurar:ms}, {deslizar:[x,y,x2,y2,ms]}, {digitar:'...'}, {tecla:'voltar'}, {esperar:s}, {calma:s} (até a tela parar), {esperar_texto|esperar_sumir:'...', ate:s}, {abrir:'pacote'}, condições no próprio celular {se|se_nao:'texto', entao:[...], senao:[...]} e laços {repetir:[...], vezes:N, ate_texto|ate_sumir:'...'}. acao=ver: elementos (texto, id, clicável, marcado, selecionado, rolável, centro x,y) e captura; so_mudancas=true só a diferença; recorte=[x,y,l,a] para ver um pedaço nítido. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução.",
+ "descricao": "Vê e opera a tela do celular pelo Shizuku, sem root. CICLO RÁPIDO: toda ação (tocar/digitar/tecla/deslizar/sequencia) espera a tela assentar e devolve só o que MUDOU desde a última olhada (ver_depois='mudancas', padrão com o leitor rápido: entrou/saiu/mudou com o valor anterior; tela nova → lista inteira); ver_depois='imagem' inclui a captura, 'nada' só o app. acao=sequencia com 'passos' faz tudo numa chamada, injetado direto (ms por toque): {tocar:[x,y]|[[x,y],...]|'texto', intervalo:s, segurar:ms}, {deslizar:[x,y,x2,y2,ms]}, {digitar:'...'}, {tecla:'voltar'}, {esperar:s}, {calma:s} (até a tela parar), {esperar_texto|esperar_sumir:'...', ate:s}, {esperar_mudanca:s, ignorar:[ids/textos]} (fica olhando até a tela mudar de verdade), {abrir:'pacote'}, condições no próprio celular {se|se_nao:'texto', entao:[...], senao:[...]} e laços {repetir:[...], vezes:N, ate_texto|ate_sumir:'...'}. acao=ver: elementos (texto, id, clicável, marcado, selecionado, rolável, centro x,y) e captura; so_mudancas=true só a diferença; recorte=[x,y,l,a] para ver um pedaço nítido. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução. REFLEXO: numa leva de toques, se surgir uma janela nova (aviso, anúncio, fim de jogo, outro app) o celular para na hora, sem os toques restantes, e a resposta traz 'interrompido' com o que apareceu (parar_em_janela=true vigia também entre os passos; false desliga); parar_se=['texto',...] para quando algum desses textos aparecer.",
  "executar": "principal.py",
  "efeito": "acao",
  "acessos": [
@@ -86,6 +86,17 @@
    "so_mudancas": {
     "type": "boolean",
     "description": "ver: só o que mudou desde a última olhada"
+   },
+   "parar_se": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "sequencia: para quando algum destes textos aparecer na tela"
+   },
+   "parar_em_janela": {
+    "type": "boolean",
+    "description": "sequencia: parar se surgir janela nova também entre os passos (padrão: só no meio de levas de toques; false desliga)"
    }
   },
   "required": [

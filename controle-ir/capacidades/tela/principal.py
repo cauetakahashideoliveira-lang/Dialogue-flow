@@ -384,6 +384,33 @@ def calma(quieto=120, limite=1000):
         return None
 
 
+def eventos():
+    """(janelas novas, mudanças, "pacote|classe|texto" da última janela) contados pelo leitor; None sem ele."""
+    a = _ajudante()
+    if not a:
+        return None
+    r = a.pedir("eventos", 6)
+    try:
+        j, m, ultima = r.split(" ", 2)
+        return int(j), int(m), ultima.strip()
+    except (AttributeError, ValueError):
+        return None
+
+
+TECLADO = re.compile(r"SoftInputWindow|InputMethod", re.I)
+
+
+def janela_nova(antes, depois, app=None):
+    """A janela que surgiu é outra coisa (aviso, anúncio, outro app), e não a mesma tela se anunciando de novo?"""
+    pa, ca = (antes.split("|") + ["", ""])[:2]
+    pd, cd = (depois.split("|") + ["", ""])[:2]
+    if (pd, cd) == (pa, ca) or TECLADO.search(cd):
+        return False
+    if not ca:  # sem referência da janela de antes: só o que claramente é outra coisa
+        return bool(pd != (app or pd) or re.search(r"Dialog|Popup|Alert|Sheet|Window", cd))
+    return True
+
+
 def tela_acesa():
     out, _, _ = rish("dumpsys power | grep -m1 mWakefulness=")
     return "Awake" in out if out else None
@@ -672,7 +699,7 @@ def _linhas_do_passo(p):
         if not re.match(r"^[A-Za-z][\w.]{2,120}$", pac):
             raise ValueError("pacote inválido")
         return [f"monkey -p {pac} -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1 || exit 4", "sleep 1"]
-    if any(k in p for k in ("esperar_texto", "esperar_sumir", "se", "se_nao", "repetir", "calma")):
+    if any(k in p for k in ("esperar_texto", "esperar_sumir", "se", "se_nao", "repetir", "calma", "esperar_mudanca")):
         return None
     raise ValueError(f"passo desconhecido: {json.dumps(p, ensure_ascii=False)[:80]}")
 
@@ -698,6 +725,14 @@ class _Falha(Exception):
     def __init__(self, info):
         super().__init__(info.get("erro"))
         self.info = info
+
+
+class _Interrompido(Exception):
+    """O reflexo parou a sequência: apareceu algo na tela. Não é erro: é a hora de olhar e decidir de novo."""
+
+    def __init__(self, motivo, elemento):
+        super().__init__(motivo)
+        self.motivo, self.elemento = motivo, elemento
 
 
 RECUSA = "recusado: o app em foco está na lista de bloqueados (banco/pagamento/senha)"
@@ -729,6 +764,9 @@ class _Executor:
         self.prazo = self.t0 + PRAZO_SEQUENCIA
         self.app, self.app_em = None, 0.0
         self.t_esperas = 0.0
+        self.parar_se = []
+        self.parar_em_janela = None  # None: só no meio de levas de toques; True: também entre passos; False: nunca
+        self.janela = None  # "pacote|classe|texto" da janela no começo (referência do reflexo)
 
     # --- utilidades
     def descarregar(self):
@@ -751,6 +789,60 @@ class _Executor:
     def presente(self, texto):
         return achar(self.ver_elementos(), texto) is not None
 
+    def checar_texto(self, onde):
+        """Reflexo: algum dos textos de parar_se apareceu? Interrompe e devolve o que surgiu."""
+        if not self.parar_se:
+            return
+        els = self.ver_elementos()
+        for t in self.parar_se:
+            e = achar(els, t)
+            if e:
+                raise _Interrompido(f"apareceu “{e.get('texto') or e.get('desc') or t}” ({onde})", compactos([e])[0])
+
+    def checar_janela(self, info, onde):
+        if self.janela is not None and janela_nova(self.janela, info, self.app):
+            pac, cls, txt = (info.split("|") + ["", "", ""])[:3]
+            raise _Interrompido(f"surgiu uma janela nova ({onde}): {pac} {cls.split('.')[-1]}"
+                                + (f" «{txt}»" if txt else ""), None)
+
+    def tocar_vigiando(self, pontos, pausa, onde):
+        """Toques em leva que param na hora se surgir outra janela (aviso, anúncio, fim de jogo) ou um texto de
+        parar_se. Com parar_se, a leva vai em pedaços de 2 toques e a tela só é lida se algo mudou."""
+        self.conferir_app()
+        pedaco = 2 if self.parar_se else len(pontos)
+        k, reanuncios = 0, 0
+        while k < len(pontos):
+            ev = eventos() if self.parar_se else None
+            parte = pontos[k:k + pedaco]
+            # a mesma tela se anunciando sem parar (animação): o resto da leva vai sem o reflexo de janela
+            cmd = "toquesv" if self.parar_em_janela is not False and reanuncios < 20 else "toques"
+            r = (self.injetar_cru(f"{cmd} {int(pausa * 1000)} " + " ".join(f"{x} {y}" for x, y in parte)))
+            if r is None:  # leitor caiu: o resto pelo shell, sem reflexo
+                linhas = []
+                for x, y in pontos[k:]:
+                    linhas += [f"input tap {x} {y} || exit 3"] + ([f"sleep {pausa:.2f}"] if pausa else [])
+                self.bloco += linhas
+                self.descarregar()
+                return
+            if r.startswith("parou"):
+                _, n, info = (r.split(" ", 2) + ["", ""])[:3]
+                k += int(n)
+                self.checar_janela(info, f"{onde}, depois de {k} de {len(pontos)} toques")
+                self.janela = info  # a mesma tela se anunciando de novo: segue
+                reanuncios += 1
+                if time.time() > self.prazo:
+                    raise _Falha({"erro": f"a sequência passou de {PRAZO_SEQUENCIA} s"})
+                continue
+            k += len(parte)
+            if self.parar_se and ev is not None:
+                depois = eventos()
+                if depois is None or depois[1] != ev[1]:
+                    self.checar_texto(f"{onde}, depois de {k} de {len(pontos)} toques")
+
+    def injetar_cru(self, comando):
+        a = _ajudante()
+        return a.pedir(comando, 60) if a else None
+
     def injetar(self, comando, linhas):
         """Pelo leitor (conferindo o app antes); se ele não responder, pelo shell (que confere o app no script).
         Sem o leitor, as linhas entram na fila do shell e saem juntas antes da próxima leitura da tela."""
@@ -762,6 +854,28 @@ class _Executor:
             self.descarregar()
             return
         self.bloco += linhas
+
+    def esperar_mudanca(self, segundos, ignorar):
+        """Fica olhando até a tela mudar de verdade (fora do que estiver em `ignorar`: ids ou textos, ex. um relógio)."""
+        t0 = time.time()
+        fim = t0 + segundos
+        ign = [normalizar(i) for i in ignorar]
+
+        def relevantes():
+            return [e for e in compactos(self.ver_elementos())
+                    if not any(i and (i == normalizar(e.get("id")) or i in normalizar(e.get("texto"))) for i in ign)]
+
+        base = relevantes()
+        while time.time() < fim:
+            ev = eventos()
+            if ev is not None:
+                self.injetar_cru(f"aguardar {ev[1]} {int(max(0.05, fim - time.time()) * 1000)}")
+            else:
+                time.sleep(0.4)
+            agora = relevantes()
+            if agora != base:
+                break
+        self.t_esperas += time.time() - t0
 
     # --- passos
     def rodar(self, passos, rotulo=""):
@@ -779,6 +893,12 @@ class _Executor:
             except (ValueError, TypeError, IndexError, KeyError) as e:
                 raise _Falha({"erro": f"{onde}: {e}"}) from e
             self.feitos += 1
+            if self.parar_se and "se" not in p and "se_nao" not in p and "repetir" not in p:
+                self.checar_texto(f"depois do {onde}")
+            if self.parar_em_janela and self.rapido:
+                ev = eventos()
+                if ev:
+                    self.checar_janela(ev[2], f"depois do {onde}")
 
     def passo(self, p, onde):
         if not self.rapido:
@@ -804,6 +924,9 @@ class _Executor:
                     if k and pausa:
                         time.sleep(pausa)
                     self.injetar(f"tocar {x} {y} {ms}", [f"input swipe {x} {y} {x} {y} {ms} || exit 3"])
+                return
+            if self.rapido and (len(pontos) > 1 or self.parar_se) and self.parar_em_janela is not False:
+                self.tocar_vigiando(pontos, pausa, onde)
                 return
             cmd = f"toques {int(pausa * 1000)} " + " ".join(f"{x} {y}" for x, y in pontos)
             linhas = []
@@ -862,6 +985,8 @@ class _Executor:
                                   "app": foco()})
                 time.sleep(0.08 if self.rapido else 0.4)
             self.t_esperas += time.time() - t
+        elif "esperar_mudanca" in p:
+            self.esperar_mudanca(min(float(p["esperar_mudanca"]), 30), p.get("ignorar") or [])
         elif "se" in p or "se_nao" in p:
             texto = p.get("se") if "se" in p else p.get("se_nao")
             verdade = self.presente(texto) == ("se" in p)
@@ -898,11 +1023,22 @@ def sequencia(a):
     except ValueError as e:
         return {"erro": str(e)}
     ex = _Executor()
+    ps = a.get("parar_se") or []
+    ex.parar_se = [ps] if isinstance(ps, str) else [str(t) for t in ps][:20]
+    if a.get("parar_em_janela") is not None:
+        ex.parar_em_janela = bool(a["parar_em_janela"])
+    if ex.rapido:
+        ev = eventos()
+        ex.janela = ev[2] if ev else None
+        ex.app, ex.app_em = foco(), time.time()
+    interrompido = None
     try:
         ex.rodar(passos)
         ex.descarregar()
     except _Falha as f:
         return {**f.info, "feitos": ex.feitos}
+    except _Interrompido as i:
+        interrompido = {"interrompido": i.motivo, **({"elemento": i.elemento} if i.elemento else {})}
     gasto = time.time() - ex.t0
     tempos = {"acoes": round(gasto - ex.t_esperas, 2)}
     if ex.t_esperas:
@@ -910,7 +1046,7 @@ def sequencia(a):
     t = time.time()
     depois = _ver_depois(a)
     tempos["olhar"] = round(time.time() - t, 2)
-    return {"feito": f"{ex.feitos} passos em {gasto:.1f} s", "tempos": tempos, **depois}
+    return {**(interrompido or {}), "feito": f"{ex.feitos} passos em {gasto:.1f} s", "tempos": tempos, **depois}
 
 
 def agir(a):

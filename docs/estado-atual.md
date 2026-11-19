@@ -41,6 +41,12 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Reflexos na tela (1.0.36):** o leitor conta os eventos da acessibilidade (janelas novas e mudanças).
+  Numa leva de toques (`toquesv`), se surgir outra janela (aviso, anúncio, fim de jogo, outro app) ele para na hora e
+  a sequência volta com `interrompido` + o que está na tela; a mesma tela se reanunciando não para (nem o teclado).
+  `parar_em_janela=true` vigia também entre passos; `parar_se=[textos]` para quando um texto aparecer (lido só se algo
+  mudou); passo `esperar_mudanca` fica olhando até a tela mudar de verdade (`ignorar` relógios etc.). Medido na
+  1.0.35: esperar a tela assentar + olhar (só o que mudou) em 0,59 s no aparelho.
 - **19/11 — Ciclo rápido de ver-agir-decidir (1.0.35):** na sequência, toques, deslizes e teclas vão injetados pelo
   leitor (`toques` num pedido só), não mais pelo `input` do shell (~0,18 s por toque). Depois de agir, espera a tela
   assentar (`calma`, `waitForIdle` da acessibilidade) em vez de pausa fixa e responde só o que mudou desde a última

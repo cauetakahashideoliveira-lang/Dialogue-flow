@@ -41,6 +41,11 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Shizuku congelando em 2º plano (HyperOS):** rish dava timeout com o app do Shizuku em segundo
+  plano. Feito pelo rish, para moe.shizuku.privileged.api, com.termux e com.termux.api: `dumpsys deviceidle whitelist +pkg`,
+  `cmd appops set pkg RUN_IN_BACKGROUND|RUN_ANY_IN_BACKGROUND allow`, `am set-standby-bucket pkg active` (ficou 5 =
+  isento) e `cmd appops set pkg 10008 allow` (autostart do MIUI). Reverter: `whitelist -pkg` e `appops ... default`.
+  Também recomendado travar o Shizuku nos recentes (cadeado).
 - **19/11 — Permissões do Controle Geral:** liberadas pelo dono em claude.ai/customize/connectors (o
   `.claude/settings.json` também lista `mcp__Controle_Geral`). Sudoku aberto pelo Termux (`am start -n
   easy.sudoku.puzzle.solver.free/com.meevii.ui.activity.SplashActivity`); Shizuku caindo — HyperOS derruba.

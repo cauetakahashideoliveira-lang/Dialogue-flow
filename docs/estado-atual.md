@@ -1,10 +1,38 @@
-# Estado atual da instalação (18/11/2026)
+# Estado atual da instalação (19/11/2026)
 
-## Celular
-- POCO X8 Pro Max, Android/HyperOS, Termux + Termux:API (F-Droid).
-- Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
-- Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
-- Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
+## Resumo (fim do dia 19/11)
+- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.18** no ar
+  desde 22:54. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar Controle IR").
+- Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz. Catálogo: base + ampliado (Flipper-IRDB completa) = 9.380
+  perfis, 94.407 sinais únicos, 1.776 marcas. (Termux precisou de `apt update && apt full-upgrade` no início.)
+- **Capacidades instaladas:** estado_celular, diagnostico_rede, descobrir_rede, ouvir_bipe (+ `controlar(ouvir=true)`),
+  foto (com recorte por alvo), termometro, tela (falta o Shizuku). **No GitHub, não instaladas:** sono e sonar
+  (1.0.19, commit 5f07335).
+- **Pacotes no Termux:** numpy 2.5.5, ffmpeg 9.0.2, nmap 7.993. Espelho de pacotes: oficial
+  `packages-cf.termux.dev` (cópia do antigo em `~/.controle-ir/sources.list.antes`).
+- **Permissões do Android dadas:** microfone e câmera do Termux:API.
+- **Central da Casa 2.0:** artefato privado https://claude.ai/artifact/XSh6ivS8Cc6BsKakes2pCh (fonte
+  `artefatos/central-da-casa.html`), com o Gênio que controla, programa o celular, cria painéis, lembra e aprende.
+- **Conector:** os pedidos de aprovação vêm da regra da organização no claude.ai (`org_ask_ceiling`), não do
+  projeto nem do celular. O usuário liberou em 19/11; conferir numa conversa nova.
+- **Repositório:** o trabalho de 19/11 está na branch `ccr-045ba202-fbl2x4` (ainda não está na main). 91 testes.
+
+## Pendências (próxima conversa)
+1. **Shizuku** (o usuário ativa em 20/11; foi o que mais o interessou): opções do desenvolvedor, Depuração USB +
+   "Depuração USB (Configurações de segurança)" do Xiaomi + Depuração sem fio, parear e Iniciar, exportar o rish
+   para Download. Depois: copiar `~/storage/downloads/rish` e `rish_shizuku.dex` para `~/.controle-ir/rish/`
+   (chmod 700 no rish, 400 no .dex), testar `tela` (estado → ver → abrir com.android.settings) e usar pelo Gênio.
+2. **Instalar a 1.0.19** (sono e sonar) com `atualizar_sistema` (uma aprovação) e testar o sonar (parado, depois
+   mexendo o braço) e uma noite do laboratório do sono.
+3. **Autorizações:** numa conversa nova, rodar algo simples no celular e ver se ainda pede aprovação.
+4. **Termômetro:** calibrar com uma temperatura real. **Ouvido do ar:** testar ligar/desligar de verdade (pedir
+   antes de desligar o ar). O Gree do quarto não deu bipe audível em 3 tentativas.
+5. **Visor do ar:** foto de perto (1–1,5 m), guardar o recorte com `alvo="ar do quarto"`; depois ler os dígitos
+   (7 segmentos) para confirmar sozinho.
+6. Decidir se abre um PR da branch para a main (conversas novas começam pela main).
+7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
+
+## Histórico de 19/11 (mais recente primeiro)
 - **19/11 — 1.0.18 no celular (22:54):** `termometro` (temperatura do cômodo pela bateria; 1ª leitura 31 °C na
   bateria → ~29 °C estimado, confiança média com o celular em uso; monitorando 60 min), ouvido do ar no
   `controlar(ouvir=true)` (3 s antes + ~8 s depois do envio, compara o ruído), `tela` e o recorte da `foto`
@@ -20,17 +48,6 @@
 - **19/11 — 1.0.19 no GitHub (commit 5f07335), NÃO instalada:** `sono` (laboratório do sono) e `sonar`
   (presença por ultrassom, experimental). Instalar com `atualizar_sistema` quando o usuário estiver presente
   (cada chamada pede aprovação da organização).
-- **19/11 — PENDENTE (continuar numa conversa nova):**
-  1. Agente de tela: `tela` instalada, falta o Shizuku. O usuário está configurando (opções do desenvolvedor,
-     Depuração USB + "Depuração USB (Configurações de segurança)" do Xiaomi + Depuração sem fio, parear e
-     Iniciar, exportar o rish para Download). Depois: copiar `~/storage/downloads/rish` e `rish_shizuku.dex`
-     para `~/.controle-ir/rish/` (chmod 700 no rish, 400 no .dex) e testar `tela` (estado → ver → abrir
-     com.android.settings).
-  4. Termômetro: calibrar com uma temperatura real (termômetro ou visor do ar estabilizado) e testar o
-     ouvido do ar com ligar/desligar de verdade (pedir ao usuário antes de desligar o ar).
-  2. Autorizações: o usuário liberou na organização, mas a conversa antiga continuou com `org_ask_ceiling`
-     (provavelmente a regra é lida no início da conversa). Conferir numa conversa nova.
-  3. Foto de perto do visor do ar do quarto (1–1,5 m) para ler os dígitos.
 - **19/11 — confirmação automática (1.0.16–1.0.17 no celular):** numpy 2.5.5 e ffmpeg 9.0.2 instalados; espelho
   de pacotes trocado do `mirrors.cqupt.edu.cn` (55 KB/s) para o oficial `packages-cf.termux.dev` (6 MB/s; cópia
   em `~/.controle-ir/sources.list.antes`). Microfone e câmera do Termux:API liberados pelo usuário.
@@ -98,17 +115,14 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
 4. "Ligue o ar do quarto em 16 graus." / "Coloca a pá do ar do quarto para oscilar." / "Apaga o visor do ar do quarto."
 5. "Liga a TV do quarto." / "Abre a Netflix na TV."
 
-## Pendências
-- **O usuário quer autonomia máxima ("modo deus")**: ligar `controle-ir exec modo autonomo` no celular, e então
-  agir sem pedir aprovação a cada passo (freio: `travar`). Linha ética: só o que é dele ou autorizado.
-- O usuário também usa o Claude no iPad e quer aprovar pelo chat sem código: padrão `aprovacao_remota: chat`
-  (o Claude pergunta, ele diz sim). Não configurar TOTP a menos que ele peça.
-- **Instalar a 1.0.13** (`controle-ir atualizar --ref <commit>` no Termux) (capacidades, execução governada, atualizar/reverter, aprovação no celular ou por
-  código do autenticador de outro aparelho, origens). É a última instalação colando a linha: depois, `atualizar_sistema(ref)` pelo Claude. Ver
-  `docs/modo-deus.md` (§8 próximos experimentos, §9 perguntas).
-- Gravar as ressalvas como observação de cada aparelho (`editar_aparelho(observacao=…)`) para chegarem ao
-  Claude pelo resumo: extras do ar do quarto fixam 16 °C/frio/automática; desligar direto da TV ainda não
-  testado (escritório e laboratório compartilham códigos: o resumo já detecta sozinho).
+## Pendências antigas (situação em 19/11)
+- ✅ **Autonomia máxima ("modo deus")**: `controle-ir exec modo autonomo` ligado no celular; o Claude age sem
+  pedir aprovação a cada passo (freio: `travar`). Linha ética: só o que é dele ou autorizado.
+- ✅ Aprovação pelo chat sem código (`aprovacao_remota: chat`); não configurar TOTP a menos que ele peça.
+- ✅ Instalação pelo Claude: desde a 1.0.13 tudo sobe com `atualizar_sistema(ref)` (hoje está na 1.0.18).
+- ⏳ Gravar as ressalvas como observação de cada aparelho (`editar_aparelho(observacao=…)`) para chegarem ao
+  Claude pelo resumo: extras do ar do quarto fixam 16 °C/frio/automática (o "visor desligado" também põe 16 °C);
+  desligar direto da TV ainda não testado (escritório e laboratório compartilham códigos: o resumo já detecta).
 
 ## Implementado em 18/11 (versões 1.0.6 e 1.0.7, instaladas no celular)
 - **Ligar/desligar com um toque (1.0.7):** atalhos "Ligar Controle IR" e "Desligar Controle IR" em

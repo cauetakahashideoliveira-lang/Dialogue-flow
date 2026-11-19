@@ -234,13 +234,16 @@ O teto deixa de ser "quantas vezes você autoriza" e passa a ser só o que o har
 
 ## 8. Próximos experimentos (ordem sugerida)
 
-1. **Instalar a 1.0.9** (última vez colando a linha; depois o Claude atualiza com `atualizar_sistema`).
-2. Numa conversa nova do app: "use estado_celular", depois "diagnostico_rede rápido", depois
-   "executar_comando: pkg list-installed". Isso confirma no POCO as capacidades, a execução e a aprovação.
-3. `controle-ir origens` depois de algumas chamadas: se tudo vier de `160.79.104.0/21`, ligar `controle-ir origens exigir`.
-4. Pelo Claude, com aprovação: `pkg install nmap iperf3 dnsutils` → capacidade `descobrir_rede` (TV, ares, roteador).
-5. Se a TV aparecer na rede: capacidade `tv_samsung_rede` (estado real + abrir YouTube por id).
-6. Shizuku + rish (exige ação sua nas opções do desenvolvedor) → capacidade `ver_tela`/`tocar`.
+Feito até 19/11: instalação pelo Claude (`atualizar_sistema`, hoje na 1.0.18), capacidades e execução confirmadas
+no POCO, modo autônomo, `descobrir_rede` (a TV e os ares não estão na rede: só IR), confirmação pelo som e pela
+câmera, termômetro pela bateria, agente de tela escrito, Central da Casa 2.0 com o Gênio.
+
+1. **Shizuku + rish** (o usuário ativa em 20/11) → testar `tela` → o Gênio passa a operar qualquer app.
+2. **Instalar a 1.0.19** (sono e sonar) → uma noite do laboratório do sono e o teste do sonar.
+3. **Ler o visor do ar** (recorte + 7 segmentos) → confirmação 100% local.
+4. `controle-ir origens` depois de algumas chamadas: se tudo vier de `160.79.104.0/21`, ligar `controle-ir origens exigir`.
+5. **Base fixa** (celular velho com IR ou Broadlink) + geocerca no POCO → "estou chegando, liga o ar".
+6. Experimento do **olho infravermelho** (rolling shutter) para aprender o controle original sem hardware.
 7. PC: `claude remote-control --spawn worktree` num terminal do computador (ou Claude Desktop + Dispatch).
 
 ## 9. Perguntas (respondidas, destravam frentes inteiras)

@@ -41,6 +41,9 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Etapa 1b em uso:** conector **“Controle Geral”** no claude.ai entra pela Central de Controle
+  (`https://painel-casa.cauetakahashideoliveira.workers.dev/mcp`, OAuth com a digital). “Só pelo painel” LIGADO
+  (seq 3): o conector antigo “Controle master” (URL do ngrok) passou a receber 403 — conferido. Celular na 1.0.27.
 - **19/11 — Nome geral (1.0.27):** “Painel da Casa” virou **Central de Controle** (o projeto é uma ferramenta
   geral, não só da casa). O endereço `painel-casa.…workers.dev` ficou (trocar invalidaria as passkeys).
 - **19/11 — Etapa 1b (1.0.26 + PR #8): OAuth na borda.** Conector novo `https://<painel>/mcp` com login pela

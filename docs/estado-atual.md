@@ -5,6 +5,15 @@
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
+- **19/11 — confirmação automática (1.0.16–1.0.17 no celular):** numpy 2.5.5 e ffmpeg 9.0.2 instalados; espelho
+  de pacotes trocado do `mirrors.cqupt.edu.cn` (55 KB/s) para o oficial `packages-cf.termux.dev` (6 MB/s; cópia
+  em `~/.controle-ir/sources.list.antes`). Microfone e câmera do Termux:API liberados pelo usuário.
+  `controlar(ouvir=true)` grava, envia e analisa o bipe no tempo certo (o parâmetro só aparece em conversas
+  novas); `foto` devolve a imagem ao Claude. Ver `docs/aparelhos/quarto/ar-do-quarto.md`. O recorte da `foto`
+  está no GitHub, **não instalado**: instalar só quando o usuário pedir.
+- **19/11 — autorizações:** os pedidos de aprovação vinham da regra da organização no claude.ai
+  (`org_ask_ceiling`) para as ferramentas do Controle master; o `.claude/settings.json` não passa por cima dela.
+  Liberar em https://claude.ai/customize/connectors → Controle master → permissões das ferramentas.
 - **19/11 — rede de casa inventariada** com a capacidade nova `descobrir_rede` (só leitura, sem nmap): roteador
   Intelbras Twibi Giga (`.1`), câmeras IP prováveis (`.95`, `.213`, só RTSP 554), `.11` e `.52` sem portas
   comuns, celular `.94`. TV Samsung e ares não aparecem na rede (sem Wi-Fi ou desligados). Inventário em

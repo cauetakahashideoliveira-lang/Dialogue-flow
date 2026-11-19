@@ -1218,6 +1218,20 @@ class TestImagemNoMcp(unittest.TestCase):
         r = ServidorMCP._resultado({"ok": True}, False)
         self.assertEqual([c["type"] for c in r["content"]], ["text"])
 
+    def test_recorte_da_foto(self):
+        import importlib.util
+        caminho = Path(__file__).resolve().parent.parent / "controle-ir" / "capacidades" / "foto" / "principal.py"
+        spec = importlib.util.spec_from_file_location("foto_principal", caminho)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        self.assertEqual(m.validar_recorte([0.5, 0.1, 0.7, 0.3]), [0.5, 0.1, 0.7, 0.3])
+        for ruim in ([0.7, 0.1, 0.5, 0.3], [0, 0, 1], [0, 0, 1.2, 1], [0.5, 0.5, 0.51, 0.9], "x"):
+            with self.assertRaises(ValueError):
+                m.validar_recorte(ruim)
+        self.assertEqual(m.filtro(960, [0.5, 0.1, 0.7, 0.3]),
+                         "crop=iw*0.2000:ih*0.2000:iw*0.5000:ih*0.1000,scale='min(960,iw)':-2")
+        self.assertEqual(m.filtro(960), "scale='min(960,iw)':-2")
+
     def test_foto_embutida_e_ativa(self):
         s, _ = novo_servico(com_base=False)
         self.assertEqual({c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}.get("foto"), "ativa")

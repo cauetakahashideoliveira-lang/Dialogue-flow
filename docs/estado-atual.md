@@ -1,8 +1,8 @@
 # Estado atual da instalação (19/11/2026)
 
 ## Resumo (fim do dia 19/11)
-- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.24** (19/11, com
-  `python-cryptography` para conferir o Painel da Casa; ainda não pareado), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
+- **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.25**, pareado com o
+  Painel da Casa (só o painel arma, com a digital do POCO ou do iPad), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
   Controle IR").
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz. Catálogo: base + ampliado (Flipper-IRDB completa) = 9.380
   perfis, 94.407 sinais únicos, 1.776 marcas. (Termux precisou de `apt update && apt full-upgrade` no início.)
@@ -41,6 +41,8 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Etapa 1a em uso:** passkeys do POCO e do iPad cadastradas; POCO pareado e na 1.0.25; armar é pelo
+  Painel da Casa (atalho na tela inicial), com a digital. Próximo: Etapa 1b (OAuth na borda, fim da URL secreta).
 - **19/11 — Painel no ar (PR #6) e POCO pareado.** Na 1ª sincronização o celular tentou mandar o histórico
   antigo inteiro e o envio estourou o tempo (o pareamento valeu). 1.0.25 + PR #7: só o histórico novo, em lotes de
   30 numa transação, sem repetidos; Safari do iPad com as opções da passkey buscadas antes do toque.

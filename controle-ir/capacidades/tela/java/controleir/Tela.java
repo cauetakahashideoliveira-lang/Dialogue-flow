@@ -123,7 +123,7 @@ public class Tela {
             int pausa = Math.max(0, Math.min(i(p[2]), 5000));
             for (int k = 3; k + 1 < p.length; k += 2) {
                 if (k > 3 && pausa > 0) SystemClock.sleep(pausa);
-                tocar(u, i(p[k]), i(p[k + 1]), 30);
+                tocarLeva(u, i(p[k]), i(p[k + 1]), k + 3 >= p.length);
             }
             return "ok";
         }
@@ -144,7 +144,7 @@ public class Tela {
             for (int k = 3; k + 1 < p.length; k += 2) {
                 if (k > 3 && pausa > 0) SystemClock.sleep(pausa);
                 if (janelas != base) return "parou " + feitos + " " + ultimaJanela;
-                tocar(u, i(p[k]), i(p[k + 1]), 30);
+                tocarLeva(u, i(p[k]), i(p[k + 1]), k + 3 >= p.length);
                 feitos++;
             }
             SystemClock.sleep(Math.max(pausa, 30));  // o efeito do último toque também conta
@@ -373,9 +373,14 @@ public class Tela {
 
     // ------------------------------------------------------------------ toques e teclas (injetados direto)
     static void evento(UiAutomation u, long desce, int acao, float x, float y) {
+        evento(u, desce, acao, x, y, true);
+    }
+
+    /** sync=true espera o app consumir o evento (~20–40 ms); false só entrega à fila de entrada, que mantém a ordem. */
+    static void evento(UiAutomation u, long desce, int acao, float x, float y, boolean sync) {
         MotionEvent e = MotionEvent.obtain(desce, SystemClock.uptimeMillis(), acao, x, y, 0);
         e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-        u.injectInputEvent(e, true);
+        u.injectInputEvent(e, sync);
         e.recycle();
     }
 
@@ -385,6 +390,16 @@ public class Tela {
         SystemClock.sleep(Math.max(10, Math.min(ms, 3000)));
         evento(u, t, MotionEvent.ACTION_UP, x, y);
     }
+
+    /** Toque de leva: sem esperar a confirmação do app (a fila preserva a ordem); só o último espera (sync). */
+    static void tocarLeva(UiAutomation u, int x, int y, boolean ultimo) {
+        long t = SystemClock.uptimeMillis();
+        evento(u, t, MotionEvent.ACTION_DOWN, x, y, false);
+        SystemClock.sleep(LEVA_MS);
+        evento(u, t, MotionEvent.ACTION_UP, x, y, ultimo);
+    }
+
+    static final int LEVA_MS = 12;  // pressão de cada toque da leva (qualquer app reconhece um toque a partir de ~5 ms)
 
     static void deslizar(UiAutomation u, int x1, int y1, int x2, int y2, int ms) {
         long t = SystemClock.uptimeMillis();

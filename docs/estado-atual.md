@@ -41,6 +41,9 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Toques de leva assíncronos (1.0.39):** teste com a 1.0.38: Sudoku médio novo 39/39 sem erros, 78 toques
+  em 7,0 s (89 ms cada, porque cada evento esperava o app confirmar). Agora a leva entrega à fila de entrada sem
+  esperar (a ordem é mantida), com 12 ms de pressão; só o último toque espera a confirmação.
 - **19/11 — Quando tocar às cegas × olhar de novo (1.0.38):** coordenada só vale na janela em que o Claude a leu
   (`_ULTIMA["janela"]`): se a janela mudou desde a última olhada, ou depois de voltar/abrir/rolar, o toque por
   coordenada não sai e volta `interrompido` com a tela atual; toque por texto, esperar_texto, abrir, se/repetir

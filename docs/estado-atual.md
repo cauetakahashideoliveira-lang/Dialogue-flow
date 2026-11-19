@@ -40,6 +40,9 @@
   (o HyperOS não derrubou), e o usuário viu **gasto mínimo de bateria**. De manhã: 49%, descarregando, 26,6 °C,
   CPU parada (carga 0). Decisão do usuário: **pode ficar ligado o tempo todo** (antes ligava só para usar).
   O histórico do termômetro não mede o repouso (as leituras de 22:56–23:55 foram com o celular em uso, 200–1000 mA).
+  **Bateria** (termux-battery-status): saúde GOOD, **4 ciclos**, 26,6 °C, 3,81 V; capacidade de fábrica 8.500 mAh
+  (versão global, HyperOS OS3.0.304.0.WPLMIXM). `/sys/class/power_supply` é bloqueado sem root; com o Shizuku dá
+  para ler `dumpsys battery`/`batterystats` (capacidade aprendida) para uma conta mais precisa.
 - **19/11 — Skill `/god-mode`** (`.claude/skills/god-mode/`): adaptação do G0DM0D3 (elder-plinius, AGPL-3.0) com
   AutoTune de 20 contextos (+ português), aprendizado por notas, STM, pontuação neutra, `perguntar` e `comparar`
   (OpenRouter ou servidor local) com síntese pelo Claude. Ficaram de fora os prompts de jailbreak, a diretiva

@@ -41,6 +41,8 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Central 1.0.29 + PR #10:** atividade do Claude (cada chamada), “Agora no celular” (terminal,
+  capacidades, câmera/microfone por AppOps) e tela ao vivo no painel. E2E 47/47.
 - **19/11 — 1.0.28:** o atalho “Armar Controle IR” da tela inicial, com o celular pareado, abre a Central de
   Controle (quem arma é ela, com a digital). Instalada; Shizuku religado (rish responde uid 2000), modo autônomo.
 - **19/11 — Etapa 1b em uso:** conector **“Controle Geral”** no claude.ai entra pela Central de Controle

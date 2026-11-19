@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS convites (hash TEXT PRIMARY KEY, expira INTEGER NOT N
 CREATE TABLE IF NOT EXISTS recebimentos (aparelho TEXT PRIMARY KEY, arquivo TEXT NOT NULL, ate INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS extras (aparelho TEXT PRIMARY KEY, so_pelo_painel INTEGER NOT NULL DEFAULT 0,
   mcp_url TEXT, mcp_url_em INTEGER);
+CREATE TABLE IF NOT EXISTS chamadas (id INTEGER PRIMARY KEY AUTOINCREMENT, quando INTEGER NOT NULL,
+  ferramenta TEXT NOT NULL, resumo TEXT, motivo TEXT, recursos TEXT, status TEXT, ms INTEGER);
+CREATE TABLE IF NOT EXISTS observacao (aparelho TEXT PRIMARY KEY, observar_ate INTEGER NOT NULL DEFAULT 0,
+  ao_vivo_ate INTEGER NOT NULL DEFAULT 0, em_uso TEXT, em_uso_em INTEGER);
+CREATE TABLE IF NOT EXISTS quadros (aparelho TEXT PRIMARY KEY, jpeg TEXT NOT NULL, quando INTEGER NOT NULL);
 `;
 let esquemaPronto = false;
 async function inicializar(env) {
@@ -345,13 +350,30 @@ async function parearCelular(env, req, corpo) {
   return json({ aparelho: id, token, chave_publica: (await chaves(env)).pub });
 }
 
+async function quadroDoCelular(env, req, corpo) {  // tela ao vivo: só aceito enquanto o dono estiver assistindo
+  const ap = await aparelhoDoToken(env, req);
+  if (!ap) return erro('aparelho não autorizado', 401);
+  const o = await env.DB.prepare('SELECT ao_vivo_ate FROM observacao WHERE aparelho = ?').bind(ap.id).first();
+  if (!o || o.ao_vivo_ate < agora()) {
+    await env.DB.prepare('DELETE FROM quadros WHERE aparelho = ?').bind(ap.id).run();
+    return erro('ninguém assistindo', 409);
+  }
+  const jpeg = typeof corpo.jpeg === 'string' ? corpo.jpeg : '';
+  if (!jpeg || jpeg.length > 400_000 || !/^[A-Za-z0-9+/=]+$/.test(jpeg)) return erro('quadro inválido', 400);
+  await env.DB.prepare(`INSERT INTO quadros (aparelho, jpeg, quando) VALUES (?, ?, ?) ON CONFLICT(aparelho)
+    DO UPDATE SET jpeg = excluded.jpeg, quando = excluded.quando`).bind(ap.id, jpeg, agora()).run();
+  return json({ ok: true });
+}
+
 async function estadoParaCelular(env, req) {
   const ap = await aparelhoDoToken(env, req);
   if (!ap) return erro('aparelho não autorizado', 401);
   await env.DB.prepare('UPDATE aparelhos SET ultimo_contato = ? WHERE id = ?').bind(agora(), ap.id).run();
   const e = await estadoDe(env, ap.id);
-  return json(await assinar(env, { v: 1, aparelho: ap.id, seq: e.seq, armado_ate: e.armado_ate, travado: e.travado,
-    desarmado_permite: e.desarmado_permite, so_pelo_painel: e.so_pelo_painel, emitido_em: agora() }));
+  const o = await env.DB.prepare('SELECT observar_ate, ao_vivo_ate FROM observacao WHERE aparelho = ?').bind(ap.id).first();
+  return json({ ...(await assinar(env, { v: 1, aparelho: ap.id, seq: e.seq, armado_ate: e.armado_ate, travado: e.travado,
+    desarmado_permite: e.desarmado_permite, so_pelo_painel: e.so_pelo_painel, emitido_em: agora() })),
+    observar_ate: o ? o.observar_ate : 0, ao_vivo_ate: o ? o.ao_vivo_ate : 0 });
 }
 
 async function ackCelular(env, req, corpo) {
@@ -360,6 +382,11 @@ async function ackCelular(env, req, corpo) {
   const seq = Number(corpo.seq) || 0;
   await env.DB.prepare('UPDATE aparelhos SET aplicado_seq = MAX(aplicado_seq, ?), aplicado_em = ?, versao = ? WHERE id = ?')
     .bind(seq, agora(), String(corpo.versao || ap.versao || '').slice(0, 20), ap.id).run();
+  if (corpo.em_uso && typeof corpo.em_uso === 'object') {  // o que está em uso no celular agora
+    const txt = JSON.stringify(corpo.em_uso).slice(0, 6000);
+    await env.DB.prepare(`INSERT INTO observacao (aparelho, em_uso, em_uso_em) VALUES (?, ?, ?) ON CONFLICT(aparelho)
+      DO UPDATE SET em_uso = excluded.em_uso, em_uso_em = excluded.em_uso_em`).bind(ap.id, txt, agora()).run();
+  }
   const url = typeof corpo.mcp_url === 'string' ? corpo.mcp_url.slice(0, 400) : '';
   if (/^https:\/\/[^\s/]+\/mcp\/\S+$/.test(url) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/mcp\/\S+$/.test(url))
     await env.DB.prepare(`INSERT INTO extras (aparelho, mcp_url, mcp_url_em) VALUES (?, ?, ?) ON CONFLICT(aparelho)
@@ -380,8 +407,16 @@ async function ackCelular(env, req, corpo) {
 
 async function painel(env, s, origem) {
   const aps = (await env.DB.prepare('SELECT id, nome, criado, ultimo_contato, versao, aplicado_seq, aplicado_em, revogado FROM aparelhos ORDER BY criado').all()).results;
+  const t = agora();
   for (const a of aps) {
     a.estado = await estadoDe(env, a.id);
+    const o = await env.DB.prepare('SELECT * FROM observacao WHERE aparelho = ?').bind(a.id).first();
+    a.em_uso = o && o.em_uso ? JSON.parse(o.em_uso) : null;
+    a.em_uso_em = o ? o.em_uso_em : null;
+    a.ao_vivo_ate = o ? o.ao_vivo_ate : 0;
+    if (!a.revogado && (!o || o.observar_ate < t + 60))  // painel aberto: o celular manda o relatório completo
+      await env.DB.prepare(`INSERT INTO observacao (aparelho, observar_ate) VALUES (?, ?) ON CONFLICT(aparelho)
+        DO UPDATE SET observar_ate = excluded.observar_ate`).bind(a.id, t + 120).run();
     a.aplicado = a.aplicado_seq >= a.estado.seq;  // só mostra como aplicado depois que o celular confirmar
   }
   const creds = (await env.DB.prepare('SELECT id, nome, criada, ultimo_uso, revogada FROM credenciais ORDER BY criada').all()).results;
@@ -390,7 +425,8 @@ async function painel(env, s, origem) {
     id: g.id, cliente: g.metadata?.cliente || g.clientId, destino: g.metadata?.destino || '', criado: g.createdAt,
   })) : [];
   return json({ agora: agora(), aparelhos: aps, passkeys: creds.map(c => ({ ...c, id: c.id.slice(0, 10), sua: c.id === s.credencial })),
-    eventos, acessos, digital_recente: fresca(s) });
+    eventos, acessos, digital_recente: fresca(s),
+    chamadas: (await env.DB.prepare('SELECT * FROM chamadas ORDER BY id DESC LIMIT 80').all()).results });
 }
 
 async function integridade(env) {  // confere a cadeia de hashes da auditoria
@@ -419,6 +455,7 @@ const painelApp = {
       if (rota === '/api/celular/parear' && metodo === 'POST') return await parearCelular(env, req, await req.json());
       if (rota === '/api/celular/estado' && metodo === 'GET') return await estadoParaCelular(env, req);
       if (rota === '/api/celular/ack' && metodo === 'POST') return await ackCelular(env, req, await req.json());
+      if (rota === '/api/celular/quadro' && metodo === 'POST') return await quadroDoCelular(env, req, await req.json());
       // rotas do dono (navegador): só POST com cabeçalho próprio e mesma origem (anti-CSRF)
       if (metodo !== 'POST') return erro('método não permitido', 405);
       if (req.headers.get('x-painel') !== '1' || (req.headers.get('origin') && req.headers.get('origin') !== u.origin))
@@ -470,6 +507,22 @@ const painelApp = {
         return json({ ok: true });
       }
       if (rota === '/api/integridade') return json(await integridade(env));
+      if (rota === '/api/tela/ao_vivo') {  // ligar renova por 2 min (a página renova enquanto estiver aberta)
+        const ap = (await env.DB.prepare('SELECT id FROM aparelhos WHERE revogado = 0 ORDER BY criado LIMIT 1').first())?.id;
+        if (!ap) return erro('nenhum celular cadastrado', 400);
+        const ate = corpo.ligar ? agora() + 120 : 0;
+        await env.DB.prepare(`INSERT INTO observacao (aparelho, ao_vivo_ate, observar_ate) VALUES (?, ?, ?) ON CONFLICT(aparelho)
+          DO UPDATE SET ao_vivo_ate = excluded.ao_vivo_ate, observar_ate = MAX(observar_ate, excluded.observar_ate)`)
+          .bind(ap, ate, ate).run();
+        if (!corpo.ligar) await env.DB.prepare('DELETE FROM quadros WHERE aparelho = ?').bind(ap).run();
+        else if (corpo.inicio) await registrar(env, 'painel', 'tela_ao_vivo', { aparelho: ap });
+        return json({ ok: true, ao_vivo_ate: ate });
+      }
+      if (rota === '/api/tela/quadro') {
+        const q = await env.DB.prepare(`SELECT q.jpeg, q.quando FROM quadros q JOIN observacao o ON o.aparelho = q.aparelho
+          WHERE o.ao_vivo_ate > ? ORDER BY q.quando DESC LIMIT 1`).bind(agora()).first();
+        return json(q || { jpeg: null });
+      }
       if (rota === '/api/acesso/revogar') {  // tira o acesso de um cliente OAuth (o Claude): vale na hora, na borda
         await env.OAUTH_PROVIDER.revokeGrant(String(corpo.id || ''), DONO);
         await registrar(env, 'painel', 'acesso_revogado', { id: String(corpo.id || '').slice(0, 16) });
@@ -581,8 +634,45 @@ function bloqueioNaBorda(nome, e) {
 }
 const rpc = (id, result, status = 200) => json({ jsonrpc: '2.0', id: id ?? null, ...result }, status);
 
+// Atividade: cada chamada de ferramenta fica registrada (o que, por quê, quais recursos, resultado, tempo)
+const RECURSOS_CAP = { foto: ['câmera'], tela: ['tela'], ouvir_bipe: ['microfone'], sono: ['microfone'],
+  sonar: ['microfone', 'alto-falante'], termometro: ['sensores'], estado_celular: ['sensores'],
+  descobrir_rede: ['rede'], diagnostico_rede: ['rede'] };
+const PALAVRAS = { 'câmera': ['termux-camera', 'camera-photo'], microfone: ['termux-microphone', 'microphone-record', 'arecord'],
+  'localização': ['termux-location'], tela: ['screencap', 'screenrecord', 'uiautomator', 'input tap', 'input text'],
+  sms: ['termux-sms'], contatos: ['termux-contact'], rede: ['curl ', 'wget ', 'ping ', 'nmap'], pacotes: ['pkg ', 'pip ', 'apt '] };
+function descrever(nome, args = {}) {
+  const r = new Set();
+  const cap = nome.startsWith('cap_') ? nome.slice(4) : nome === 'executar_capacidade' ? String(args.nome || '') : '';
+  (RECURSOS_CAP[cap] || []).forEach(x => r.add(x));
+  let resumo = '';
+  if (nome === 'executar_comando') {
+    r.add('terminal');
+    const c = String(args.comando || '');
+    for (const [k, ps] of Object.entries(PALAVRAS)) if (ps.some(p => c.toLowerCase().includes(p))) r.add(k);
+    resumo = c;
+  } else if (cap) {
+    const a = nome === 'executar_capacidade' ? (args.argumentos || {}) : args;
+    resumo = `${cap}${a.acao ? ' · ' + a.acao : ''}`;
+  } else if (['controlar', 'enviar_sinal', 'buscar', 'retestar', 'confirmar'].includes(nome)) {
+    r.add('infravermelho');
+    if (args.ouvir) r.add('microfone');
+    resumo = [args.aparelho, args.definir && JSON.stringify(args.definir), args.teclas && args.teclas.join(','), args.macro]
+      .filter(Boolean).join(' · ');
+  } else if (nome === 'atualizar_sistema') { r.add('sistema'); resumo = String(args.ref || '').slice(0, 12); }
+  else resumo = JSON.stringify(args);
+  return { resumo: resumo.slice(0, 200), motivo: String(args.motivo || '').slice(0, 200), recursos: [...r].join(',') };
+}
+async function registrarChamada(env, nome, args, status, ms) {
+  const d = descrever(nome, args || {});
+  await env.DB.prepare('INSERT INTO chamadas (quando, ferramenta, resumo, motivo, recursos, status, ms) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(agora(), nome.slice(0, 60), d.resumo, d.motivo, d.recursos, status, ms).run();
+  if (Math.random() < 0.02) await env.DB.prepare('DELETE FROM chamadas WHERE quando < ?').bind(agora() - 30 * 86400).run();
+}
+
 const mcpApi = {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
+    const t0 = Date.now();
     await inicializar(env);
     if (req.method !== 'POST') return new Response(null, { status: 405, headers: { Allow: 'POST' } });
     const bruto = new Uint8Array(await req.arrayBuffer());
@@ -601,6 +691,7 @@ const mcpApi = {
       const motivo = bloqueioNaBorda(nome, e);
       if (motivo) {
         await registrar(env, 'painel', 'bloqueado_na_borda', { ferramenta: nome.slice(0, 60) });
+        await registrarChamada(env, nome, m.params?.arguments, 'bloqueado', 0);
         const texto = JSON.stringify({ erro: motivo, bloqueado: true, onde: 'painel' });
         return rpc(m.id, { result: { content: [{ type: 'text', text: texto }], structuredContent: JSON.parse(texto), isError: true } });
       }
@@ -614,6 +705,9 @@ const mcpApi = {
     } catch (err) {
       return rpc(msg?.id, { error: { code: -32000, message: `o celular não respondeu: ${String(err.message || err).slice(0, 120)}` } }, 502);
     }
+    const chamada = (Array.isArray(msg) ? msg : [msg]).find(m => m?.method === 'tools/call');
+    if (chamada) ctx.waitUntil(registrarChamada(env, String(chamada.params?.name || '?'), chamada.params?.arguments,
+      r.ok ? 'ok' : `HTTP ${r.status}`, Date.now() - t0).catch(() => {}));
     const sai = { 'content-type': r.headers.get('content-type') || 'application/json', 'cache-control': 'no-store' };
     if (r.headers.get('mcp-session-id')) sai['mcp-session-id'] = r.headers.get('mcp-session-id');
     return new Response(r.body, { status: r.status, headers: sai });

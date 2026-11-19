@@ -116,6 +116,22 @@ claude.ai ──OAuth 2.1 + PKCE──▶ Painel (Worker) ──chamada assinada
   conector antigo (URL do ngrok) continua aceito até você ligar “só pelo painel”. Sem escopos por missão, por
   decisão do dono (autonomia geral quando armado).
 
+### 3c. Transparência: atividade, tela ao vivo e “em uso agora” (1.0.29)
+
+Autonomia geral continua (nada pede aprovação); a Central só mostra o que acontece:
+- **Atividade do Claude:** a Central registra cada chamada que repassa (ferramenta, resumo — o comando, a
+  capacidade e a ação, o aparelho —, o “por quê” que o Claude informou, recursos tocados, resultado, tempo) e as
+  barradas na borda. Fica no D1 por 30 dias; o Claude não escreve nele.
+- **Agora no celular:** o celular relata a cada sincronização as tarefas do terminal em execução (com câmera,
+  microfone, localização… inferidos do comando), capacidades rodando em 2º plano (lidas de /proc) e, com o painel
+  aberto, **câmera e microfone em uso por qualquer app** (AppOps “Running”, o mesmo dado do ponto verde do
+  Android, pelo Shizuku). Também mostra o que foi usado nas chamadas dos últimos 2 min.
+- **Tela ao vivo:** com o painel aberto e o botão ligado, o celular manda um quadro JPEG (~540 px) a cada ~2 s
+  (começa em até 30 s); o pedido vence em 2 min sem renovação, para ao esconder a página, e o último quadro é
+  apagado ao parar. Só o último quadro fica guardado.
+- **Custo:** fora do painel aberto, nada muda (sem Shizuku, sem quadros). Com o painel aberto, uma consulta
+  AppOps a cada 30 s; assistindo, captura + ffmpeg a cada 2 s.
+
 #### Planejado (próximas etapas)
 
 ```

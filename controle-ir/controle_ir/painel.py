@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 
 INTERVALO = 30
+QUADRO = 2.0  # segundos entre quadros da tela ao vivo
 MAX_EVENTOS = 30  # por envio: cabe numa transação do painel (limite de consultas do plano grátis)
 ARQUIVO = "painel.json"
 
@@ -143,7 +144,7 @@ def parear(pasta, url: str, codigo: str, nome: str, versao: str) -> dict:
     return cfg
 
 
-def sincronizar(pasta, versao: str, ao_reduzir=None, url_mcp=None) -> dict:
+def sincronizar(pasta, versao: str, ao_reduzir=None, url_mcp=None, em_uso=None) -> dict:
     """Uma rodada: busca o estado assinado, aplica, confirma e envia o histórico novo."""
     cfg = ler(pasta)
     if not cfg:
@@ -172,6 +173,13 @@ def sincronizar(pasta, versao: str, ao_reduzir=None, url_mcp=None) -> dict:
     desde = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(cfg["pareado_em"])) if cfg.get("pareado_em") else ""
     eventos, novo_offset, arquivo = _eventos_novos(pasta, int(cfg.get("offset", 0)), desde)
     corpo = {"seq": e["seq"], "versao": versao, "eventos": eventos, "arquivo": arquivo}
+    observar = float(r.get("observar_ate") or 0) > agora  # painel aberto: relatório completo (com Shizuku)
+    ao_vivo = float(r.get("ao_vivo_ate") or 0) > agora
+    if em_uso:
+        try:
+            corpo["em_uso"] = em_uso(observar, ao_vivo)
+        except Exception as erro:  # noqa: BLE001 — o relatório nunca derruba a sincronização
+            corpo["em_uso"] = {"itens": [], "erro": str(erro)[:120]}
     url = url_mcp() if url_mcp else None
     if url:  # endereço do MCP do celular, para o painel repassar as chamadas do Claude (assinadas)
         corpo["mcp_url"] = url
@@ -182,7 +190,8 @@ def sincronizar(pasta, versao: str, ao_reduzir=None, url_mcp=None) -> dict:
         gravar(pasta, cfg)
     return {"pareado": True, "seq": e["seq"], "armado_ate": e["armado_ate"], "travado": e["travado"],
             "eventos_enviados": len(eventos) if st2 == 200 else 0,
-            "eventos_aceitos": r2.get("recebidos", 0) if st2 == 200 else 0}
+            "eventos_aceitos": r2.get("recebidos", 0) if st2 == 200 else 0,
+            "ao_vivo_ate": float(r.get("ao_vivo_ate") or 0), "observar_ate": float(r.get("observar_ate") or 0)}
 
 
 def _eventos_novos(pasta, offset: int, desde: str = "", maximo: int = MAX_EVENTOS) -> tuple[list, int, str]:
@@ -217,8 +226,9 @@ def _eventos_novos(pasta, offset: int, desde: str = "", maximo: int = MAX_EVENTO
 class Sincronizador:
     """Laço em segundo plano do serviço: busca o estado do painel a cada INTERVALO segundos."""
 
-    def __init__(self, pasta, versao: str, ao_reduzir=None, log=None, url_mcp=None):
+    def __init__(self, pasta, versao: str, ao_reduzir=None, log=None, url_mcp=None, em_uso=None, quadro=None):
         self.pasta, self.versao, self.ao_reduzir, self.url_mcp = Path(pasta), versao, ao_reduzir, url_mcp
+        self.em_uso, self.quadro = em_uso, quadro
         self.log = log or (lambda *a: None)
         self.parar = threading.Event()
         self.ultimo: dict = {}
@@ -229,8 +239,29 @@ class Sincronizador:
     def _laco(self):
         while not self.parar.is_set():
             try:
-                self.ultimo = sincronizar(self.pasta, self.versao, self.ao_reduzir, self.url_mcp)
+                self.ultimo = self._rodada()
+                if self.quadro and self.ultimo.get("ao_vivo_ate", 0) > time.time():
+                    self._transmitir()
             except Exception as e:  # noqa: BLE001 — erro de rede ou assinatura: mantém falha fechada
                 self.ultimo = {"erro": str(e)[:200]}
                 self.log("painel", self.ultimo["erro"])
             self.parar.wait(INTERVALO)
+
+    def _rodada(self) -> dict:
+        return sincronizar(self.pasta, self.versao, self.ao_reduzir, self.url_mcp, self.em_uso)
+
+    def _transmitir(self):
+        """Tela ao vivo: um quadro a cada ~2 s enquanto o painel pedir (o pedido vence em 2 min sem renovação)."""
+        cfg = ler(self.pasta)
+        proxima = time.time() + 10
+        while cfg and not self.parar.is_set() and self.ultimo.get("ao_vivo_ate", 0) > time.time():
+            t0 = time.time()
+            b64 = self.quadro()
+            if b64:
+                st, _ = _http("POST", f"{cfg['url']}/api/celular/quadro", cfg["token"], {"jpeg": b64}, timeout=15)
+                if st in (401, 409):  # revogado, ou o dono parou de assistir
+                    break
+            if time.time() >= proxima:  # confirma com o painel se ainda é para transmitir
+                self.ultimo = self._rodada()
+                proxima = time.time() + 10
+            self.parar.wait(max(0.3, QUADRO - (time.time() - t0)))

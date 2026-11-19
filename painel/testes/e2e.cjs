@@ -143,6 +143,24 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   ok(r.result?.structuredContent?.onde === 'painel' && await chamadasNoCelular() === 1, 'desarmado: terminal barrado NA BORDA (nem chega ao celular)');
   r = await (await chamar('controlar')).json();
   ok(/"via": ?"celular"/.test(r.result?.content?.[0]?.text || ''), 'desarmado: infravermelho continua passando');
+  // 4c. Atividade, "em uso agora" e tela ao vivo (sem nenhuma aprovação a mais)
+  await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
+  const ativ = await pagina.textContent('#chamadas');
+  ok(/executar_comando/.test(ativ) && /barrado na Central/.test(ativ) && /controlar/.test(ativ) && /terminal/.test(ativ),
+    'Atividade do Claude lista cada chamada (ok e barrada) com os recursos');
+  celular(`import os,time\nos.makedirs(os.path.join(P,'tarefas'),exist_ok=True)\nopen(os.path.join(P,'tarefas','9.json'),'w').write(json.dumps({'id':'9','status':'executando','comando':'termux-camera-photo -c 0 /tmp/x.jpg','inicio':time.time()}))\nfrom controle_ir import observador\nr=painel.sincronizar(P,'e2e',em_uso=lambda o,v: observador.em_uso(P,False,v))\nprint(json.dumps(r))`);
+  await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
+  ok(/termux-camera-photo/.test(await pagina.textContent('#emUso')) && /câmera/.test(await pagina.textContent('#emUso')),
+    '"Agora no celular" mostra o comando em execução e que ele usa a câmera');
+  await pagina.click('#btTela'); await pagina.waitForTimeout(500);
+  const jpg = 'iVBORw0KGgo' + 'A'.repeat(64);
+  const tv = celular(`import time\nr=painel.sincronizar(P,'e2e')\ncfg=painel.ler(P)\nst,_=painel._http('POST',cfg['url']+'/api/celular/quadro',cfg['token'],{'jpeg':${JSON.stringify(jpg)}})\nprint(json.dumps({'ao_vivo':r['ao_vivo_ate']>time.time(),'st':st}))`);
+  ok(tv.ao_vivo && tv.st === 200, 'com o painel assistindo, o celular recebe o pedido e envia o quadro');
+  await pagina.waitForFunction(() => (document.querySelector('#telaImg').getAttribute('src') || '').startsWith('data:image/jpeg'), null, { timeout: 8000 });
+  ok(true, 'o quadro aparece na Central');
+  await pagina.click('#btTela'); await pagina.waitForTimeout(600);
+  const tv2 = celular(`cfg=painel.ler(P)\nst,_=painel._http('POST',cfg['url']+'/api/celular/quadro',cfg['token'],{'jpeg':${JSON.stringify(jpg)}})\nprint(json.dumps({'st':st}))`);
+  ok(tv2.st === 409, 'parou de assistir: o celular para de mandar e o último quadro é apagado');
   await pagina.check('#soPainel'); await pagina.waitForTimeout(800);
   ok(celular(`painel.sincronizar(P,'e2e')\nprint(json.dumps({'s':Politica(P).efetiva().get('so_pelo_painel')}))`).s === true,
     '"só pelo painel" chega ao celular pelo estado assinado');

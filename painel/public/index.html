@@ -24,7 +24,7 @@
   .estado { font-size:1.15rem; font-weight:700; } .ok { color:var(--ok); } .alerta { color:var(--alerta); } .perigo-t { color:var(--perigo); }
   .suave { color:var(--suave); font-size:.9rem; } code { background:var(--fundo); padding:2px 6px; border-radius:6px; word-break:break-all; }
   ul { list-style:none; padding:0; margin:0; } li { padding:8px 0; border-bottom:1px solid var(--linha); }
-  li:last-child { border:0; } .linha-check { display:flex; gap:10px; align-items:flex-start; } .linha-check input { width:auto; margin-top:4px; } #msg { min-height:1.4em; } .escondido { display:none; }
+  li:last-child { border:0; } .chip { display:inline-block; font-size:.78rem; padding:2px 8px; margin:2px 4px 2px 0; border-radius:999px; border:1px solid var(--linha); } .chip.vivo { border-color:var(--alerta); color:var(--alerta); font-weight:700; } .chip.ok { color:var(--ok); } .chip.mal { color:var(--perigo); } #telaImg { width:100%; border-radius:12px; border:1px solid var(--linha); background:#000; min-height:120px; } .det { color:var(--suave); font-size:.85rem; word-break:break-word; } .linha-check { display:flex; gap:10px; align-items:flex-start; } .linha-check input { width:auto; margin-top:4px; } #msg { min-height:1.4em; } .escondido { display:none; }
 </style>
 </head>
 <body>
@@ -57,6 +57,18 @@
       <label class="suave">Desarmado, pelo conector passa:
         <select id="permite"><option value="ir">infravermelho e consulta</option><option value="nada">só consulta</option></select></label>
       <button id="btEmergencia" class="perigo">EMERGÊNCIA: cortar todo o acesso</button>
+    </section>
+    <section>
+      <h2>Agora no celular</h2>
+      <div id="emUso"></div>
+      <p id="emUsoInfo" class="suave"></p>
+      <button id="btTela" class="sec">Ver a tela do celular ao vivo</button>
+      <div id="telaCaixa" class="escondido"><img id="telaImg" alt="Tela do celular"><p id="telaInfo" class="suave"></p></div>
+    </section>
+    <section>
+      <h2>Atividade do Claude</h2>
+      <p class="suave">Cada ferramenta que o Claude chama, registrada aqui pela Central (ele não consegue apagar).</p>
+      <ul id="chamadas"></ul>
     </section>
     <section>
       <h2>Conector do Claude</h2>

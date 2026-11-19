@@ -2041,6 +2041,16 @@ for linha in sys.stdin:
         self.assertIn("leitor toquesv 8:8 83 686 1049 2362", log)  # casa (0,0) e o botão 8, leva rápida e vigiada
         self.assertNotIn("refeitos", r)
 
+    def test_anuncio_por_baixo_da_barra_do_sistema(self):
+        self._leitor_falso()
+        (self.tmp / "janela.txt").write_text("com.android.systemui|android.widget.FrameLayout|Gravador de Tela")
+        d = self.tmp / "bin" / "dumpsys"
+        d.write_text('echo "    topResumedActivity=ActivityRecord{1 u0 app.x/com.applovin.adview.AppLovinFullscreenActivity t8}"\n')
+        d.chmod(0o755)
+        self.assertTrue(self.m.em_anuncio())  # o último evento é do sistema: confere a atividade no topo
+        (self.tmp / "janela.txt").write_text("app.x|app.x.MainActivity|")
+        self.assertFalse(self.m.em_anuncio())  # evento do próprio app e não é anúncio: nem precisa do dumpsys
+
     def test_leitor_recusa_app_bloqueado(self):
         foco = self.tmp / "foco.txt"
         foco.write_text("com.nu.production")

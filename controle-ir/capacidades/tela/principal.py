@@ -663,9 +663,22 @@ def classe_janela(info):
     return (info.split("|") + ["", ""])[1]
 
 
-def em_anuncio():
+def atividade_no_topo():
+    """A atividade de fato em primeiro plano (o último evento de janela pode ser da barra do sistema por cima)."""
+    out, _, _ = rish("dumpsys activity activities | grep -m1 topResumedActivity", timeout=10)
+    m = re.search(r"\s([\w.]+)/([\w.$]+)", out or "")
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+def em_anuncio(certeza=False):
+    """Há anúncio em primeiro plano? Rápido pelo último evento; se ele veio do sistema (notificação, gravador de
+    tela) ou certeza=True, confere a atividade no topo de verdade."""
     ev = eventos()
-    return bool(ev and ANUNCIO.search(classe_janela(ev[2])))
+    if ev and ANUNCIO.search(classe_janela(ev[2])):
+        return True
+    if certeza or (ev and IGNORAR_APP.search(ev[2].split("|")[0] or "")):
+        return bool(ANUNCIO.search(atividade_no_topo()[1] or ""))
+    return False
 
 
 def botao_fechar(els):
@@ -704,7 +717,7 @@ def fechar_anuncio(pacote, limite=45):
             _abrir(pacote)
             calma(150, 2500)
             continue
-        if not em_anuncio():
+        if not em_anuncio(certeza=True):
             return {"anuncio": "fechado", "segundos": round(time.time() - t0, 1), "passos": feitos}
         b = botao_fechar(elementos(dump_ui()))
         chave = (b["x"], b["y"]) if b else None
@@ -1667,7 +1680,7 @@ def executar(a):
         elif acao == "grade":
             r = grade(a)
         elif acao == "fechar_anuncio":
-            r = fechar_anuncio(foco(), min(float(a.get("limite", 45)), 120)) if em_anuncio() else {"anuncio": "nenhum"}
+            r = fechar_anuncio(foco(), min(float(a.get("limite", 45)), 120)) if em_anuncio(True) else {"anuncio": "nenhum"}
         elif acao == "reflexos":
             r = reflexos(a.get("regras"))
         else:

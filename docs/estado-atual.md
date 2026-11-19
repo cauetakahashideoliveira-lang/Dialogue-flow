@@ -41,6 +41,9 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Anúncio por baixo da barra do sistema (1.0.45):** um AppLovin com cartão final sem fechar passou como "fechado"
+  porque o último evento de janela era da barra de notificações/gravador de tela. Agora, se o último evento vem do
+  sistema (ou ao confirmar o fechamento), confere a atividade no topo (`dumpsys activity | topResumedActivity`).
 - **19/11 — Grade mais rápida (1.0.44):** teste com a 1.0.43: Sudoku difícil (44 casas) em 8 s no relógio do jogo,
   leitura+solução 0,28 s, 88 toques 2,8 s, olhar final 1,3 s. Agora: `grade` aceita `antes` (retomar o jogo na mesma
   chamada), espera a grade ficar estável (duas leituras iguais) em vez de pausa fixa, preenche com 8 ms de pausa e

@@ -87,7 +87,36 @@ sozinho: quem arma é o painel, com a digital.
 - **Limite que continua:** a URL do conector (ngrok) ainda é o segredo de acesso ao celular; durante a janela
   armada, quem a tiver usa a política vigente. Isso é o que a 1b resolve.
 
-### 3b. Gateway OAuth na borda (a construir)
+### 3b. Gateway OAuth na borda (1.0.26, implementada)
+
+```
+claude.ai ──OAuth 2.1 + PKCE──▶ Painel (Worker) ──chamada assinada (Ed25519 + nonce)──▶ ngrok ──▶ celular
+                  consentimento com a digital ┘  └ bloqueio na borda (desarmado / EMERGÊNCIA) e revogação do token
+```
+
+- **Login do conector:** endereço `https://<painel>/mcp`. O claude.ai descobre o OAuth (RFC 9728), registra-se
+  (DCR) e abre `/authorize`, que mostra o app e o destino e só autoriza com a **digital na hora**. Biblioteca
+  oficial `@cloudflare/workers-oauth-provider` (tokens só como hash no KV, PKCE S256). Destinos aceitos: claude.ai,
+  claude.com e um app no próprio computador (aviso na tela); um cliente que peça outro destino nem se registra.
+  Token de acesso de 1 h; o acesso (grant) dura até 30 dias e é revogado no painel na hora (“Revogar acesso”).
+- **Bloqueio na borda:** antes de repassar, o painel aplica o mesmo critério do celular (`seguranca.py`):
+  desarmado, só infravermelho e consulta; EMERGÊNCIA, só consultar/politica/travar. O que é barrado nem chega ao
+  celular (evento `bloqueado_na_borda`).
+- **Repasse assinado:** cada chamada vai ao celular com `X-Painel-Assinatura` = horário + nonce + Ed25519 sobre o
+  hash do corpo (mesma chave do estado). O celular confere com a chave fixada, recusa horário fora de ±90 s,
+  corpo alterado e nonce repetido. O celular informa ao painel o endereço do MCP dele a cada sincronização.
+- **“Aceitar o Claude só pelo painel”** (estado assinado, `so_pelo_painel`): ligado, o celular recusa chamadas
+  sem a assinatura do painel; a URL do ngrok vazada deixa de servir. Ligar reduz poder (sem digital); desligar
+  pede a digital. Vale mesmo sem rede (último valor assinado).
+- **Evidência:** E2E 42/42 (OAuth completo com autenticador virtual, PKCE, cliente com destino de terceiros
+  recusado, repasse conferido pelo código real do celular, bloqueio na borda, revogação do token, “só pelo
+  painel”) e `TestPainel` (assinatura, horário, corpo trocado, chave errada, repetição; servidor recusando o
+  direto quando “só pelo painel”).
+- **Limites:** o tráfego das ferramentas passa pelo Worker (conta Cloudflare = raiz de confiança, com 2FA). O
+  conector antigo (URL do ngrok) continua aceito até você ligar “só pelo painel”. Escopos por missão ficam para
+  depois (hoje o escopo é o estado do painel: desarmado/armado/emergência).
+
+#### Planejado (próximas etapas)
 
 ```
 claude.ai / Claude Code ──OAuth 2.1+PKCE──▶ Painel (Cloudflare Worker + D1) ──túnel──▶ celular (controle-ir)

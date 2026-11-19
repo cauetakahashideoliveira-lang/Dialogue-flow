@@ -8,6 +8,7 @@ escreve. Sem resposta do painel, vale o último estado assinado até o prazo del
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import threading
@@ -71,6 +72,39 @@ def estado_valido(pasta) -> dict | None:
     return e
 
 
+# Etapa 1b: o painel (gateway OAuth na borda) assina cada chamada MCP que repassa ao celular:
+# cabeçalho X-Painel-Assinatura = "<unix>.<nonce>.<Ed25519 de '<unix>.<nonce>.<sha256 hex do corpo>'>", com a mesma
+# chave do estado. O nonce (aleatório) torna cada assinatura única: a mesma não é aceita duas vezes.
+JANELA_ASSINATURA = 90
+_vistas: dict[str, float] = {}
+_vistas_trava = threading.Lock()
+
+
+def verificar_requisicao(pasta, cabecalho: str | None, corpo: bytes, agora: float | None = None) -> bool:
+    """A chamada veio do Painel da Casa? Confere assinatura, horário (±90 s) e repetição (cada uma vale uma vez)."""
+    cfg = ler(pasta)
+    if not cfg or cfg.get("revogado") or not cabecalho or cabecalho.count(".") != 2:
+        return False
+    agora = time.time() if agora is None else agora
+    ts, nonce, sig = cabecalho.split(".")
+    try:
+        if abs(agora - int(ts)) > JANELA_ASSINATURA or not 8 <= len(nonce) <= 64:
+            return False
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        msg = f"{int(ts)}.{nonce}.{hashlib.sha256(corpo).hexdigest()}".encode()
+        Ed25519PublicKey.from_public_bytes(_b64(cfg["chave_publica"])).verify(_b64(sig), msg)
+    except (ValueError, KeyError, ImportError, InvalidSignature):
+        return False
+    with _vistas_trava:
+        for k in [k for k, t in _vistas.items() if agora - t > 2 * JANELA_ASSINATURA]:
+            del _vistas[k]
+        if nonce in _vistas:  # repetição de uma chamada já atendida
+            return False
+        _vistas[nonce] = agora
+    return True
+
+
 def _http(metodo: str, url: str, token: str | None = None, corpo=None, timeout: float = 10):
     cab = {"Accept": "application/json", "User-Agent": "controle-ir"}
     dados = None
@@ -109,7 +143,7 @@ def parear(pasta, url: str, codigo: str, nome: str, versao: str) -> dict:
     return cfg
 
 
-def sincronizar(pasta, versao: str, ao_reduzir=None) -> dict:
+def sincronizar(pasta, versao: str, ao_reduzir=None, url_mcp=None) -> dict:
     """Uma rodada: busca o estado assinado, aplica, confirma e envia o histórico novo."""
     cfg = ler(pasta)
     if not cfg:
@@ -128,7 +162,7 @@ def sincronizar(pasta, versao: str, ao_reduzir=None) -> dict:
     if int(e["seq"]) < int(cfg.get("seq_max", 0)):
         raise ValueError("o painel devolveu um estado mais antigo que o já aplicado")
     cfg.update(estado=r["estado"], assinatura=r["assinatura"], seq_max=int(e["seq"]), verificado_em=time.time(),
-               revogado=False)
+               revogado=False, so_pelo_painel=int(e.get("so_pelo_painel") or 0))
     gravar(pasta, cfg)
     agora = time.time()
     armado_antes = bool(antes and not antes.get("travado") and antes.get("armado_ate", 0) > agora)
@@ -137,8 +171,11 @@ def sincronizar(pasta, versao: str, ao_reduzir=None) -> dict:
         ao_reduzir("emergência no painel" if e.get("travado") else "desarmado pelo painel")
     desde = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(cfg["pareado_em"])) if cfg.get("pareado_em") else ""
     eventos, novo_offset, arquivo = _eventos_novos(pasta, int(cfg.get("offset", 0)), desde)
-    st2, r2 = _http("POST", f"{cfg['url']}/api/celular/ack", cfg["token"],
-                   {"seq": e["seq"], "versao": versao, "eventos": eventos, "arquivo": arquivo}, timeout=20)
+    corpo = {"seq": e["seq"], "versao": versao, "eventos": eventos, "arquivo": arquivo}
+    url = url_mcp() if url_mcp else None
+    if url:  # endereço do MCP do celular, para o painel repassar as chamadas do Claude (assinadas)
+        corpo["mcp_url"] = url
+    st2, r2 = _http("POST", f"{cfg['url']}/api/celular/ack", cfg["token"], corpo, timeout=20)
     if st2 == 200:
         cfg = ler(pasta) or cfg
         cfg["offset"] = novo_offset
@@ -180,8 +217,8 @@ def _eventos_novos(pasta, offset: int, desde: str = "", maximo: int = MAX_EVENTO
 class Sincronizador:
     """Laço em segundo plano do serviço: busca o estado do painel a cada INTERVALO segundos."""
 
-    def __init__(self, pasta, versao: str, ao_reduzir=None, log=None):
-        self.pasta, self.versao, self.ao_reduzir = Path(pasta), versao, ao_reduzir
+    def __init__(self, pasta, versao: str, ao_reduzir=None, log=None, url_mcp=None):
+        self.pasta, self.versao, self.ao_reduzir, self.url_mcp = Path(pasta), versao, ao_reduzir, url_mcp
         self.log = log or (lambda *a: None)
         self.parar = threading.Event()
         self.ultimo: dict = {}
@@ -192,7 +229,7 @@ class Sincronizador:
     def _laco(self):
         while not self.parar.is_set():
             try:
-                self.ultimo = sincronizar(self.pasta, self.versao, self.ao_reduzir)
+                self.ultimo = sincronizar(self.pasta, self.versao, self.ao_reduzir, self.url_mcp)
             except Exception as e:  # noqa: BLE001 — erro de rede ou assinatura: mantém falha fechada
                 self.ultimo = {"erro": str(e)[:200]}
                 self.log("painel", self.ultimo["erro"])

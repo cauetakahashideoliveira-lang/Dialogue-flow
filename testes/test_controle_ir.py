@@ -739,6 +739,49 @@ class TestPainel(unittest.TestCase):
         ev2, fim2, _ = self.p._eventos_novos(self.pasta, fim, "2026-11-19 00:00:00")
         self.assertEqual((len(ev2), fim2), (10, arq.stat().st_size))
 
+    def assinar_req(self, corpo: bytes, ts=None, chave=None):
+        import hashlib
+        ts = int(time.time()) if ts is None else ts
+        nonce = base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
+        sig = (chave or self.chave).sign(f"{ts}.{nonce}.{hashlib.sha256(corpo).hexdigest()}".encode())
+        return f"{ts}.{nonce}." + base64.urlsafe_b64encode(sig).decode().rstrip("=")
+
+    def test_chamada_repassada_pelo_painel_assinada(self):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        corpo = b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+        v = self.p.verificar_requisicao
+        self.assertTrue(v(self.pasta, self.assinar_req(corpo), corpo))
+        self.assertFalse(v(self.pasta, self.assinar_req(corpo), corpo + b" "))  # corpo trocado no caminho
+        self.assertFalse(v(self.pasta, self.assinar_req(corpo, ts=int(time.time()) - 600), corpo))  # velha
+        self.assertFalse(v(self.pasta, self.assinar_req(corpo, chave=Ed25519PrivateKey.generate()), corpo))
+        cab = self.assinar_req(corpo)
+        self.assertTrue(v(self.pasta, cab, corpo))
+        self.assertFalse(v(self.pasta, cab, corpo))  # a mesma assinatura não vale duas vezes (repetição)
+        self.assertFalse(v(self.pasta, None, corpo))
+
+    def test_servidor_aceita_painel_e_recusa_direto_quando_so_pelo_painel(self):
+        segredo = "segredo-de-teste-456"
+        http = criar_servidor(self.s, segredo, 0)
+        threading.Thread(target=http.serve_forever, daemon=True).start()
+        self.addCleanup(http.shutdown)
+        url = f"http://127.0.0.1:{http.server_address[1]}/mcp/{segredo}"
+
+        def post(corpo: bytes, cab=None):
+            req = urllib.request.Request(url, corpo, {"Content-Type": "application/json", **(cab or {})})
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return r.status
+            except urllib.error.HTTPError as e:
+                return e.code
+        corpo = b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+        self.assertEqual(post(corpo, {"X-Painel-Assinatura": self.assinar_req(corpo)}), 200)
+        self.assertEqual(post(corpo, {"X-Painel-Assinatura": "123.abcdefgh.falsa"}), 401)
+        self.assertEqual(post(corpo), 200)  # direto pelo ngrok ainda vale até o dono ligar "só pelo painel"
+        self.p.gravar(self.pasta, {**self.p.ler(self.pasta), "so_pelo_painel": 1})
+        self.assertTrue(self.pol.efetiva()["so_pelo_painel"])
+        self.assertEqual(post(corpo), 403)  # URL do ngrok vazada não basta mais
+        self.assertEqual(post(corpo, {"X-Painel-Assinatura": self.assinar_req(corpo)}), 200)
+
 
 class TestGreeVariante(unittest.TestCase):
     """ferramentas/gree_variante.py: sinais que funcionaram no “ar do quarto” (Gree GWH09KF) em 17/11/2026."""

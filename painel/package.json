@@ -9,6 +9,7 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.4",
     "@simplewebauthn/server": "14.1.0"
   },
   "devDependencies": {

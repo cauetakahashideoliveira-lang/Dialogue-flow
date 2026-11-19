@@ -41,6 +41,9 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Etapa 1b (1.0.26 + PR #8): OAuth na borda.** Conector novo `https://<painel>/mcp` com login pela
+  digital; o painel barra na borda o que o estado não permite e repassa o resto assinado; “só pelo painel” fecha a
+  URL do ngrok. Falta: merge, instalar 1.0.26, adicionar o conector novo no claude.ai, testar, ligar “só pelo painel”.
 - **19/11 — Etapa 1a em uso:** passkeys do POCO e do iPad cadastradas; POCO pareado e na 1.0.25; armar é pelo
   Painel da Casa (atalho na tela inicial), com a digital. Próximo: Etapa 1b (OAuth na borda, fim da URL secreta).
 - **19/11 — Painel no ar (PR #6) e POCO pareado.** Na 1ª sincronização o celular tentou mandar o histórico

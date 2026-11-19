@@ -3,7 +3,8 @@
 //      node testes/e2e.cjs http://localhost:8787
 // A "digital" é o autenticador virtual do Chromium (CDP WebAuthn), com verificação do usuário.
 const { chromium } = require('playwright');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
+const nodeCrypto = require('crypto');
 const fs = require('fs'), os = require('os'), path = require('path');
 
 const BASE = process.argv[2] || 'http://localhost:8787';
@@ -94,6 +95,60 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   ok(s.efetiva.armado_ate > Date.now() / 1000 + 7000, 'celular ARMADO por ~2 h pelo estado assinado');
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/aplicado no celular/.test(await pagina.textContent('#celulares')), 'depois da confirmação: "aplicado"');
+
+  // 4b. Etapa 1b: o Claude entra pelo painel (OAuth com a digital); o painel repassa ao celular, assinado
+  const FALSO = `import json,sys\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom controle_ir import painel\nP=sys.argv[1];n={'chamadas':0}\nclass H(BaseHTTPRequestHandler):\n  def log_message(s,*a):pass\n  def _r(s,st,d):\n    b=json.dumps(d).encode();s.send_response(st);s.send_header('Content-Type','application/json');s.send_header('Content-Length',str(len(b)));s.end_headers();s.wfile.write(b)\n  def do_GET(s):s._r(200,n)\n  def do_POST(s):\n    b=s.rfile.read(int(s.headers['Content-Length']))\n    if s.path!='/mcp/segredo-teste':return s._r(401,{'erro':'segredo'})\n    if not painel.verificar_requisicao(P,s.headers.get('X-Painel-Assinatura'),b):return s._r(401,{'erro':'assinatura'})\n    n['chamadas']+=1;m=json.loads(b)\n    s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'content':[{'type':'text','text':json.dumps({'via':'celular','ferramenta':(m.get('params') or {}).get('name')})}]}})\nThreadingHTTPServer(('127.0.0.1',8799),H).serve_forever()`;
+  const falso = spawn('python3', ['-c', FALSO, PASTA], { env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: 'ignore' });
+  await new Promise(r => setTimeout(r, 800));
+  const chamadasNoCelular = async () => (await (await fetch('http://127.0.0.1:8799/')).json()).chamadas;
+  celular(`r=painel.sincronizar(P,'e2e',url_mcp=lambda:'http://127.0.0.1:8799/mcp/segredo-teste')\nprint(json.dumps(r))`);
+  const semToken = await fetch(`${BASE}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  ok(semToken.status === 401 && /resource_metadata/.test(semToken.headers.get('www-authenticate') || ''), '/mcp sem token → 401 apontando para o OAuth');
+  const meta = await (await fetch(`${BASE}/.well-known/oauth-protected-resource/mcp`)).json();
+  ok(meta.resource === `${BASE}/mcp` && meta.authorization_servers?.length === 1, 'metadados OAuth publicados (RFC 9728)');
+  const registrar = uris => fetch(`${BASE}/oauth/register`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_name: 'Claude (teste)', redirect_uris: uris, token_endpoint_auth_method: 'none',
+      grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] }) });
+  ok((await registrar(['https://atacante.example/cb'])).status === 400, 'cliente com destino de terceiros não se registra');
+  const cliente = await (await registrar(['https://claude.ai/api/mcp/auth_callback'])).json();
+  const b64u = b => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const verificador = b64u(nodeCrypto.randomBytes(32));
+  const desafioPkce = b64u(nodeCrypto.createHash('sha256').update(verificador).digest());
+  const q = new URLSearchParams({ response_type: 'code', client_id: cliente.client_id, redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+    code_challenge: desafioPkce, code_challenge_method: 'S256', state: 'st123', scope: 'controle', resource: `${BASE}/mcp` });
+  let voltou = null;
+  await pagina.route('https://claude.ai/**', r => { voltou = r.request().url(); r.fulfill({ status: 200, body: 'ok' }); });
+  await pagina.goto(`${BASE}/authorize?${q}`);
+  ok(/Claude \(teste\)/.test(await pagina.textContent('#pedido')) && /claude\.ai/.test(await pagina.textContent('#pedido')),
+    'página de autorização mostra o app e o destino (claude.ai)');
+  await pagina.click('#btAutorizar');
+  for (let i = 0; i < 50 && !voltou; i++) await pagina.waitForTimeout(100);
+  const cb = new URL(voltou || 'https://x/');
+  ok(cb.searchParams.get('state') === 'st123' && cb.searchParams.get('code'), 'com a digital, o código volta para o Claude');
+  const tok = await (await fetch(`${BASE}/oauth/token`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'authorization_code', code: cb.searchParams.get('code'), redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+      client_id: cliente.client_id, code_verifier: verificador, resource: `${BASE}/mcp` }) })).json();
+  ok(!!tok.access_token, 'token OAuth emitido (PKCE)');
+  const chamar = (nome, token = tok.access_token) => fetch(`${BASE}/mcp`, { method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: nome, arguments: {} } }) });
+  let r = await (await chamar('executar_comando')).json();
+  ok(/"via": ?"celular"/.test(r.result?.content?.[0]?.text || '') && await chamadasNoCelular() === 1,
+    'armado: a chamada chega ao celular, com a assinatura do painel conferida pelo código real');
+  await pagina.unroute('https://claude.ai/**');
+  await pagina.goto(BASE); await pagina.waitForSelector('#logado:not(.escondido)');
+  ok(/Claude \(teste\) → claude\.ai/.test(await pagina.textContent('#acessos')), 'painel lista o acesso autorizado');
+  await clicar('#btDesarmar');
+  r = await (await chamar('executar_comando')).json();
+  ok(r.result?.structuredContent?.onde === 'painel' && await chamadasNoCelular() === 1, 'desarmado: terminal barrado NA BORDA (nem chega ao celular)');
+  r = await (await chamar('controlar')).json();
+  ok(/"via": ?"celular"/.test(r.result?.content?.[0]?.text || ''), 'desarmado: infravermelho continua passando');
+  await pagina.check('#soPainel'); await pagina.waitForTimeout(800);
+  ok(celular(`painel.sincronizar(P,'e2e')\nprint(json.dumps({'s':Politica(P).efetiva().get('so_pelo_painel')}))`).s === true,
+    '"só pelo painel" chega ao celular pelo estado assinado');
+  await pagina.click('text=Revogar acesso'); await pagina.waitForTimeout(800);
+  ok((await chamar('controlar')).status === 401, 'acesso revogado no painel: o token para de valer na hora');
+  falso.kill();
 
   // 5. Sem digital recente, armar é recusado; a interface pede a digital e conclui
   execFileSync('npx', ['wrangler', 'd1', 'execute', 'painel', '--local', '--command', 'UPDATE sessoes SET passkey_em = passkey_em - 600'], { cwd: path.join(RAIZ, 'painel'), stdio: 'ignore' });

@@ -41,6 +41,22 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Canal direto, grade NxN, rotinas e reenvios (1.0.46 + PR da Central):**
+  * **Canal direto** (`controle_ir/canal.py` + Durable Object `Canal` na Central): o celular disca para a Central
+    e mantém um WebSocket; as chamadas vão por ele (sem ngrok, sem TLS por chamada) e a Central empurra avisos
+    (armar/desarmar/painel aberto chegam na hora). Confirmação de recebimento: sem ela em 5 s, cai para o túnel.
+    Detalhes e segurança: `docs/seguranca.md` §3d. E2E da Central: 53/53 (inclui canal, aviso na hora e celular
+    congelado → túnel em 5,0 s).
+  * **Reenvios:** a mesma chamada repetida pela rede (corpo idêntico, enquanto roda ou até 3 s depois) devolve a
+    resposta da primeira — causa provável dos "não achei o teclado" falsos (a 1ª execução resolvia o jogo, a
+    resposta se perdia e o reenvio rodava na tela de resultado). `rpc_id` agora vai para a auditoria.
+  * **Grade NxN:** modelos guardados no leitor (`modelos`/`ler`), assinatura 32x32 com o símbolo principal do
+    botão (ignora a contagem embaixo), teclado em páginas (desliza a fileira), símbolos 1–9 e A–Z, resolvedor
+    genérico (9x9, 16x16 em 1 ms, 6x6…), correção de casa duvidosa em conflito, preenchimento por página e
+    conferência com os modelos guardados (antes: os botões sumiam e a conferência dava "faltam todas").
+    Validado offline: 131/131 no 16x16 (B≠8, G≠C), 81/81 no 9x9.
+  * **Reflexos por app** (`app`, texto curto só vale igual) também nas esperas (`esperar_texto`, grade) e
+    **rotinas** (`acao=rotina`: salvar/rodar/repetir N vezes numa chamada com resumo por volta).
 - **19/11 — Anúncio por baixo da barra do sistema (1.0.45):** um AppLovin com cartão final sem fechar passou como "fechado"
   porque o último evento de janela era da barra de notificações/gravador de tela. Agora, se o último evento vem do
   sistema (ou ao confirmar o fechamento), confere a atividade no topo (`dumpsys activity | topResumedActivity`).

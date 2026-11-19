@@ -39,13 +39,15 @@ class Servico:
         self.trava_envio = threading.Lock()
         self.ultima_requisicao_claude: float | None = None
         self.url_publica: str | None = None
+        self.canal = None  # canal direto com a Central (controle_ir.canal), quando pareado
         self.inicio = agora()
 
     # ------------------------------------------------------------- consulta
     def consultar(self, categoria=None, marca=None, texto=None) -> dict:
         est = self.cat.estatisticas()
         out = {
-            "servidor": {"versao": __version__, "ativo_desde": hora_legivel(self.inicio)},
+            "servidor": {"versao": __version__, "ativo_desde": hora_legivel(self.inicio),
+                         **({"canal": self.canal.estado()} if self.canal else {})},
             "emissor": self.emissor.disponivel(),
             "catalogo": {"perfis": est["perfis"], "sinais_unicos": est["sinais_unicos"], "marcas": est["marcas"],
                          "categorias": est["categorias"], "fontes": est["fontes"]},

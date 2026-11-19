@@ -32,6 +32,10 @@
   (`https://<painel>/mcp`, OAuth com a digital, bloqueio na borda). Conector em uso: **Controle Geral** (o antigo
   “Controle master”, pela URL do ngrok, é recusado desde que “só pelo painel” foi ligado). Mudança no painel = PR que o dono aprova (merge);
   teste local: `painel/testes/e2e.cjs` com `wrangler dev` sem as variáveis de proxy.
+- **Canal direto** (1.0.46+): o celular mantém um WebSocket com a Central (`controle_ir/canal.py`, Durable Object
+  `Canal`); chamadas sem túnel e avisos na hora; sem canal, volta ao ngrok sozinho (`docs/seguranca.md` §3d).
+  `consultar` mostra `servidor.canal`. Tela: `acao=grade` lê/resolve grades NxN no celular (9x9, 16x16 com
+  letras); `acao=rotina` guarda chamadas longas e repete N vezes; reflexos por app dispensam avisos de jogos.
 - Pedidos de aprovação do conector vêm das permissões dele no claude.ai (claude.ai/customize/connectors →
   Controle Geral → “Sempre permitir”; a regra da organização `org_ask_ceiling` pode travar); não tente contornar. Ferramentas novas do conector só aparecem em conversas novas (lista fixa por conversa).
 - **`/god-mode`** (`.claude/skills/god-mode/`, adaptação AGPL do G0DM0D3): AutoTune, notas, STM, `perguntar` e

@@ -55,7 +55,10 @@ function render() {
     const st = el('div', travado ? 'TRAVADO (emergência)' : armado ? `ARMADO até ${hora(e.armado_ate)}` : 'Desarmado',
       `estado ${travado ? 'perigo-t' : armado ? 'alerta' : 'ok'}`);
     const ap = el('div', a.aplicado ? '✓ aplicado no celular' : '… pendente: o celular ainda não confirmou', a.aplicado ? 'ok' : 'alerta');
-    cel.append(el('strong', a.nome), st, ap,
+    const canal = a.canal && a.canal.conectado
+      ? el('p', `⚡ Conexão direta (canal) ativa desde ${a.canal.desde ? hora(Math.floor(a.canal.desde / 1000)) : '?'}: chamadas sem túnel e avisos na hora`, 'ok')
+      : el('p', 'Conexão pelo túnel (ngrok): o canal direto liga sozinho com a versão 1.0.46+ do celular', 'suave');
+    cel.append(el('strong', a.nome), st, ap, canal,
       el('p', `Último contato ${ha(a.ultimo_contato)} · versão ${a.versao || '?'} · desarmado permite: ${e.desarmado_permite === 'ir' ? 'infravermelho' : 'só consulta'}`, 'suave'));
     $('permite').value = e.desarmado_permite;
     const rv = el('button', `Revogar ${a.nome}`, 'sec');

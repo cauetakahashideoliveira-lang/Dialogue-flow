@@ -191,7 +191,8 @@ def sincronizar(pasta, versao: str, ao_reduzir=None, url_mcp=None, em_uso=None) 
     return {"pareado": True, "seq": e["seq"], "armado_ate": e["armado_ate"], "travado": e["travado"],
             "eventos_enviados": len(eventos) if st2 == 200 else 0,
             "eventos_aceitos": r2.get("recebidos", 0) if st2 == 200 else 0,
-            "ao_vivo_ate": float(r.get("ao_vivo_ate") or 0), "observar_ate": float(r.get("observar_ate") or 0)}
+            "ao_vivo_ate": float(r.get("ao_vivo_ate") or 0), "observar_ate": float(r.get("observar_ate") or 0),
+            "canal_na_central": bool(r.get("canal"))}
 
 
 def _eventos_novos(pasta, offset: int, desde: str = "", maximo: int = MAX_EVENTOS) -> tuple[list, int, str]:
@@ -231,21 +232,31 @@ class Sincronizador:
         self.em_uso, self.quadro = em_uso, quadro
         self.log = log or (lambda *a: None)
         self.parar = threading.Event()
+        self.despertar = threading.Event()
         self.ultimo: dict = {}
+        self.ao_ver_canal = None  # a Central passou a ter canal direto: o canal do celular tenta conectar já
 
     def iniciar(self):
         threading.Thread(target=self._laco, name="painel", daemon=True).start()
+        return self
+
+    def acordar(self):
+        """Sincroniza agora (a Central avisou pelo canal: armado, desarmado, painel aberto…), sem esperar 30 s."""
+        self.despertar.set()
 
     def _laco(self):
         while not self.parar.is_set():
             try:
                 self.ultimo = self._rodada()
+                if self.ao_ver_canal and self.ultimo.get("canal_na_central"):
+                    self.ao_ver_canal()
                 if self.quadro and self.ultimo.get("ao_vivo_ate", 0) > time.time():
                     self._transmitir()
             except Exception as e:  # noqa: BLE001 — erro de rede ou assinatura: mantém falha fechada
                 self.ultimo = {"erro": str(e)[:200]}
                 self.log("painel", self.ultimo["erro"])
-            self.parar.wait(INTERVALO)
+            self.despertar.wait(INTERVALO)  # 30 s, ou na hora se a Central avisar pelo canal
+            self.despertar.clear()
 
     def _rodada(self) -> dict:
         return sincronizar(self.pasta, self.versao, self.ao_reduzir, self.url_mcp, self.em_uso)

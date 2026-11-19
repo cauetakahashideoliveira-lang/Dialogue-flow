@@ -350,6 +350,7 @@ class ServidorMCP:
             if metodo == "tools/list":
                 return {"jsonrpc": "2.0", "id": ident, "result": {"tools": self.ferramentas()}}
             if metodo == "tools/call":
+                self._rpc_id = ident  # vai para a auditoria: mostra se o cliente repete ids (diagnóstico de reenvios)
                 return {"jsonrpc": "2.0", "id": ident, "result": self.chamar(params.get("name"),
                                                                               params.get("arguments") or {})}
             if metodo in ("resources/list", "prompts/list"):
@@ -380,7 +381,7 @@ class ServidorMCP:
             return self._resultado({"erro": motivo, "bloqueado": True}, True)
         self.log(f"ferramenta {nome}", json.dumps(args, ensure_ascii=False)[:300])
         try:
-            self.servico.exec.auditar({"evento": "ferramenta", "ferramenta": nome,
+            self.servico.exec.auditar({"evento": "ferramenta", "ferramenta": nome, "rpc_id": getattr(self, "_rpc_id", None),
                                        "args": json.dumps(args, ensure_ascii=False, default=str)[:300]})
         except Exception:  # noqa: BLE001 — auditoria nunca bloqueia
             pass

@@ -10,5 +10,8 @@
   "d1_databases": [{ "binding": "DB", "database_name": "painel" }],
   // tokens do OAuth (o Claude entrando pelo painel); criado sozinho no deploy
   "kv_namespaces": [{ "binding": "OAUTH_KV" }],
+  // canal direto com o celular: um objeto por aparelho segura o WebSocket que o celular abre (plano grátis: SQLite)
+  "durable_objects": { "bindings": [{ "name": "CANAL", "class_name": "Canal" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Canal"] }],
   "observability": { "enabled": true }
 }

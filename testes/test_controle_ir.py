@@ -445,6 +445,110 @@ class TestDescoberta(unittest.TestCase):
         self.assertEqual(srv2.desc.s["cursor"], 1)
 
 
+class TestCanal(unittest.TestCase):
+    """Canal direto com a Central: o cliente WebSocket do celular contra uma 'Central' mínima feita aqui."""
+
+    def test_canal_repassa_chamada_e_aviso(self):
+        import base64 as b64
+        import hashlib as hl
+        import socket as so
+        import struct as st
+        from controle_ir import canal as canal_mod
+        pasta = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, pasta, True)
+        # servidor local falso (o /mcp do celular): ecoa a assinatura e o corpo
+        recebidas = []
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                corpo = self.rfile.read(int(self.headers["Content-Length"]))
+                recebidas.append((self.path, self.headers.get("X-Painel-Assinatura"), corpo))
+                b = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"eco": corpo.decode()}}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
+
+        local = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=local.serve_forever, daemon=True).start()
+        self.addCleanup(local.shutdown)
+        # "Central" mínima: aceita o WebSocket, confere o token, manda um aviso e uma chamada, lê a resposta
+        srv = so.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        porta_ws = srv.getsockname()[1]
+        visto = {}
+
+        def central():
+            c, _ = srv.accept()
+            req = b""
+            while b"\r\n\r\n" not in req:
+                req += c.recv(4096)
+            linhas = req.decode().split("\r\n")
+            visto["auth"] = next((ln for ln in linhas if ln.lower().startswith("authorization:")), "")
+            chave = next(ln.split(":", 1)[1].strip() for ln in linhas if ln.lower().startswith("sec-websocket-key"))
+            aceite = b64.b64encode(hl.sha1((chave + canal_mod.GUID).encode()).digest()).decode()
+            c.sendall(f"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                      f"Sec-WebSocket-Accept: {aceite}\r\n\r\n".encode())
+
+            def mandar(txt):
+                d = txt.encode()
+                c.sendall(bytes([0x81, 126]) + st.pack("!H", len(d)) + d if len(d) >= 126 else bytes([0x81, len(d)]) + d)
+
+            def ler():
+                b1, b2 = c.recv(2)
+                n = b2 & 0x7F
+                if n == 126:
+                    n = st.unpack("!H", c.recv(2))[0]
+                elif n == 127:
+                    n = st.unpack("!Q", c.recv(8))[0]
+                m = c.recv(4)
+                d = b""
+                while len(d) < n:
+                    d += c.recv(n - len(d))
+                return bytes(x ^ m[i % 4] for i, x in enumerate(d))
+
+            mandar(json.dumps({"t": "sync"}))
+            mandar(json.dumps({"t": "req", "id": "r1", "h": {"x-painel-assinatura": "1.abcdefgh.sig",
+                                                              "content-type": "application/json", "cookie": "não"},
+                               "b": json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call"})}))
+            while True:
+                txt = ler().decode()
+                if txt.startswith("{"):
+                    m = json.loads(txt)
+                    if m.get("t") == "ok":
+                        visto["confirmou"] = m.get("id")  # recebeu: confirma antes de executar
+                        continue
+                    visto["resposta"] = m
+                    break
+            c.close()
+
+        threading.Thread(target=central, daemon=True).start()
+        from controle_ir import painel as painel_mod
+        painel_mod.gravar(pasta, {"url": f"http://127.0.0.1:{porta_ws}", "aparelho": "a1", "token": "tok-123",
+                                  "chave_publica": "x"})
+        acordou = threading.Event()
+        cn = canal_mod.Canal(pasta, local.server_address[1], "segredo-x", ao_sincronizar=acordou.set).iniciar()
+        self.addCleanup(cn.parar.set)
+        fim = time.time() + 10
+        while "resposta" not in visto and time.time() < fim:
+            time.sleep(0.05)
+        self.assertEqual(visto["auth"], "Authorization: Bearer tok-123")  # entra com o token do aparelho
+        self.assertEqual(visto["confirmou"], "r1")  # confirmação de recebimento (a Central não cai para o túnel)
+        self.assertTrue(acordou.is_set())  # aviso "sync" → sincroniza na hora
+        caminho, ass, corpo = recebidas[0]
+        self.assertEqual(caminho, "/mcp/segredo-x")  # entregue ao servidor LOCAL, com o segredo
+        self.assertEqual(ass, "1.abcdefgh.sig")  # a assinatura da Central segue junto (é ela que vale)
+        r = visto["resposta"]
+        self.assertEqual((r["t"], r["id"], r["s"]), ("res", "r1", 200))
+        self.assertIn("tools/call", json.loads(r["b"])["result"]["eco"])
+        self.assertEqual(cn.atendidas, 1)
+
+
 class TestServidorMCP(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -490,6 +594,32 @@ class TestServidorMCP(unittest.TestCase):
         st, r = self.post(url, {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
                                 "params": {"name": "controlar", "arguments": {"aparelho": "inexistente"}}})
         self.assertTrue(r["result"]["isError"])
+
+    def test_reenvio_da_rede_nao_executa_duas_vezes(self):
+        from controle_ir.servidor import Reenvios
+        r = Reenvios(janela=0.5)
+        n = {"execucoes": 0}
+
+        def lento():
+            n["execucoes"] += 1
+            time.sleep(0.3)
+            return 200, {"ok": n["execucoes"]}
+
+        corpo = {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "x"}}
+        chave = Reenvios.chave(json.dumps(corpo).encode(), corpo)
+        res = []
+        ts = [threading.Thread(target=lambda: res.append(r.executar(chave, lento))) for _ in range(2)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+        self.assertEqual(n["execucoes"], 1)  # o reenvio chegou com a primeira rodando: esperou e reaproveitou
+        self.assertEqual(sorted(x[2] for x in res), [False, True])
+        self.assertTrue(r.executar(chave, lento)[2])  # logo depois de terminar: ainda é reenvio
+        time.sleep(0.6)
+        self.assertFalse(r.executar(chave, lento)[2])  # passada a janela: pedido novo de verdade
+        self.assertEqual(n["execucoes"], 2)
+        self.assertIsNone(Reenvios.chave(b"{}", {"method": "tools/list", "id": 1}))  # só ferramentas
 
     def test_seguranca(self):
         st, _ = self.post("/mcp/errado", {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
@@ -1787,12 +1917,15 @@ for linha in sys.stdin:
             os.remove(parar)
     elif cmd == "aguardar":
         r = str(int(p[2]) + 1)
-    elif cmd == "grade":
-        cont += 1
+    elif cmd in ("limparmodelos", "modelos"):
+        open(reg, "a").write("leitor " + " ".join(p[1:]) + "\\n")
+        r = "ok 9"
+    elif cmd == "ler":
         g1, g2 = (os.path.join(os.path.dirname(reg), f) for f in ("grade1.txt", "grade2.txt"))
         lidas = getattr(sys, "lidas", 0) + 1
         sys.lidas = lidas
-        r = open(g2 if lidas > 2 and os.path.exists(g2) else g1).read().strip() + "\\nduvidas "
+        txt = open(g2 if lidas > 2 and os.path.exists(g2) else g1).read().strip()
+        r = "\\n".join(" ".join(ch for ch in ln) for ln in txt.split("\\n"))
     elif cmd == "shell":
         pr = subprocess.run(["sh", "-c", bytes.fromhex(p[2]).decode()], capture_output=True, text=True)
         r = f"{{pr.returncode}} {{len(pr.stdout)}}\\n" + pr.stdout + pr.stderr
@@ -2026,8 +2159,8 @@ for linha in sys.stdin:
 
     def test_grade_resolve_preenche_e_confere(self):
         self._leitor_falso()
-        sol = ["854713296", "231496587", "769825143", "672159834", "348672951",
-               "915368472", "527931648", "183247965", "496582317"]
+        sol = ["854713296", "231695784", "769824153", "672459831", "348271569",
+               "915368472", "527136948", "183947625", "496582317"]
         quase = [ln for ln in sol]
         quase[0] = "054713296"  # uma casa vazia
         (self.tmp / "grade1.txt").write_text("\n".join(quase))
@@ -2040,6 +2173,55 @@ for linha in sys.stdin:
         log = self.registro.read_text()
         self.assertIn("leitor toquesv 8:8 83 686 1049 2362", log)  # casa (0,0) e o botão 8, leva rápida e vigiada
         self.assertNotIn("refeitos", r)
+
+    def test_grade_16x16_blocos_e_correcao_de_duvida(self):
+        rows = ["D.7.....69.4C..5", "1G.E.D248.5.A96.", ".4...7A9B....21E", "3.9F58...1EG4...",
+                ".2D.F.G.7.4...86", "97..E2CB3F6.1.A.", ".1A864.3..BD..F.", ".6....8..5...C.9",
+                "..6.AF.5CG.E2.D.", "A54.1.D...2B6.C7", "2..C9...4.3...5A", "BE...C.8.A1.3.94",
+                "8..4.B.EA.....G.", "5...8G.7D..29.E.", "FD164.9...C..8..", "G.....F21.....43"]
+        S = self.m.SIMBOLOS
+        g = [[0 if ch == "." else S.index(ch) + 1 for ch in r] for r in rows]
+        sol = self.m.resolver_grade(g)
+        self.assertIsNotNone(sol)
+        for r in range(16):  # linhas, colunas e blocos 4x4 completos
+            self.assertEqual(sorted(sol[r]), list(range(1, 17)))
+            self.assertEqual(sorted(sol[i][r] for i in range(16)), list(range(1, 17)))
+        self.assertEqual(sorted(sol[i][j] for i in range(4) for j in range(4)), list(range(1, 17)))
+        self.assertEqual(self.m._caixa(6), (2, 3))
+        g[0][1] = g[0][0]  # leitura errada vira repetição: aponta as duas casas
+        self.assertTrue({(0, 0), (0, 1)} <= self.m._conflitos(g))  # (e o outro D da coluna)
+        self.assertIsNone(self.m.resolver_grade(g))
+
+    def test_teclado_em_paginas_e_regra_de_texto_curto(self):
+        reg = [17, 617, 1244, 1243]
+        pag2 = [{"clicavel": True, "x": x, "y": 2362, "l": 150, "a": 190} for x in (107, 285, 462, 640, 818, 996, 1173)]
+        ferramentas = [{"clicavel": True, "x": 168 + 240 * k, "y": 2115, "l": 200, "a": 150} for k in range(5)]
+        self.assertEqual(len(self.m.teclado_da_grade(pag2 + ferramentas, reg)), 7)  # a fileira maior é o teclado
+        els = [{"texto": "Facebook", "desc": "", "x": 1, "y": 1, "clicavel": True},
+               {"texto": "OK", "desc": "", "x": 9, "y": 9, "clicavel": True}]
+        self.assertEqual(self.m.achar_regra(els, "ok")["x"], 9)  # "ok" não casa com "Facebook"
+        self.assertIsNone(self.m.achar_regra(els[:1], "ok"))
+        r = {"app": "app.jogo", "se": "OK", "tocar": "OK"}
+        self.assertEqual(self.m.regra_vale(r, "app.jogo", lambda: els), (9, 9))
+        self.assertIsNone(self.m.regra_vale(r, "com.whatsapp", lambda: els))  # regra de um app não vale em outro
+        self.assertIn("erro", self.m.reflexos([{"se": "x", "tocar": "x", "app": "não é pacote!"}]))
+
+    def test_rotinas_guardadas_e_repetidas(self):
+        self._leitor_falso()
+        self.m.ROTINAS_ARQ = str(self.tmp / "rotinas.json")
+        self.assertIn("erro", self.m.rotina({"salvar": {"nome": "x y", "args": {"acao": "ver"}}}))
+        self.assertIn("erro", self.m.rotina({"salvar": {"nome": "laco", "args": {"acao": "rotina"}}}))  # sem recursão
+        r = self.m.rotina({"salvar": {"nome": "toque", "args": {"acao": "sequencia", "ver_depois": "nada",
+                                                               "passos": [{"tocar": [3, 4], "confiar": True}]}}})
+        self.assertEqual(r["rotinas"], ["toque"])
+        self.assertEqual(self.m.executar({"acao": "rotina"})["rotinas"], {"toque": "sequencia"})
+        r = self.m.executar({"acao": "rotina", "nome": "toque", "vezes": 3})
+        self.assertEqual((r["feitas"], r["pedidas"]), (3, 3))
+        self.assertTrue(all(v["ok"] for v in r["voltas"]))
+        self.assertEqual(self.registro.read_text().count(" 3 4\n"), 3)  # um toque por volta
+        self.assertIn("erro", self.m.rotina({"nome": "nenhuma"}))
+        self.m.rotina({"apagar": "toque"})
+        self.assertEqual(self.m.rotina({})["rotinas"], {})
 
     def test_anuncio_por_baixo_da_barra_do_sistema(self):
         self._leitor_falso()

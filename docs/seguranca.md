@@ -132,6 +132,28 @@ Autonomia geral continua (nada pede aprovação); a Central só mostra o que aco
 - **Custo:** fora do painel aberto, nada muda (sem Shizuku, sem quadros). Com o painel aberto, uma consulta
   AppOps a cada 30 s; assistindo, captura + ffmpeg a cada 2 s.
 
+### 3d. Canal direto celular ↔ Central (1.0.46 + PR da Central)
+
+Antes, cada chamada ia Central → túnel ngrok → celular. Agora o **celular disca** para a Central
+(`wss://<central>/api/celular/canal`, com o **token do aparelho**) e mantém um WebSocket aberto; um Durable Object
+por aparelho (`Canal`, SQLite, plano grátis) segura a conexão. A Central repassa as chamadas do Claude por ele e
+**empurra avisos** ("sync") — armar, desarmar, emergência, revogar e abrir o painel chegam ao celular **na hora**
+(antes: até 30 s).
+
+Propriedades de segurança (nada afrouxa):
+- **Mesma autenticação de ponta a ponta:** cada chamada que desce pelo canal continua **assinada pela Central**
+  (X-Painel-Assinatura, Ed25519 + nonce + ±90 s) e é entregue ao servidor **local** (127.0.0.1), que confere a
+  assinatura como sempre. Quem roubasse o canal não forjaria chamadas; quem roubasse o token do aparelho só
+  receberia chamadas (já filtradas na borda) e não as ver executadas no celular verdadeiro.
+- **Aviso não é ordem:** o "sync" só acorda a sincronização; o celular busca e **confere a assinatura** do estado
+  como sempre. Um aviso falso não arma nada.
+- **Nada novo exposto no celular:** a conexão é de saída (sem porta aberta, funciona em dados móveis e roteado).
+- **Falha segura:** o celular confirma cada chamada na hora; sem confirmação em 5 s (ou sem batida há 70 s) o
+  canal é descartado e a chamada vai pelo túnel. Reenvios não executam duas vezes: o servidor do celular devolve a
+  resposta da primeira se a mesma chamada (corpo idêntico) chegar enquanto ela roda ou até 3 s depois (1.0.46).
+- **Custo:** batidas a cada 25 s respondidas automaticamente pelo objeto sem acordá-lo (hibernação) — zero de
+  processamento parado; bateria do celular ~ a de um app de mensagens.
+
 #### Planejado (próximas etapas)
 
 ```

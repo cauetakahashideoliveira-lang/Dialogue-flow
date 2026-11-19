@@ -2192,6 +2192,18 @@ for linha in sys.stdin:
         self.assertTrue({(0, 0), (0, 1)} <= self.m._conflitos(g))  # (e o outro D da coluna)
         self.assertIsNone(self.m.resolver_grade(g))
 
+    def test_app_de_banco_nunca_e_lido(self):
+        xml = ('<?xml version="1.0"?><hierarchy>'
+               '<node text="Saldo R$ 1.234" package="com.c6bank.app.yellow" bounds="[0,0][100,100]" clickable="true"/>'
+               '<node text="Pergunta 1" package="com.android.chrome" bounds="[0,200][100,300]"/>'
+               '</hierarchy>')
+        textos = [e["texto"] for e in self.m.elementos(xml)]
+        self.assertEqual(textos, ["Pergunta 1"])  # o nó do banco some antes de qualquer coisa
+        self.assertTrue(self.m._privado("com.nu.production"))
+        self.assertFalse(self.m._privado("com.android.chrome"))
+        self.assertIn("app privado", self.m._janela_curta("com.c6bank.app.yellow|MainActivity|Saldo R$ 10"))
+        self.assertNotIn("Saldo", self.m._janela_curta("com.c6bank.app.yellow|MainActivity|Saldo R$ 10"))
+
     def test_tabuleiro_de_xadrez_compacto(self):
         ini = {"a1": "Brancas Torre", "e1": "Brancas Rei", "e4": "Brancas Peão", "e8": "Pretas Rei", "f6": "Pretas Cavalo"}
         els = []

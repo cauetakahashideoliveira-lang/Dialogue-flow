@@ -41,6 +41,29 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 noite — PILOTO: laço rápido no celular (1.0.47→1.0.55):**
+  * Objetivo do dono: "modo deus" = ver e reagir como uma pessoa. Diagnóstico (debatido com o ChatGPT no app):
+    o celular já percebe/lê/toca em ~0,1–0,3 s; o gargalo é o ciclo do Claude (~3 s por decisão, só vê a tela no
+    retorno de cada chamada). Solução: tirar o Claude do laço — `acao=piloto` (`capacidades/tela/piloto.py`).
+  * Piloto: espera a tela mudar (Java `aguardar`), lê pergunta+opções pela acessibilidade, **corrida de
+    cérebros** (memória → modelo local → Claude Haiku pela API, streaming: toca no 1º dígito), **alvo semântico**
+    (relocaliza o TEXTO escolhido na hora do toque; descarta se a pergunta mudou), **descarte de leitura
+    rasgada** (pergunta e opções têm de mudar juntas + 2 leituras iguais), gravador `~/.controle-ir/piloto/
+    rodadas.jsonl`. `iniciar/estado/parar/ensinar/testar`.
+  * Modelo local: llama.cpp **compilado no celular** com `GGML_NATIVE` (dotprod/i8mm; o pacote do Termux é
+    genérico e 4,5x mais lento) em `~/.controle-ir/llama.cpp/build/bin`, Qwen2.5-1.5B **Q4_0**
+    (`~/.controle-ir/modelos/`), `llama-server` em 127.0.0.1:8080, `-t 4`. Pergunta nova: ~0,32–0,64 s.
+    Religar: `B=~/.controle-ir/llama.cpp/build/bin; LD_LIBRARY_PATH=$B setsid nohup $B/llama-server -m
+    ~/.controle-ir/modelos/qwen2.5-1.5b-q4_0.gguf --host 127.0.0.1 --port 8080 -c 1024 -t 4 -tb 4 --no-webui &`.
+  * Quiz de teste instrumentado: `capacidades/tela/quiz/quiz.html`, servido em 127.0.0.1:**8766** (a 8765 é do
+    serviço) e aberto com `rish am start -d URL`. Rodada 1 (só local): 30/30 respondidas, 0 estouros, mediana
+    916 ms, p95 1475 ms (medido pela página), **14/30 acertos** — quase todos os erros por leitura rasgada
+    (corrigida na 1.0.54, ainda sem nova rodada medida). Chave da API (Haiku) ainda não instalada
+    (`~/.controle-ir/anthropic.key`, nunca pelo chat).
+  * **Privacidade (1.0.55):** a leitura da tela (`ver`, piloto, sequências) descarta nós e imagem de apps da lista
+    de bloqueio (bancos/pagamentos/senhas) — antes só o toque era bloqueado.
+  * Outros: deslize do teclado da grade longe da borda (gesto "voltar"), teclado guardado entre partidas,
+    `texto_max` (ler textos longos inteiros), xadrez compacto (`lance`, `esperar_vez`, `ver_depois=tabuleiro`).
 - **19/11 — Canal direto, grade NxN, rotinas e reenvios (1.0.46 + PR da Central):**
   * **Canal direto** (`controle_ir/canal.py` + Durable Object `Canal` na Central): o celular disca para a Central
     e mantém um WebSocket; as chamadas vão por ele (sem ngrok, sem TLS por chamada) e a Central empurra avisos

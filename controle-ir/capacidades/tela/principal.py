@@ -56,6 +56,18 @@ def ler_bounds(b):
     return tuple(int(v) for v in m.groups()) if m else None
 
 
+_BLOQ_CACHE = {"t": 0.0, "lista": None}
+
+
+def _privado(pacote):
+    """App de banco/pagamento/senha/autenticador (a lista de bloqueio): o conteúdo dele NUNCA é lido nem enviado."""
+    if not pacote:
+        return False
+    if time.time() - _BLOQ_CACHE["t"] > 5 or _BLOQ_CACHE["lista"] is None:
+        _BLOQ_CACHE.update(t=time.time(), lista=bloqueados())
+    return bloqueado(pacote, _BLOQ_CACHE["lista"])
+
+
 _CORTE = [80]  # tamanho máximo de cada texto devolvido (texto_max na chamada: até 4000, p/ ler respostas longas)
 
 
@@ -75,6 +87,8 @@ def elementos(xml_texto, limite=120):
         b = ler_bounds(a.get("bounds"))
         if not b or b[2] <= b[0] or b[3] <= b[1] or not (texto or desc or clicavel or editavel or rolavel or marcavel):
             continue
+        if _privado(a.get("package", "")):
+            continue  # privacidade: nada de app de banco/senha sai do celular
         out.append({"texto": texto[:_CORTE[0]], "desc": desc[:_CORTE[0]], "id": a.get("resource-id", "").split("/")[-1],
                     "classe": a.get("class", "").split(".")[-1], "clicavel": clicavel, "editavel": editavel,
                     "x": (b[0] + b[2]) // 2, "y": (b[1] + b[3]) // 2, "pacote": a.get("package", ""),
@@ -443,6 +457,8 @@ def historico(desde):
 
 def _janela_curta(info):
     pac, cls, txt = (info.split("|") + ["", "", ""])[:3]
+    if _privado(pac):
+        return f"{pac} (app privado: conteúdo não lido)"
     return f"{pac} {cls.split('.')[-1]}" + (f" «{txt}»" if txt else "")
 
 
@@ -1176,6 +1192,12 @@ def ver(imagem=True, largura=720, com_elementos=True, recorte=None, so_mudancas=
     rapida = foto_rapida(largura, recorte) if imagem and _ajudante() else (None, None)
     xml, png, app, acesa = observar(com_elementos, imagem and not rapida[0])
     out = {"app": app, "tela_acesa": acesa}
+    if _privado(app):  # app de banco/senha em primeiro plano: nem imagem nem elementos saem do celular
+        if png:
+            _apagar(png)
+        out["privado"] = "app bloqueado (banco, pagamento ou senha) em primeiro plano: a tela não foi lida"
+        _ULTIMA.update(app=app, els=[], regioes=[])
+        return out
     tempo = _linha_do_tempo()
     if tempo:
         out["surgiu"] = tempo
@@ -1230,7 +1252,7 @@ def _ver_depois(a, padrao=None, tocados=()):
         esperou = calma(int(a.get("calma_ms", 120)), int(a.get("calma_ate", 1000))) if a.get("calma", True) else None
         tela = ver(False, 480, True, None, so_mudancas=True, formato=a.get("formato", "curto"))
         reg = (_ULTIMA.get("regioes") or [None])[0]
-        if reg and ("elementos" in tela or any(dentro(p, reg) for p in tocados)):
+        if reg and not tela.get("privado") and ("elementos" in tela or any(dentro(p, reg) for p in tocados)):
             b64, res = foto_rapida(min(720, max(320, int(a.get("largura", 480)))), reg)
             if b64:
                 tela["_imagem"] = {"mime": "image/jpeg", "base64": b64}

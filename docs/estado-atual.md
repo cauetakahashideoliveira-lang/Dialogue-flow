@@ -41,6 +41,11 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Ciclo econômico (1.0.37):** medido de ponta a ponta: 4,3 s por volta, ~2 s são rede + o Claude
+  escrever/ler (piso que código não remove). Por isso: respostas curtas (elemento numa linha, mudanças como +/-/~,
+  ~metade dos tokens), `surgiu` com as janelas que apareceram desde a última olhada (anel de 32 no leitor) e
+  reflexos guardados no celular (`acao=reflexos`, `~/.controle-ir/tela_reflexos.json`): numa sequência, o que bate
+  com uma regra é resolvido em ms e a leva segue, sem gastar uma volta do Claude.
 - **19/11 — Reflexos na tela (1.0.36):** o leitor conta os eventos da acessibilidade (janelas novas e mudanças).
   Numa leva de toques (`toquesv`), se surgir outra janela (aviso, anúncio, fim de jogo, outro app) ele para na hora e
   a sequência volta com `interrompido` + o que está na tela; a mesma tela se reanunciando não para (nem o teclado).

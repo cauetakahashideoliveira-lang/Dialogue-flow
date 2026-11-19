@@ -391,10 +391,63 @@ def eventos():
         return None
     r = a.pedir("eventos", 6)
     try:
-        j, m, ultima = r.split(" ", 2)
-        return int(j), int(m), ultima.strip()
+        j, m, t, ultima = r.split(" ", 3)
+        return int(j), int(m), ultima.strip(), int(t)
     except (AttributeError, ValueError):
         return None
+
+
+def historico(desde):
+    """Janelas surgidas depois de `desde` (relógio do celular, ms): [(t, "pacote|classe|texto"), ...]."""
+    a = _ajudante()
+    r = a.pedir(f"historico {int(desde)}", 6) if a else None
+    out = []
+    for linha in (r or "").splitlines():
+        t, _, info = linha.partition(" ")
+        if t.isdigit():
+            out.append((int(t), info))
+    return out
+
+
+def _janela_curta(info):
+    pac, cls, txt = (info.split("|") + ["", "", ""])[:3]
+    return f"{pac} {cls.split('.')[-1]}" + (f" «{txt}»" if txt else "")
+
+
+# --------------------------------------------------------------------------- formato curto (menos tokens)
+SINAIS = (("clicavel", "c"), ("editavel", "e"), ("selecionado", "s"), ("rolavel", "r"), ("focado", "f"),
+          ("desativado", "d"))
+LEGENDA = "texto (desc) #id x,y + sinais: c clicável, e editável, s selecionado, r rolável, f focado, d desativado, M/m marcado/não"
+
+
+def curto(e):
+    """Um elemento numa linha: "Texto" (desc) #id x,y sinais."""
+    partes = []
+    if e.get("texto"):
+        partes.append(f'"{e["texto"]}"')
+    if e.get("desc") and e.get("desc") != e.get("texto"):
+        partes.append(f'({e["desc"]})')
+    if e.get("id"):
+        partes.append("#" + e["id"])
+    partes.append(f'{e["x"]},{e["y"]}')
+    sinais = "".join(c for k, c in SINAIS if e.get(k))
+    if e.get("marcado") is not None:
+        sinais += "M" if e["marcado"] else "m"
+    if sinais:
+        partes.append(sinais)
+    return " ".join(partes)
+
+
+def diferenca_curta(dif):
+    linhas = [f"+ {curto(e)}" for e in dif["entrou"]] + [f"- {curto(e)}" for e in dif["saiu"]]
+    for e in dif["mudou"]:
+        antes = e.get("antes", {})
+        agora = {k: v for k, v in e.items() if k != "antes"}
+        if set(antes) == {"texto"}:
+            linhas.append(f'~ {curto(agora)} (era "{antes["texto"]}")')
+        else:
+            linhas.append(f"~ {curto(agora)} (era {', '.join(f'{k}={v}' for k, v in antes.items())})")
+    return linhas
 
 
 TECLADO = re.compile(r"SoftInputWindow|InputMethod", re.I)
@@ -592,10 +645,26 @@ def diferenca(antes, depois, app_antes=None, app=None):
     return {"entrou": entrou, "saiu": saiu, "mudou": mudou}
 
 
-def ver(imagem=True, largura=720, com_elementos=True, recorte=None, so_mudancas=False):
+def _linha_do_tempo():
+    """O que surgiu (janelas) desde a última olhada, para nada passar enquanto o Claude pensava."""
+    ev = eventos()
+    if ev is None:
+        return []
+    agora, desde = ev[3], _ULTIMA.get("t")
+    _ULTIMA["t"] = agora
+    if desde is None:
+        return []
+    return [f"-{(agora - t) / 1000:.1f}s {_janela_curta(info)}" for t, info in historico(desde)][-8:]
+
+
+def ver(imagem=True, largura=720, com_elementos=True, recorte=None, so_mudancas=False, formato="curto"):
     rapida = foto_rapida(largura, recorte) if imagem and _ajudante() else (None, None)
     xml, png, app, acesa = observar(com_elementos, imagem and not rapida[0])
     out = {"app": app, "tela_acesa": acesa}
+    tempo = _linha_do_tempo()
+    if tempo:
+        out["surgiu"] = tempo
+    json_ = formato == "json"
     try:
         if rapida[0]:
             out["resolucao"] = rapida[1]
@@ -609,10 +678,10 @@ def ver(imagem=True, largura=720, com_elementos=True, recorte=None, so_mudancas=
             els = compactos(elementos(xml))
             dif = diferenca(_ULTIMA["els"], els, _ULTIMA["app"], app) if so_mudancas else None
             if dif is None:
-                out["elementos"] = els
-                out["nota"] = "coordenadas x,y em pixels da tela real (use-as em tocar); a imagem é reduzida"
+                out["elementos"] = els if json_ else [curto(e) for e in els]
+                out["nota"] = "x,y em pixels reais (use em tocar)" + ("" if json_ else "; " + LEGENDA)
             elif any(dif.values()):
-                out["mudancas"] = {k: v for k, v in dif.items() if v}
+                out["mudancas"] = {k: v for k, v in dif.items() if v} if json_ else diferenca_curta(dif)
                 out["sem_mudar"] = len(els) - len(dif["entrou"]) - len(dif["mudou"])
             else:
                 out["mudancas"] = "nenhuma"
@@ -646,7 +715,8 @@ def _ver_depois(a, padrao=None):
     if modo == "nada":
         return {"app": foco()}
     largura = max(320, min(int(a.get("largura", 720)), 1080))
-    return {"tela": ver(modo == "imagem", largura, True, a.get("recorte"), so_mudancas=(modo == "mudancas")), **extra}
+    return {"tela": ver(modo == "imagem", largura, True, a.get("recorte"), so_mudancas=(modo == "mudancas"),
+                        formato=a.get("formato", "curto")), **extra}
 
 
 # --------------------------------------------------------------------------- sequência (vários passos, 1 viagem)
@@ -721,6 +791,40 @@ def _rodar_bloco(linhas, rx):
     return None
 
 
+# --------------------------------------------------------------------------- reflexos guardados no celular
+REFLEXOS_ARQ = os.path.join(BASE, "tela_reflexos.json")
+MAX_REFLEXOS = 20
+
+
+def _regras():
+    try:
+        with open(REFLEXOS_ARQ) as f:
+            r = json.load(f)
+        return r if isinstance(r, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def reflexos(regras=None):
+    """Lista (sem regras) ou troca as regras. Cada uma: {se:'texto' | janela:'trecho de pacote/classe/texto',
+    tocar:[x,y]|'texto' | tecla:'voltar'}. Valem dentro das sequências: no lugar de parar, o celular resolve e segue."""
+    if regras is None:
+        return {"regras": _regras()}
+    if not isinstance(regras, list) or len(regras) > MAX_REFLEXOS:
+        return {"erro": f"regras deve ser uma lista (até {MAX_REFLEXOS})"}
+    for k, r in enumerate(regras):
+        if not isinstance(r, dict) or not (r.get("se") or r.get("janela")) or not (r.get("tocar") or r.get("tecla")):
+            return {"erro": f"regra {k + 1}: precisa de se/janela e de tocar/tecla"}
+        if r.get("tecla") and normalizar(r["tecla"]) not in TECLAS:
+            return {"erro": f"regra {k + 1}: tecla deve ser uma de: {', '.join(TECLAS)}"}
+    os.makedirs(BASE, exist_ok=True)
+    tmp = REFLEXOS_ARQ + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(regras, f, ensure_ascii=False)
+    os.replace(tmp, REFLEXOS_ARQ)
+    return {"regras": regras, "feito": f"{len(regras)} reflexo(s) guardado(s)"}
+
+
 class _Falha(Exception):
     def __init__(self, info):
         super().__init__(info.get("erro"))
@@ -767,6 +871,8 @@ class _Executor:
         self.parar_se = []
         self.parar_em_janela = None  # None: só no meio de levas de toques; True: também entre passos; False: nunca
         self.janela = None  # "pacote|classe|texto" da janela no começo (referência do reflexo)
+        self.regras = _regras()
+        self.usados = []  # reflexos que agiram nesta sequência
 
     # --- utilidades
     def descarregar(self):
@@ -789,6 +895,41 @@ class _Executor:
     def presente(self, texto):
         return achar(self.ver_elementos(), texto) is not None
 
+    def aplicar_reflexo(self, info=""):
+        """Alguma regra guardada resolve o que surgiu? Age (tocar/tecla), espera assentar e diz True."""
+        if not self.regras or len(self.usados) >= 10:
+            return False
+        els = None
+        for r in self.regras:
+            if r.get("janela"):
+                if normalizar(r["janela"]) not in normalizar(info):
+                    continue
+            else:
+                els = els if els is not None else self.ver_elementos()
+                if not achar(els, r["se"]):
+                    continue
+            if r.get("tecla"):
+                cod = TECLAS[normalizar(r["tecla"])]
+                self.injetar(f"tecla {cod}", [f"input keyevent {cod} || exit 3"])
+            else:
+                alvo = r["tocar"]
+                if isinstance(alvo, str):
+                    els = els if els is not None else self.ver_elementos()
+                    e = achar(els, alvo)
+                    if not e:
+                        continue
+                    alvo = [e["x"], e["y"]]
+                x, y = int(alvo[0]), int(alvo[1])
+                self.app_em = 0.0
+                self.injetar(f"tocar {x} {y}", [f"input tap {x} {y} || exit 3"])
+            self.usados.append(r.get("se") or r.get("janela"))
+            calma(120, 1500)
+            ev = eventos()
+            if ev:
+                self.janela = ev[2]
+            return True
+        return False
+
     def checar_texto(self, onde):
         """Reflexo: algum dos textos de parar_se apareceu? Interrompe e devolve o que surgiu."""
         if not self.parar_se:
@@ -797,13 +938,17 @@ class _Executor:
         for t in self.parar_se:
             e = achar(els, t)
             if e:
+                if self.aplicar_reflexo():
+                    return
                 raise _Interrompido(f"apareceu “{e.get('texto') or e.get('desc') or t}” ({onde})", compactos([e])[0])
 
     def checar_janela(self, info, onde):
+        """Surgiu outra janela? Um reflexo guardado resolve (True) ou interrompe; a mesma tela: False."""
         if self.janela is not None and janela_nova(self.janela, info, self.app):
-            pac, cls, txt = (info.split("|") + ["", "", ""])[:3]
-            raise _Interrompido(f"surgiu uma janela nova ({onde}): {pac} {cls.split('.')[-1]}"
-                                + (f" «{txt}»" if txt else ""), None)
+            if self.aplicar_reflexo(info):
+                return True
+            raise _Interrompido(f"surgiu uma janela nova ({onde}): {_janela_curta(info)}", None)
+        return False
 
     def tocar_vigiando(self, pontos, pausa, onde):
         """Toques em leva que param na hora se surgir outra janela (aviso, anúncio, fim de jogo) ou um texto de
@@ -827,8 +972,8 @@ class _Executor:
             if r.startswith("parou"):
                 _, n, info = (r.split(" ", 2) + ["", ""])[:3]
                 k += int(n)
-                self.checar_janela(info, f"{onde}, depois de {k} de {len(pontos)} toques")
-                self.janela = info  # a mesma tela se anunciando de novo: segue
+                if not self.checar_janela(info, f"{onde}, depois de {k} de {len(pontos)} toques"):
+                    self.janela = info  # a mesma tela se anunciando de novo: segue
                 reanuncios += 1
                 if time.time() > self.prazo:
                     raise _Falha({"erro": f"a sequência passou de {PRAZO_SEQUENCIA} s"})
@@ -897,8 +1042,8 @@ class _Executor:
                 self.checar_texto(f"depois do {onde}")
             if self.parar_em_janela and self.rapido:
                 ev = eventos()
-                if ev:
-                    self.checar_janela(ev[2], f"depois do {onde}")
+                if ev and not self.checar_janela(ev[2], f"depois do {onde}"):
+                    self.janela = ev[2]
 
     def passo(self, p, onde):
         if not self.rapido:
@@ -1038,7 +1183,9 @@ def sequencia(a):
     except _Falha as f:
         return {**f.info, "feitos": ex.feitos}
     except _Interrompido as i:
-        interrompido = {"interrompido": i.motivo, **({"elemento": i.elemento} if i.elemento else {})}
+        interrompido = {"interrompido": i.motivo, **({"elemento": curto(i.elemento)} if i.elemento else {})}
+    if ex.usados:
+        interrompido = {**(interrompido or {}), "reflexos": ex.usados}
     gasto = time.time() - ex.t0
     tempos = {"acoes": round(gasto - ex.t_esperas, 2)}
     if ex.t_esperas:
@@ -1129,7 +1276,9 @@ def executar(a):
         elif acao == "ver":
             largura = max(320, min(int(a.get("largura", 720)), 1080))
             r = ver(bool(a.get("imagem", True)), largura, bool(a.get("elementos", True)), a.get("recorte"),
-                    so_mudancas=bool(a.get("so_mudancas")))
+                    so_mudancas=bool(a.get("so_mudancas")), formato=a.get("formato", "curto"))
+        elif acao == "reflexos":
+            r = reflexos(a.get("regras"))
         else:
             r = agir(a)
     except SemShizuku as e:

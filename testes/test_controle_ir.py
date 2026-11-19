@@ -1729,7 +1729,7 @@ class TestTelaPorArquivo(unittest.TestCase):
         chamadas = []
         original = self.m.rish
         self.m.rish = lambda cmd, timeout=20: (chamadas.append(cmd), original(cmd, timeout))[1]
-        r = self.m.ver(imagem=bool(shutil.which("ffmpeg")), largura=320, recorte=[0, 0, 200, 200])
+        r = self.m.ver(imagem=bool(shutil.which("ffmpeg")), largura=320, recorte=[0, 0, 200, 200], formato="json")
         self.assertEqual(len(chamadas), 1)  # dump, captura, foco e tela acesa numa viagem só
         self.assertEqual((r["app"], r["tela_acesa"]), ("com.android.settings", True))
         bt = [e for e in r["elementos"] if e.get("texto") == "Bluetooth"][0]
@@ -1747,6 +1747,7 @@ class TestTelaPorArquivo(unittest.TestCase):
         ap = self.tmp / "bin" / "app_process"
         ap.write_text(f"""#!{sys.executable}
 import os, subprocess, sys
+import time
 pasta, token = sys.argv[3], sys.argv[4]
 if {quebrado!r}:
     sys.exit(1)
@@ -1771,7 +1772,10 @@ for linha in sys.stdin:
         r = "ok 3"
     elif cmd == "eventos":
         cont += 1
-        r = f"0 {{cont}} com.android.settings|com.android.settings.Principal|"
+        r = f"0 {{cont}} {{int(time.monotonic() * 1000)}} com.android.settings|com.android.settings.Principal|"
+    elif cmd == "historico":
+        h = os.path.join(os.path.dirname(reg), "historico.txt")
+        r = f"{{int(time.monotonic() * 1000) - 1500}} " + open(h).read().strip() if os.path.exists(h) else ""
     elif cmd == "toquesv":
         open(reg, "a").write("leitor " + " ".join(p[1:]) + "\\n")
         parar = os.path.join(os.path.dirname(reg), "parar.txt")
@@ -1898,7 +1902,7 @@ for linha in sys.stdin:
         r = self.m.agir({"acao": "sequencia", "parar_se": ["bluetooth"], "ver_depois": "nada",
                          "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}]})
         self.assertIn("Bluetooth", r["interrompido"])
-        self.assertEqual(r["elemento"]["x"], 220)
+        self.assertIn("220,450", r["elemento"])
         self.assertNotIn(" 3 3", self.registro.read_text())  # parou depois do 1º pedaço de 2 toques
         t = time.time()
         r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [{"esperar_mudanca": 0.3}]})
@@ -1907,6 +1911,33 @@ for linha in sys.stdin:
         self.assertTrue(self.m.janela_nova("a|A|", "b|B|"))
         self.assertFalse(self.m.janela_nova("a|A|", "a|A|outro"))
         self.assertFalse(self.m.janela_nova("a|A|", "teclado|android.inputmethodservice.SoftInputWindow|"))
+
+    def test_formato_curto(self):
+        e = {"texto": "Sincronizar", "id": "syncTv", "x": 640, "y": 2375, "clicavel": True, "marcado": False}
+        self.assertEqual(self.m.curto(e), '"Sincronizar" #syncTv 640,2375 cm')
+        self.assertEqual(self.m.curto({"desc": "Voltar", "x": 1, "y": 2}), "(Voltar) 1,2")
+        dif = {"entrou": [{"texto": "Venceu!", "x": 3, "y": 3}], "saiu": [{"texto": "Sair", "x": 5, "y": 5}],
+               "mudou": [{"id": "placar", "texto": "10", "x": 1, "y": 1, "antes": {"texto": "0"}}]}
+        self.assertEqual(self.m.diferenca_curta(dif), ['+ "Venceu!" 3,3', '- "Sair" 5,5', '~ "10" #placar 1,1 (era "0")'])
+
+    def test_linha_do_tempo_e_reflexos(self):
+        self._leitor_falso()
+        self.m.REFLEXOS_ARQ = str(self.tmp / "reflexos.json")
+        self.m.ver(imagem=False)  # primeira olhada marca a hora
+        (self.tmp / "historico.txt").write_text("com.x|com.x.Popup|Oi")
+        r = self.m.ver(imagem=False, so_mudancas=True)
+        self.assertEqual(r["surgiu"], ["-1.5s com.x Popup «Oi»"])  # o que surgiu enquanto o Claude pensava
+        self.assertIn("erro", self.m.reflexos([{"se": "x"}]))  # sem ação
+        self.assertIn("erro", self.m.reflexos([{"se": "x", "tecla": "pular"}]))
+        self.m.reflexos([{"janela": "AdActivity", "tecla": "voltar"}])
+        self.assertEqual(self.m.executar({"acao": "reflexos"})["regras"][0]["janela"], "AdActivity")
+        (self.tmp / "parar.txt").write_text("com.anuncios|com.anuncios.AdActivity|Anúncio")
+        r = self.m.agir({"acao": "sequencia", "ver_depois": "nada", "passos": [{"tocar": [[1, 1], [2, 2], [3, 3]]}]})
+        self.assertNotIn("interrompido", r)  # o reflexo resolveu sem parar
+        self.assertEqual(r["reflexos"], ["AdActivity"])
+        log = self.registro.read_text()
+        self.assertIn("leitor tecla 4", log)
+        self.assertIn("leitor toquesv 50 2 2 3 3", log)  # e seguiu com os toques que faltavam
 
     def test_leitor_recusa_app_bloqueado(self):
         foco = self.tmp / "foco.txt"

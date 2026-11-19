@@ -33,7 +33,8 @@ import java.lang.reflect.Method;
  * Comandos: ping | dump | foco | estado (pacote em foco e tela acesa, sem shell) | tocar X Y [ms] |
  * toques PAUSA_MS X1 Y1 X2 Y2… (vários toques num pedido só) | deslizar X1 Y1 X2 Y2 [ms] | tecla CODIGO | texto HEX |
  * calma QUIETO_MS LIMITE_MS (espera a tela parar de mudar; responde "ok MS" ou "tempo MS") |
- * eventos (contadores de janelas novas e de mudanças, e a última janela: "J M pacote|classe|texto") |
+ * eventos (contadores de janelas novas e de mudanças, relógio e a última janela: "J M T pacote|classe|texto") |
+ * historico DESDE_MS (janelas surgidas depois de DESDE, uma por linha: "T pacote|classe|texto") |
  * toquesv PAUSA_MS X1 Y1… (como toques, mas para se surgir uma janela nova: "parou K pacote|classe|texto") |
  * aguardar M LIMITE_MS (espera o contador de mudanças sair de M; responde o contador atual) |
  * shell HEX (roda um comando como shell, sem abrir outra conexão com o Shizuku) |
@@ -48,6 +49,8 @@ public class Tela {
     // reflexos: contadores atualizados pelos eventos da acessibilidade (no fio dela, sem a trava dos comandos)
     static volatile int janelas = 0, mudancas = 0;
     static volatile String ultimaJanela = "||";
+    static final String[] hist = new String[32];  // as últimas janelas surgidas, com a hora (anel)
+    static volatile int histN = 0;
     static final long OCIOSO_MS = 60000, FIM_MS = 300000;
 
     public static void main(String[] args) throws Exception {
@@ -124,7 +127,17 @@ public class Tela {
             }
             return "ok";
         }
-        if (c.equals("eventos")) return janelas + " " + mudancas + " " + ultimaJanela;
+        if (c.equals("eventos")) return janelas + " " + mudancas + " " + SystemClock.uptimeMillis() + " " + ultimaJanela;
+        if (c.equals("historico")) {
+            long desde = Long.parseLong(p[2]);
+            StringBuilder sb = new StringBuilder();
+            int n = histN;
+            for (int k = Math.max(0, n - hist.length); k < n; k++) {
+                String h = hist[k % hist.length];
+                if (h != null && Long.parseLong(h.substring(0, h.indexOf(' '))) > desde) sb.append(h).append('\n');
+            }
+            return sb.toString();
+        }
         if (c.equals("toquesv")) {
             int pausa = Math.max(0, Math.min(i(p[2]), 5000));
             int base = janelas, feitos = 0;
@@ -278,6 +291,8 @@ public class Tela {
                     String t = "";
                     if (e.getText() != null && !e.getText().isEmpty() && e.getText().get(0) != null) t = e.getText().get(0).toString();
                     ultimaJanela = limpo(e.getPackageName(), 80) + "|" + limpo(e.getClassName(), 120) + "|" + limpo(t, 80);
+                    hist[histN % hist.length] = SystemClock.uptimeMillis() + " " + ultimaJanela;
+                    histN++;
                     janelas++;
                 }
             }

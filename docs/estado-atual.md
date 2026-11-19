@@ -5,6 +5,12 @@
 - Emissor IR confirmado: 30, 33, 36, 38, 40 e 56 kHz.
 - Termux precisou de `apt update && apt full-upgrade` (curl quebrado por openssl antigo).
 - Catálogo instalado: base + ampliado (Flipper-IRDB completa) = 9.380 perfis, 94.407 sinais únicos, 1.776 marcas.
+- **19/11 — modo deus confirmado no POCO** (sessão de teste do Claude Code, conferida por `consultar`): política
+  `autonomo` (todas as classes permitir); `estado_celular` ok (bateria, Wi-Fi 5 GHz RSSI −48, 16 comandos do
+  Termux:API); `diagnostico_rede` ok (0% de perda, roteador ~26 ms, internet ~76 ms, DNS 64–154 ms, sem
+  problemas); `executar_comando` ok (aarch64, kernel 6.6.118, 107 pacotes); `atualizar_sistema` instalou a
+  **1.0.14 sozinho, sem aprovação** (ativo desde 21:19:53). Sessões novas do Claude Code pedem permissão para o
+  conector (nome interno `96238baf-…`) até o usuário escolher "sempre permitir".
 - **19/11:** autoatualização confirmada no POCO (`controle-ir atualizar --ref` → 1.0.13 sozinho); widget
   Ligar/Desligar confirmado na 1.0.13 (reinício 21:06 → 21:08). Usuário ligou o **modo autônomo**.
   1.0.14: atalhos do widget Modo autonomo, Modo cauteloso e Travar.

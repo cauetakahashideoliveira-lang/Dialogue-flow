@@ -1484,10 +1484,15 @@ def sequencia(a):
         ex.rodar(passos)
         ex.descarregar()
     except _Falha as f:
-        try:  # o erro já volta com a tela atual: sem chamada extra para ver o que aconteceu
-            tela = _ver_depois(dict(a, ver_depois=a.get("ver_depois") if a.get("ver_depois") != "nada" else "auto"))
+        tela = {}
+        try:  # o erro já volta com a tela atual (sem chamada extra), mas só se ainda é o app da sequência:
+            atual = foco()  # outro app (ex.: o dono abriu uma conversa) não é lido — privacidade
+            if atual and atual in (ex.app_inicial, ex.app):
+                tela = _ver_depois(dict(a, ver_depois=a.get("ver_depois") if a.get("ver_depois") != "nada" else "auto"))
+            elif atual:
+                tela = {"app_em_foco": atual, "nota": "outro app em uso: a tela não foi lida"}
         except Exception:  # noqa: BLE001
-            tela = {}
+            pass
         return {**f.info, "feitos": ex.feitos, **({"anuncios": ex.anuncios} if ex.anuncios else {}), **tela}
     except _Interrompido as i:
         interrompido = {"interrompido": i.motivo, **({"elemento": curto(i.elemento)} if i.elemento else {})}
@@ -1500,7 +1505,12 @@ def sequencia(a):
     if ex.t_esperas:
         tempos["esperas"] = round(ex.t_esperas, 2)
     t = time.time()
-    depois = _ver_depois(a, tocados=ex.tocados)
+    atual = foco() if ex.rapido and ex.app_inicial else None
+    if atual and atual != ex.app_inicial and not IGNORAR_APP.search(atual) and not any("abrir" in p for p in passos
+                                                                                      if isinstance(p, dict)):
+        depois = {"app_em_foco": atual, "nota": "outro app em primeiro plano: a tela não foi lida"}  # privacidade
+    else:
+        depois = _ver_depois(a, tocados=ex.tocados)
     tempos["olhar"] = round(time.time() - t, 2)
     return {**(interrompido or {}), "feito": f"{ex.feitos} passos em {gasto:.1f} s", "tempos": tempos, **depois}
 

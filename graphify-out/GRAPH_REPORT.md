@@ -1,7 +1,7 @@
 # Graph Report - Dialogue-flow  (2026-11-19)
 
 ## Corpus Check
-- 69 files · ~108,407 words
+- 69 files · ~108,500 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 8 file(s) not represented in the graph (top: (none) 3, .ir 3, .gz 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 157,587 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4ee90408`
+- Built from commit: `75d95c9c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -102,10 +102,10 @@
 10. `_iniciar()` - 26 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `3b. Gateway OAuth na borda (1.0.26, implementada)` --references--> `TestPainel`  [INFERRED]
-  docs/seguranca.md → testes/test_controle_ir.py
 - `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `Catalogo`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/catalogo.py
+- `3b. Gateway OAuth na borda (1.0.26, implementada)` --references--> `TestPainel`  [INFERRED]
+  docs/seguranca.md → testes/test_controle_ir.py
 - `Túnel ngrok com domínio fixo` --conceptually_related_to--> `Tunel`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/tunel.py
 - `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `ampliar_catalogo()`  [INFERRED]
@@ -356,15 +356,15 @@ Nodes (3): TestObservador, TestVocabulario, TestGodModeStmEPontuacao
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Servico` connect `Servico` to `servico.py`, `descoberta.py`, `Controlador`, `re`, `_iniciar`, `Servico`, `Sinal`, `.editar_aparelho`, `ServidorMCP`, `mcp.py`, `Registro`, `cli.py`, `Execucao`, `formatos.py`, `novo_servico`, `criar_servidor`, `emissor.py`, `ErroUso`, `EmissorSimulado`?**
-  _High betweenness centrality (0.060) - this node is a cross-community bridge._
+  _High betweenness centrality (0.087) - this node is a cross-community bridge._
 - **Are the 20 inferred relationships involving `Servico` (e.g. with `Aparelhos` and `ErroAparelho`) actually correct?**
   _`Servico` has 20 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Versão do servidor (celular 1.0.4, repositório 1.0.5)` to the rest of the system?**
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `index.js` be split into smaller, more focused modules?**
   _Cohesion score 0.06738245094409478 - nodes in this community are weakly interconnected._
-- **Why does `TestTelaPorArquivo` connect `TestTelaPorArquivo` to `test_controle_ir.py`?**
-  _High betweenness centrality (0.050) - this node is a cross-community bridge._
+- **Why does `TestPainel` connect `TestPainel` to `test_controle_ir.py`?**
+  _High betweenness centrality (0.045) - this node is a cross-community bridge._
 - **Are the 4 inferred relationships involving `Descoberta` (e.g. with `Catalogo` and `ErroEmissor`) actually correct?**
   _`Descoberta` has 4 INFERRED edges - model-reasoned connections that need verification._
 - **Should `TestPainel` be split into smaller, more focused modules?**

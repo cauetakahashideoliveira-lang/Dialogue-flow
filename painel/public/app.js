@@ -62,8 +62,37 @@ function render() {
     rv.onclick = () => acao(() => comDigital(() => api('revogar', { tipo: 'aparelho', id: a.id })), 'Celular revogado');
     cel.append(rv);
   }
-  $('enderecoConector').textContent = dados.conector || '';
   const cel0 = ativos[0];
+  // ---- agora no celular: o que está em uso (relato do celular + chamadas dos últimos 2 min)
+  const eu = $('emUso'); eu.replaceChildren();
+  const uso = cel0 && cel0.em_uso, chips = [];
+  if (uso) {
+    for (const p of uso['câmera'] || []) chips.push([`📷 câmera: ${p}`, true]);
+    for (const p of uso.microfone || []) chips.push([`🎙️ microfone: ${p}`, true]);
+    for (const i of uso.itens || []) chips.push([`${{ terminal: '⌨️', capacidade: '⚙️', tela: '🖥️' }[i.tipo] || '•'} ${i.desc}${
+      i.recursos && i.recursos.length ? ' (' + i.recursos.join(', ') + ')' : ''}`, true]);
+  }
+  const recentes = new Set();
+  for (const c of dados.chamadas) if (dados.agora - c.quando < 120) (c.recursos || '').split(',').filter(Boolean).forEach(r => recentes.add(r));
+  for (const r of recentes) chips.push([`usado há pouco: ${r}`, false]);
+  if (!chips.length) eu.append(el('p', 'Nada em uso agora.', 'ok'));
+  for (const [txt, vivo] of chips) eu.append(el('span', txt, `chip${vivo ? ' vivo' : ''}`));
+  $('emUsoInfo').textContent = !cel0 ? '' : !cel0.em_uso_em ? 'aguardando o primeiro relato do celular (versão 1.0.29+)'
+    : `relato do celular ${ha(cel0.em_uso_em)}${uso && uso.shizuku === false ? ' · câmera/microfone: Shizuku parado' : ''}`;
+  // ---- atividade do Claude
+  const ch = $('chamadas'); ch.replaceChildren();
+  if (!dados.chamadas.length) ch.append(el('li', 'Nenhuma chamada ainda.', 'suave'));
+  for (const c of dados.chamadas) {
+    const li = el('li');
+    const st = c.status === 'ok' ? 'ok' : 'mal';
+    li.append(el('strong', c.ferramenta), el('span', ` · ${hora(c.quando)}${c.ms ? ` · ${(c.ms / 1000).toFixed(1)} s` : ''} `, 'suave'),
+      el('span', c.status === 'bloqueado' ? 'barrado na Central' : c.status, `chip ${st}`));
+    for (const r of (c.recursos || '').split(',').filter(Boolean)) li.append(el('span', r, 'chip'));
+    if (c.resumo) li.append(el('div', c.resumo, 'det'));
+    if (c.motivo) li.append(el('div', `por quê: ${c.motivo}`, 'det'));
+    ch.append(li);
+  }
+  $('enderecoConector').textContent = dados.conector || '';
   $('celularMcp').textContent = !cel0 ? '' : cel0.estado.tem_mcp
     ? `✓ o celular informou o endereço dele ${ha(cel0.estado.mcp_url_em)}: o painel repassa as chamadas, assinadas`
     : '… aguardando o celular informar o endereço (precisa da versão 1.0.26 ou mais nova)';
@@ -144,6 +173,29 @@ $('btParear').onclick = () => acao(() => comDigital(async () => {
 }), 'Código criado');
 $('btIntegridade').onclick = () => acao(async () => { const r = await api('integridade'); if (!r.ok) throw new Error(`histórico alterado no evento ${r.quebra_em}`); aviso(`Histórico íntegro (${r.eventos} eventos)`, 'ok'); }, 'Histórico íntegro');
 $('btSair').onclick = () => acao(() => api('sair'), 'Saiu');
+// ---- tela ao vivo: o celular manda um quadro a cada ~2 s enquanto esta página pedir (começa em até 30 s)
+let aoVivo = null, renovar = null;
+async function pararTela() {
+  clearInterval(aoVivo); clearInterval(renovar); aoVivo = renovar = null;
+  $('telaCaixa').classList.add('escondido'); $('telaImg').removeAttribute('src');
+  $('btTela').textContent = 'Ver a tela do celular ao vivo';
+  await api('tela/ao_vivo', { ligar: false }).catch(() => {});
+}
+$('btTela').onclick = async () => {
+  if (aoVivo) return pararTela();
+  try { await api('tela/ao_vivo', { ligar: true, inicio: true }); } catch (e) { return aviso(e.message, 'perigo-t'); }
+  $('telaCaixa').classList.remove('escondido'); $('btTela').textContent = 'Parar de ver a tela';
+  $('telaInfo').textContent = 'pedindo ao celular… (começa em até 30 s)';
+  renovar = setInterval(() => api('tela/ao_vivo', { ligar: true }).catch(() => {}), 60000);
+  aoVivo = setInterval(async () => {
+    try {
+      const q = await api('tela/quadro');
+      if (q.jpeg) { $('telaImg').src = `data:image/jpeg;base64,${q.jpeg}`; $('telaInfo').textContent = `quadro de ${ha(q.quando)}`; }
+    } catch { /* tenta de novo no próximo */ }
+  }, 2000);
+};
+document.addEventListener('visibilitychange', () => { if (document.hidden && aoVivo) pararTela(); });
+
 prepararLogin();
 carregar();
-setInterval(() => { if (dados && !document.hidden) carregar(); }, 15000);
+setInterval(() => { if (dados && !document.hidden) carregar(); }, 10000);

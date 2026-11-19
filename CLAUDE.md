@@ -29,7 +29,8 @@
   infravermelho, consulta e travar); o dono arma no celular (widget “Armar Controle IR”). Não há como armar,
   destravar ou aprovar pelo conector (autorizar só com o código do autenticador). **Central de Controle** (`painel/`,
   Cloudflare Worker): pareado (1.0.24+), só ele arma, com a digital; desde a 1.0.26 o conector pode entrar por ele
-  (`https://<painel>/mcp`, OAuth com a digital, bloqueio na borda). Mudança no painel = PR que o dono aprova (merge);
+  (`https://<painel>/mcp`, OAuth com a digital, bloqueio na borda). Conector em uso: **Controle Geral** (o antigo
+  “Controle master”, pela URL do ngrok, é recusado desde que “só pelo painel” foi ligado). Mudança no painel = PR que o dono aprova (merge);
   teste local: `painel/testes/e2e.cjs` com `wrangler dev` sem as variáveis de proxy.
 - Pedidos de aprovação do conector vêm da regra da organização no claude.ai (`org_ask_ceiling`); não tente
   contornar. Ferramentas novas do conector só aparecem em conversas novas (lista fixa por conversa).

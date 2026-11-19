@@ -783,6 +783,37 @@ class TestPainel(unittest.TestCase):
         self.assertEqual(post(corpo, {"X-Painel-Assinatura": self.assinar_req(corpo)}), 200)
 
 
+class TestObservador(unittest.TestCase):
+    """O que a Central mostra em "Agora no celular": tarefas, capacidades, câmera/microfone (AppOps)."""
+
+    def setUp(self):
+        from controle_ir import observador
+        self.o = observador
+
+    def test_appops_running_vira_app_usando(self):
+        saida = ("  Uid 10324:\n    Package com.termux.api:\n      CAMERA (allow):\n        null=[\n"
+                 "          Access: [fgsvc-s] 2026-11-19 10:44:06 (-2s) duration=+2s\n          Running start at: +2s\n"
+                 "    Package com.android.camera:\n          Access: [top-s] 2026-11-15 duration=+32s\n"
+                 "#####\n    Package com.whatsapp:\n      RECORD_AUDIO (allow):\n          Running start at: +1s\n")
+        self.assertEqual(self.o.apps_usando(saida), {"câmera": ["com.termux.api"], "microfone": ["com.whatsapp"]})
+        self.assertEqual(self.o.apps_usando(""), {"câmera": [], "microfone": []})
+
+    def test_recursos_e_tarefas_em_execucao(self):
+        self.assertEqual(self.o.recursos_do_comando("termux-microphone-record -f a.m4a"), ["microfone"])
+        self.assertEqual(self.o.recursos_do_comando("ls -la"), [])
+        pasta = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, pasta, True)
+        (pasta / "tarefas").mkdir()
+        (pasta / "tarefas" / "1.json").write_text(json.dumps({"id": "1", "status": "executando",
+                                                             "comando": "termux-camera-photo x.jpg", "inicio": 1}))
+        (pasta / "tarefas" / "2.json").write_text(json.dumps({"id": "2", "status": "concluida", "comando": "ls"}))
+        r = self.o.em_uso(pasta, android=False, ao_vivo=True)
+        tipos = [(i["tipo"], tuple(i.get("recursos", []))) for i in r["itens"]]
+        self.assertIn(("terminal", ("terminal", "câmera")), tipos)
+        self.assertIn(("tela", ("tela",)), tipos)  # transmitindo para a Central
+        self.assertNotIn("ls", json.dumps(r))  # só o que está rodando
+
+
 class TestGreeVariante(unittest.TestCase):
     """ferramentas/gree_variante.py: sinais que funcionaram no “ar do quarto” (Gree GWH09KF) em 17/11/2026."""
 

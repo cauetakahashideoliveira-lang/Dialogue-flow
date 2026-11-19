@@ -328,6 +328,12 @@ def armar_cli(acao: str, horas: float | None = None) -> int:
         try:
             p = pol.armar(horas)
         except ValueError as e:
+            from . import painel
+            cfg = painel.ler(PASTA)
+            if cfg and cfg.get("url"):  # pareado: quem arma é a Central de Controle — o atalho abre ela
+                _termux("termux-open-url", cfg["url"])
+                _aviso("Abrindo a Central de Controle: arme lá, com a digital")
+                return 0
             _aviso(f"Controle IR: {e}")
             return 1
         (PASTA / "PARAR").unlink(missing_ok=True)
@@ -898,9 +904,12 @@ def _iniciar(args, trava):
             n = servico.exec.parar_todas()
             servico.exec.auditar({"evento": "reduzido_pelo_painel", "motivo": motivo, "tarefas_encerradas": n})
             _aviso(f"Controle IR: {motivo}")
+        from . import observador
         painel_mod.Sincronizador(PASTA, __version__, reduzir,
                                  url_mcp=lambda: f"{servico.url_publica}/mcp/{c['segredo']}"
-                                 if servico.url_publica else None).iniciar()
+                                 if servico.url_publica else None,
+                                 em_uso=lambda observar, ao_vivo: observador.em_uso(PASTA, observar, ao_vivo),
+                                 quadro=observador.quadro).iniciar()
     inicio = time.time()
 
     def gravar_estado(url=None):

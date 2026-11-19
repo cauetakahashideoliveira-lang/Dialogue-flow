@@ -15,7 +15,9 @@
   `artefatos/central-da-casa.html`), com o Gênio que controla, programa o celular, cria painéis, lembra e aprende.
 - **Conector:** os pedidos de aprovação vêm da regra da organização no claude.ai (`org_ask_ceiling`), não do
   projeto nem do celular. O usuário liberou em 19/11; conferir numa conversa nova.
-- **Repositório:** o trabalho de 19/11 está na branch `ccr-045ba202-fbl2x4` (ainda não está na main). 91 testes.
+- **Repositório:** a branch padrão é `claude/ir-control-poco-setup-u46urr` (não existe `main`). O trabalho de 19/11
+  está na branch `ccr-045ba202-fbl2x4` (37 commits à frente da padrão). 91 testes. PR #5 (hook que instala o
+  graphify e o numpy nas sessões na nuvem) aberto contra a padrão.
 
 ## Pendências (próxima conversa)
 1. **Shizuku** (o usuário ativa em 20/11; foi o que mais o interessou): opções do desenvolvedor, Depuração USB +
@@ -29,10 +31,16 @@
    antes de desligar o ar). O Gree do quarto não deu bipe audível em 3 tentativas.
 5. **Visor do ar:** foto de perto (1–1,5 m), guardar o recorte com `alvo="ar do quarto"`; depois ler os dígitos
    (7 segmentos) para confirmar sozinho.
-6. Decidir se abre um PR da branch para a main (conversas novas começam pela main).
+6. PR do resto da branch para a padrão: o usuário dispensou por ora em 19/11 (conversas novas começam pela padrão,
+   que ainda está na 1.0.14). O PR #5 (hook do graphify) espera o merge dele.
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Visor do ar do quarto apagado pelo conector** (`x_luz`, 23:49 no relógio do celular): o último estado
+  era 16 °C/frio/automática, o mesmo do quadro do `x_luz`, então só o visor mudou. Usuário: "deu certo". Estado
+  registrado no celular (`registrar_estado`: ligado, visor desligado).
+- **19/11 — Hook de início de sessão** (`.claude/hooks/session-start.sh`): instala o graphify (`graphifyy`, pelo uv)
+  e o numpy nas sessões do Claude Code na nuvem; PR #5. Grafo atualizado: 927 nós, 2307 arestas (estava na 1.0.14).
 - **19/11 — 1.0.18 no celular (22:54):** `termometro` (temperatura do cômodo pela bateria; 1ª leitura 31 °C na
   bateria → ~29 °C estimado, confiança média com o celular em uso; monitorando 60 min), ouvido do ar no
   `controlar(ouvir=true)` (3 s antes + ~8 s depois do envio, compara o ruído), `tela` e o recorte da `foto`

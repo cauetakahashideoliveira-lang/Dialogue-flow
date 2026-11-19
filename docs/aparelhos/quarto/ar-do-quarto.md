@@ -34,6 +34,7 @@
 | 18 °C + oscilar (sinal avulso, não salvo) | sinal enviado, sem confirmação |
 | oscilar + visor apagado em 16 °C (sinal avulso, não salvo) | sinal enviado; o mesmo estado está no Turbo, que funcionou |
 | ligar 16 °C (frio, automática), 18/11 22:17 | **funcionou** (usuário: "o ar ligou") |
+| **Visor desligado** (`x_luz`) com o ar já em 16 °C/frio/automática, 18/11 23:49 (relógio do celular) | **funcionou** (usuário: "deu certo"); estado registrado no celular: ligado, visor desligado |
 
 ## Confirmação automática (18/11/2026)
 

@@ -122,10 +122,10 @@ public class Tela {
             return "ok";
         }
         if (c.equals("toques")) {
-            int pausa = Math.max(0, Math.min(i(p[2]), 5000));
+            int pausa = pausaDe(p[2]), pressao = pressaoDe(p[2]);
             for (int k = 3; k + 1 < p.length; k += 2) {
                 if (k > 3 && pausa > 0) SystemClock.sleep(pausa);
-                tocarLeva(u, i(p[k]), i(p[k + 1]), k + 3 >= p.length);
+                tocarLeva(u, i(p[k]), i(p[k + 1]), k + 3 >= p.length, pressao);
             }
             return "ok";
         }
@@ -141,12 +141,12 @@ public class Tela {
             return sb.toString();
         }
         if (c.equals("toquesv")) {
-            int pausa = Math.max(0, Math.min(i(p[2]), 5000));
+            int pausa = pausaDe(p[2]), pressao = pressaoDe(p[2]);
             int base = janelas, feitos = 0;
             for (int k = 3; k + 1 < p.length; k += 2) {
                 if (k > 3 && pausa > 0) SystemClock.sleep(pausa);
                 if (janelas != base) return "parou " + feitos + " " + ultimaJanela;
-                tocarLeva(u, i(p[k]), i(p[k + 1]), k + 3 >= p.length);
+                tocarLeva(u, i(p[k]), i(p[k + 1]), k + 3 >= p.length, pressao);
                 feitos++;
             }
             SystemClock.sleep(Math.max(pausa, 30));  // o efeito do último toque também conta
@@ -188,6 +188,17 @@ public class Tela {
     }
 
     static int i(String s) { return Integer.parseInt(s); }
+
+    /** "PAUSA" ou "PAUSA:PRESSÃO" (ms) nas levas de toques. */
+    static int pausaDe(String s) {
+        int k = s.indexOf(':');
+        return Math.max(0, Math.min(i(k < 0 ? s : s.substring(0, k)), 5000));
+    }
+
+    static int pressaoDe(String s) {
+        int k = s.indexOf(':');
+        return k < 0 ? LEVA_MS : Math.max(3, Math.min(i(s.substring(k + 1)), 1000));
+    }
 
     static String limpo(CharSequence cs, int max) {
         if (cs == null) return "";
@@ -399,10 +410,10 @@ public class Tela {
 
     /** Toque de leva: direto no gerenciador de entrada (sem a UiAutomation, que espera as animações do app a cada
      *  evento), sem esperar a confirmação (a fila preserva a ordem); só o último espera o app consumir. */
-    static void tocarLeva(UiAutomation u, int x, int y, boolean ultimo) {
+    static void tocarLeva(UiAutomation u, int x, int y, boolean ultimo, int pressao) {
         long t = SystemClock.uptimeMillis();
         direto(u, t, MotionEvent.ACTION_DOWN, x, y, false);
-        SystemClock.sleep(LEVA_MS);
+        SystemClock.sleep(pressao);
         direto(u, t, MotionEvent.ACTION_UP, x, y, ultimo);
     }
 
@@ -550,7 +561,8 @@ public class Tela {
     }
 
     /** Desenho de uma casa reduzido a 16x16 (1 = tinta), enquadrado pela tinta; null se a casa está vazia.
-     *  Tinta = bem mais escura que o fundo da casa (o fundo é lido nas bordas: casa destacada também funciona). */
+     *  Tinta = bem diferente do fundo da casa, mais escura ou mais clara (o fundo é lido nas bordas: casa destacada,
+     *  com algarismo branco sobre azul, também funciona). */
     static int[] assinatura(Bitmap bm, int x, int y, int w, int h) {
         x = Math.max(0, x); y = Math.max(0, y);
         w = Math.min(w, bm.getWidth() - x); h = Math.min(h, bm.getHeight() - y);
@@ -565,9 +577,9 @@ public class Tela {
         long soma = 0; int nb = 0;
         for (int q = 0; q < w; q++) { soma += lum[q] + lum[(h - 1) * w + q]; nb += 2; }
         for (int q = 0; q < h; q++) { soma += lum[q * w] + lum[q * w + w - 1]; nb += 2; }
-        int lim = (int) (soma / nb) - 60;
+        int fundo = (int) (soma / nb);
         int x0 = w, y0 = h, x1 = -1, y1 = -1, tinta = 0;
-        for (int yy = 0; yy < h; yy++) for (int xx = 0; xx < w; xx++) if (lum[yy * w + xx] < lim) {
+        for (int yy = 0; yy < h; yy++) for (int xx = 0; xx < w; xx++) if (Math.abs(lum[yy * w + xx] - fundo) > 60) {
             tinta++;
             if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (yy < y0) y0 = yy; if (yy > y1) y1 = yy;
         }
@@ -579,7 +591,7 @@ public class Tela {
             int ax = ox + sx * lado / S, ay = oy + sy * lado / S, bx = ox + (sx + 1) * lado / S, by = oy + (sy + 1) * lado / S;
             int tot = 0, sim = 0;
             for (int yy = Math.max(ay, 0); yy < Math.min(by, h); yy++)
-                for (int xx = Math.max(ax, 0); xx < Math.min(bx, w); xx++) { tot++; if (lum[yy * w + xx] < lim) sim++; }
+                for (int xx = Math.max(ax, 0); xx < Math.min(bx, w); xx++) { tot++; if (Math.abs(lum[yy * w + xx] - fundo) > 60) sim++; }
             sig[sy * S + sx] = tot > 0 && sim * 4 > tot ? 1 : 0;
         }
         return sig;

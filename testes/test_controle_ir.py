@@ -1787,6 +1787,12 @@ for linha in sys.stdin:
             os.remove(parar)
     elif cmd == "aguardar":
         r = str(int(p[2]) + 1)
+    elif cmd == "grade":
+        cont += 1
+        g1, g2 = (os.path.join(os.path.dirname(reg), f) for f in ("grade1.txt", "grade2.txt"))
+        lidas = getattr(sys, "lidas", 0) + 1
+        sys.lidas = lidas
+        r = open(g2 if lidas > 2 and os.path.exists(g2) else g1).read().strip() + "\\nduvidas "
     elif cmd == "shell":
         pr = subprocess.run(["sh", "-c", bytes.fromhex(p[2]).decode()], capture_output=True, text=True)
         r = f"{{pr.returncode}} {{len(pr.stdout)}}\\n" + pr.stdout + pr.stderr
@@ -2017,6 +2023,23 @@ for linha in sys.stdin:
         sol = self.m.resolver_sudoku([[int(c) for c in ln] for ln in g])
         self.assertEqual("".join(map(str, sol[0])), "854713296")
         self.assertIsNone(self.m.resolver_sudoku([[5, 5] + [0] * 7] + [[0] * 9] * 8))  # leitura com repetido
+
+    def test_grade_resolve_preenche_e_confere(self):
+        self._leitor_falso()
+        sol = ["854713296", "231496587", "769825143", "672159834", "348672951",
+               "915368472", "527931648", "183247965", "496582317"]
+        quase = [ln for ln in sol]
+        quase[0] = "054713296"  # uma casa vazia
+        (self.tmp / "grade1.txt").write_text("\n".join(quase))
+        (self.tmp / "grade2.txt").write_text("\n".join(sol))
+        tec = [[90 + 137 * k, 2362, 128, 190] for k in range(9)]
+        r = self.m.grade({"resolver": True, "recorte": [14, 617, 1252, 1252], "teclado": tec,
+                          "antes": [{"esperar": 0.01}]})
+        self.assertEqual(r["vazias"], 1, r)
+        self.assertTrue(r["conferido"], r)
+        log = self.registro.read_text()
+        self.assertIn("leitor toquesv 8:8 83 686 1049 2362", log)  # casa (0,0) e o botão 8, leva rápida e vigiada
+        self.assertNotIn("refeitos", r)
 
     def test_leitor_recusa_app_bloqueado(self):
         foco = self.tmp / "foco.txt"

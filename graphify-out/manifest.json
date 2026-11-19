@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795104436.5630684,
-    "seen": 1795104438.9335768,
-    "ast_hash": "14504b9833aee592f4cdd5b865a09f8a",
+    "mtime": 1795112654.216544,
+    "seen": 1795112661.0683186,
+    "ast_hash": "b7c9f227f45fef0592daf5a4521a1b67",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -126,9 +126,9 @@
     "semantic_hash": "7412aa1ac0ae2377aea28c4b62ac429f"
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1795103958.4535215,
-    "seen": 1795104249.3324797,
-    "ast_hash": "62d8149db9d89ef6d0af6d92ace5c143",
+    "mtime": 1795112608.424341,
+    "seen": 1795112661.0690048,
+    "ast_hash": "fb395e74a539010a0e4cedf4736905d7",
     "semantic_hash": ""
   },
   "README.md": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795104246.315608,
-    "seen": 1795104249.3327546,
-    "ast_hash": "20fecd9616bf5381b138c9146677138b",
+    "mtime": 1795112654.2315145,
+    "seen": 1795112661.0692992,
+    "ast_hash": "8d87531f08253ae9544e7300eed7d99a",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -330,15 +330,15 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/capacidade.json": {
-    "mtime": 1795103958.4616365,
-    "seen": 1795104249.3317192,
-    "ast_hash": "d550b34f9ae8f1d4a030448f6d5406ff",
+    "mtime": 1795112549.4055827,
+    "seen": 1795112661.0682683,
+    "ast_hash": "a87b414344f27968219fb0747e7851bb",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/principal.py": {
-    "mtime": 1795104398.0326176,
-    "seen": 1795104438.9335287,
-    "ast_hash": "23e6c070127669fe54e2c517b4185540",
+    "mtime": 1795112549.3936818,
+    "seen": 1795112661.0682724,
+    "ast_hash": "fd6816a04b5537a034da8f23fcd12f65",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/termometro/capacidade.json": {
@@ -432,9 +432,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/java/controleir/Tela.java": {
-    "mtime": 1795103904.7534134,
-    "seen": 1795104249.3317215,
-    "ast_hash": "41421edbcb754dafb57fd9ea2464ac6a",
+    "mtime": 1795112505.968016,
+    "seen": 1795112661.068271,
+    "ast_hash": "e2a2586671dc5bb55250f3e82347919d",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

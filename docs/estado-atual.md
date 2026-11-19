@@ -41,6 +41,12 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **19/11 — Grade mais rápida (1.0.44):** teste com a 1.0.43: Sudoku difícil (44 casas) em 8 s no relógio do jogo,
+  leitura+solução 0,28 s, 88 toques 2,8 s, olhar final 1,3 s. Agora: `grade` aceita `antes` (retomar o jogo na mesma
+  chamada), espera a grade ficar estável (duas leituras iguais) em vez de pausa fixa, preenche com 8 ms de pausa e
+  8 ms de pressão (`toques P:H`), relê e repete sozinho até 6 casas que não pegaram (só se a janela não mudou) e não
+  espera a animação final. Leitura considera tinta clara ou escura (algarismo branco em casa destacada). O modo
+  "Número Primeiro" do app foi descartado: segurar ~0,5 s por algarismo custa mais do que economiza.
 - **19/11 — Grade lida no celular (1.0.42):** `acao=grade` lê um tabuleiro de algarismos desenhado (sem texto na
   acessibilidade) no próprio leitor (Java `grade`): cada casa vira uma assinatura 16x16 comparada com os botões 1..N do
   teclado do jogo (achados sozinhos abaixo da grade). Validado offline numa captura antiga: 81/81. `resolver=true`

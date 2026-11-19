@@ -537,31 +537,61 @@ def resolver_sudoku(g):
     return g if passo() else None
 
 
-def grade(a):
-    """Lê no celular a grade NxN de algarismos (tabuleiro sem texto na acessibilidade) usando como modelo os botões
-    1..N do próprio jogo. resolver=true (sudoku 9x9): resolve e preenche numa leva só."""
-    aj = _ajudante()
-    if not aj:
-        return {"erro": "precisa do leitor rápido (Shizuku)"}
+def _achar_grade(n, recorte=None, teclado=None):
+    """(região, teclado) da grade na tela atual, ou (None, motivo)."""
     xml = dump_ui()
-    els = elementos(xml, limite=300)
-    n = int(a.get("n", 9))
-    reg = a.get("recorte") or (regioes_visuais(xml) or [None])[0]
+    reg = recorte or (regioes_visuais(xml) or [None])[0]
     if not reg:
-        return {"erro": "não achei a grade (área sem texto); informe recorte=[x,y,l,a]"}
-    tec = a.get("teclado") or teclado_da_grade(els, reg, n)
+        return None, "não achei a grade (área sem texto); informe recorte=[x,y,l,a]"
+    tec = teclado or teclado_da_grade(elementos(xml, limite=300), reg, n)
     if not tec:
-        return {"erro": f"não achei os {n} botões de algarismo abaixo da grade; informe teclado=[[x,y,l,a],...]"}
+        return None, f"não achei os {n} botões de algarismo abaixo da grade; informe teclado=[[x,y,l,a],...]"
+    return (reg, tec), None
+
+
+def _ler_grade(aj, reg, tec, n):
     x0 = min(t[0] - t[2] // 2 for t in tec)
     x1 = max(t[0] + t[2] // 2 for t in tec)
-    t0 = time.time()
     r = aj.pedir(f"grade {int(reg[0])} {int(reg[1])} {int(reg[2])} {int(reg[3])} {n} {x0} "
                  f"{tec[0][1] - tec[0][3] // 2} {x1 - x0} {tec[0][3]} {n}", 15)
     if not r or r.startswith("ERRO"):
-        return {"erro": f"leitura falhou: {(r or 'sem resposta')[:120]}"}
+        return None, []
     linhas = r.strip().split("\n")
     g = [[int(ch) if ch.isdigit() else 0 for ch in ln] for ln in linhas[:n]]
-    duvidas = linhas[n].replace("duvidas", "").split() if len(linhas) > n else []
+    return g, (linhas[n].replace("duvidas", "").split() if len(linhas) > n else [])
+
+
+def grade(a):
+    """Lê no celular a grade NxN de algarismos (tabuleiro sem texto na acessibilidade) usando como modelo os botões
+    1..N do próprio jogo. Espera a grade ficar estável (animação de entrada, anúncio) em vez de pausa fixa.
+    antes=[passos]: roda antes (ex.: retomar o jogo), na mesma chamada. resolver=true (sudoku 9x9): resolve, preenche
+    numa leva rápida, relê a grade e repete sozinho os toques que não pegaram."""
+    aj = _ajudante()
+    if not aj:
+        return {"erro": "precisa do leitor rápido (Shizuku)"}
+    t0 = time.time()
+    if a.get("antes"):
+        r0 = sequencia({"passos": a["antes"], "ver_depois": "nada"})
+        if r0.get("erro") or r0.get("interrompido"):
+            return {"antes": r0, "erro": "os passos de antes não terminaram"}
+    n = int(a.get("n", 9))
+    limite = time.time() + min(float(a.get("ate", 10)), 30)
+    g, duvidas, anterior, motivo, achado = None, [], None, None, None
+    while time.time() < limite:  # grade estável: duas leituras iguais seguidas (e com solução, se for resolver)
+        if em_anuncio():
+            fechar_anuncio(foco())
+            continue
+        achado, motivo = _achar_grade(n, a.get("recorte"), a.get("teclado"))
+        if achado:
+            g, duvidas = _ler_grade(aj, achado[0], achado[1], n)
+            if g and g == anterior and any(any(ln) for ln in g):
+                break
+            anterior = g
+        time.sleep(0.12)
+    else:
+        return {"erro": motivo or "a grade não ficou estável a tempo", **({"grade": ["".join(map(str, ln)) for ln in g]}
+                                                                           if g else {})}
+    reg, tec = achado
     out = {"grade": ["".join(map(str, ln)) for ln in g], "vazias": sum(ln.count(0) for ln in g),
            "leitura_s": round(time.time() - t0, 2)}
     if duvidas:
@@ -574,19 +604,48 @@ def grade(a):
     if not sol:
         return {**out, "erro": "a grade lida não tem solução (leitura duvidosa): confira com ver + recorte",
                 "recorte": reg}
-    pontos = []
-    for i in range(9):
-        for j in range(9):
-            if not g[i][j]:
-                pontos += [[int(reg[0] + reg[2] * (j + 0.5) / 9), int(reg[1] + reg[3] * (i + 0.5) / 9)],
-                           [tec[sol[i][j] - 1][0], tec[sol[i][j] - 1][1]]]
-    out["resolvido_s"] = round(time.time() - t0, 2)
-    if not pontos:
+
+    def centro(i, j):
+        return [int(reg[0] + reg[2] * (j + 0.5) / 9), int(reg[1] + reg[3] * (i + 0.5) / 9)]
+
+    def pontos_de(casas):
+        pts = []
+        for i, j in casas:
+            pts += [centro(i, j), [tec[sol[i][j] - 1][0], tec[sol[i][j] - 1][1]]]
+        return pts
+
+    vazias = [(i, j) for i in range(9) for j in range(9) if not g[i][j]]
+    if not vazias:
         return {**out, "feito": "nada a preencher"}
-    _ULTIMA["janela"] = (eventos() or (0, 0, None))[2]  # as coordenadas acabaram de ser lidas desta tela
-    r2 = sequencia({"passos": [{"tocar": pontos, "intervalo": float(a.get("intervalo", 0.015))}],
-                    "ver_depois": a.get("ver_depois", "mudancas")})
-    return {**out, **r2}
+    janela = (eventos() or (0, 0, None))[2]
+    _ULTIMA["janela"] = janela  # as coordenadas acabaram de ser lidas desta tela
+    t1 = time.time()
+    r2 = sequencia({"passos": [{"tocar": pontos_de(vazias), "intervalo": float(a.get("intervalo", 0.008)),
+                                "pressao": int(a.get("pressao", 8))}], "ver_depois": "nada"})
+    out["preencher_s"] = round(time.time() - t1, 2)
+    if r2.get("erro") or r2.get("interrompido"):
+        return {**out, **r2}
+    # conferência: relê e repete (devagar) só as casas que ficaram vazias — nunca se a tela mudou (jogo acabou)
+    if a.get("conferir", True):
+        calma(80, 400)
+        ev = eventos()
+        if ev and ev[2] == janela:
+            lido, _ = _ler_grade(aj, reg, tec, 9)
+            faltam = [(i, j) for i, j in vazias if lido and not lido[i][j]]
+            ev = eventos()
+            if faltam and len(faltam) <= 6 and ev and ev[2] == janela:
+                sequencia({"passos": [{"tocar": pontos_de(faltam), "intervalo": 0.05, "pressao": 30}],
+                           "ver_depois": "nada"})
+                out["refeitos"] = len(faltam)
+            elif faltam:
+                out["faltam"] = [f"{i},{j}" for i, j in faltam]
+        out["conferido"] = "faltam" not in out
+    out["total_s"] = round(time.time() - t0, 2)
+    if a.get("ver_depois") and a["ver_depois"] != "nada":
+        out.update(_ver_depois(a))
+    else:
+        out["app"] = foco()
+    return out
 
 
 # --------------------------------------------------------------------------- anúncios (resolvidos no celular)
@@ -1103,6 +1162,7 @@ class _Executor:
         self.anuncios = []  # anúncios que o celular fechou sozinho
         self.com_anuncios = True
         self.app_inicial = None  # trava de app inesperado
+        self.pressao = None  # ms de cada toque nas levas (None: o padrão do leitor, 12 ms)
 
     # --- utilidades
     def descarregar(self):
@@ -1244,7 +1304,8 @@ class _Executor:
             parte = pontos[k:k + pedaco]
             # a mesma tela se anunciando sem parar (animação): o resto da leva vai sem o reflexo de janela
             cmd = "toquesv" if self.parar_em_janela is not False and reanuncios < 20 else "toques"
-            r = (self.injetar_cru(f"{cmd} {int(pausa * 1000)} " + " ".join(f"{x} {y}" for x, y in parte)))
+            ritmo = f"{int(pausa * 1000)}" + (f":{int(self.pressao)}" if self.pressao else "")
+            r = (self.injetar_cru(f"{cmd} {ritmo} " + " ".join(f"{x} {y}" for x, y in parte)))
             if r is None:  # leitor caiu: o resto pelo shell, sem reflexo
                 linhas = []
                 for x, y in pontos[k:]:
@@ -1357,6 +1418,7 @@ class _Executor:
                 self.conferir_coordenadas(p, onde)
             pontos = [[int(x), int(y)] for x, y in pontos]
             self.tocados += pontos
+            self.pressao = p.get("pressao") or self.pressao
             pausa = max(0.0, min(float(p.get("intervalo", 0.05)), 5.0))
             if p.get("segurar"):
                 ms = max(50, min(int(p["segurar"]), 5000))

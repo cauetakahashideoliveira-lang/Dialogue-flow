@@ -797,7 +797,6 @@ async function registrarChamada(env, nome, args, status, ms) {
 const mcpApi = {
   async fetch(req, env, ctx) {
     const t0 = Date.now();
-    await inicializar(env);
     if (req.method !== 'POST') return new Response(null, { status: 405, headers: { Allow: 'POST' } });
     const bruto = new Uint8Array(await req.arrayBuffer());
     if (bruto.length > 1_000_000) return rpc(null, { error: { code: -32600, message: 'corpo grande demais' } }, 413);
@@ -805,10 +804,22 @@ const mcpApi = {
     try { msg = JSON.parse(new TextDecoder().decode(bruto)); } catch {
       return rpc(null, { error: { code: -32700, message: 'JSON inválido' } }, 400);
     }
-    // uma consulta só: aparelho, endereço e estado (antes eram três, em sequência)
-    const ap = await env.DB.prepare(`SELECT a.id, x.mcp_url, e.armado_ate, e.travado, e.desarmado_permite
+    // Estas mensagens encerram aqui após a autenticação OAuth do recurso.
+    if (msg?.jsonrpc === '2.0' && msg.method === 'ping' && msg.id != null)
+      return rpc(msg.id, { result: {} });
+    if (msg?.jsonrpc === '2.0' && msg.method === 'notifications/initialized' && msg.id == null)
+      return new Response(null, { status: 202 });
+
+    // O pareamento já criou o esquema. Evita repetir DDL na primeira chamada de cada isolate.
+    const consultar = () => env.DB.prepare(`SELECT a.id, x.mcp_url, e.armado_ate, e.travado, e.desarmado_permite
       FROM aparelhos a LEFT JOIN extras x ON x.aparelho = a.id LEFT JOIN estado e ON e.aparelho = a.id
       WHERE a.revogado = 0 ORDER BY a.criado LIMIT 1`).first();
+    let ap;
+    try { ap = await consultar(); } catch (e) {
+      if (!/no such table/i.test(String(e.message || e))) throw e;
+      await inicializar(env);
+      ap = await consultar();
+    }
     if (!ap) return rpc(msg?.id, { error: { code: -32000, message: 'nenhum celular cadastrado na Central' } }, 503);
     const e = { armado_ate: ap.armado_ate || 0, travado: ap.travado || 0, desarmado_permite: ap.desarmado_permite || 'ir' };
     for (const m of Array.isArray(msg) ? msg : [msg]) {
@@ -826,6 +837,7 @@ const mcpApi = {
       'x-painel-assinatura': await assinarRequisicao(env, bruto), 'ngrok-skip-browser-warning': '1' };
     for (const h of ['mcp-session-id', 'mcp-protocol-version']) if (req.headers.get(h)) cab[h] = req.headers.get(h);
     // 1º o canal direto (conexão aberta pelo celular: sem túnel); sem canal, o túnel (ngrok) como antes
+    const inicioTransporte = Date.now();
     let r = null, via = 'canal';
     try {
       const rc = await canalDe(env, ap.id).fetch('https://canal/rpc', { method: 'POST', headers: cab, body: bruto });
@@ -844,6 +856,7 @@ const mcpApi = {
     if (chamada) ctx.waitUntil(registrarChamada(env, String(chamada.params?.name || '?'), chamada.params?.arguments,
       `${r.ok ? 'ok' : `HTTP ${r.status}`} · ${via}`, Date.now() - t0).catch(() => {}));
     const sai = { 'content-type': r.headers.get('content-type') || 'application/json', 'cache-control': 'no-store',
+      'server-timing': `central;dur=${inicioTransporte - t0}, transporte;dur=${Date.now() - inicioTransporte}`,
       'x-via': via === 'canal' ? 'canal' : 'tunel' };  // cabeçalho só em ASCII
     if (r.headers.get('mcp-session-id')) sai['mcp-session-id'] = r.headers.get('mcp-session-id');
     return new Response(r.body, { status: r.status, headers: sai });

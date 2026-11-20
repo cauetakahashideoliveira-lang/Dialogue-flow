@@ -1,7 +1,7 @@
 # Graph Report - Dialogue-flow  (2026-11-20)
 
 ## Corpus Check
-- 71 files · ~122,387 words
+- 71 files · ~122,621 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 8 file(s) not represented in the graph (top: (none) 3, .ir 3, .gz 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 157,587 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b901d246`
+- Built from commit: `15ac536f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -103,10 +103,10 @@
 10. `normalizar()` - 26 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `3b. Gateway OAuth na borda (1.0.26, implementada)` --references--> `TestPainel`  [INFERRED]
-  docs/seguranca.md → testes/test_controle_ir.py
 - `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `Catalogo`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/catalogo.py
+- `3b. Gateway OAuth na borda (1.0.26, implementada)` --references--> `TestPainel`  [INFERRED]
+  docs/seguranca.md → testes/test_controle_ir.py
 - `Túnel ngrok com domínio fixo` --conceptually_related_to--> `Tunel`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/tunel.py
 - `variante()` --implements--> `Variante Gree a partir da captura real (troca só os bits)`  [INFERRED]
@@ -344,9 +344,9 @@ _Questions this graph is uniquely positioned to answer:_
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `index.js` be split into smaller, more focused modules?**
   _Cohesion score 0.06426484907497566 - nodes in this community are weakly interconnected._
-- **Why does `TestTelaPorArquivo` connect `TestTelaPorArquivo` to `test_controle_ir.py`?**
-  _High betweenness centrality (0.035) - this node is a cross-community bridge._
+- **Why does `Catalogo` connect `Servico` to `cli.py`, `time`, `Sinal`, `descoberta.py`, `tv do quarto (TV Samsung)`?**
+  _High betweenness centrality (0.034) - this node is a cross-community bridge._
 - **Should `TestPainel` be split into smaller, more focused modules?**
   _Cohesion score 0.08602150537634409 - nodes in this community are weakly interconnected._
-- **Why does `Catalogo` connect `Servico` to `cli.py`, `time`, `Sinal`, `descoberta.py`, `tv do quarto (TV Samsung)`?**
-  _High betweenness centrality (0.032) - this node is a cross-community bridge._
+- **Why does `_iniciar()` connect `cli.py` to `painel.py`, `Controlador`, `capacidades.py`, `execucao.py`, `Servico`, `Servico`, `criar_servidor`, `time`, `Tunel`, `descoberta.py`?**
+  _High betweenness centrality (0.028) - this node is a cross-community bridge._

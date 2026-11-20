@@ -41,6 +41,19 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **20/11 madrugada — Piloto com inteligência alta (1.0.56→1.0.60):**
+  * Chave da API no celular (`~/.controle-ir/anthropic.key`, 600, criada pelo dono no Termux; permanente; conta
+    Team com teto mensal de US$ 100). Latência medida da API daqui: Haiku e Sonnet ~1,3 s por resposta.
+  * **Escada de inteligência:** memória → modelo local com CERTEZA (logprobs do llama-server) → Sonnet. O Sonnet
+    roda em toda pergunta e serve de **gabarito**: a precisão do local com certeza ≥ 95% é medida na partida
+    (início otimista 9/10); o local age sozinho enquanto a precisão medida ≥ meta (90%). Memória só guarda resposta
+    do forte. Modelo local trocado para **Qwen2.5-3B Q4_0** (`-t 6`, ~0,6–0,8 s; o 1,5B errava convicto).
+  * Rodadas do quiz (placar da página, prazo 2 s): R1 só 1,5B 14/30 · R3 1,5B+Sonnet 22/30 · R4 3B+Sonnet com
+    aprendizado radical 16/30 (13 estouros: tudo esperando o Sonnet) · **R5 sem memória 29/30, 0 estouros,
+    mediana 1,62 s** · **R6 com a memória da R5: 30/30, mediana 0,70 s (nosso lado 0,22 s)**.
+  * Lição: ~0,5 s entre a página desenhar e o piloto agir (atualização da acessibilidade do Chrome + entrega do
+    toque) — próximo alvo (perceber por diferença de quadros na captura). Sobreposições do sistema (barra,
+    notificação) não travam mais o piloto; app de banco na tela faz o piloto parar.
 - **19/11 noite — PILOTO: laço rápido no celular (1.0.47→1.0.55):**
   * Objetivo do dono: "modo deus" = ver e reagir como uma pessoa. Diagnóstico (debatido com o ChatGPT no app):
     o celular já percebe/lê/toca em ~0,1–0,3 s; o gargalo é o ciclo do Claude (~3 s por decisão, só vê a tela no

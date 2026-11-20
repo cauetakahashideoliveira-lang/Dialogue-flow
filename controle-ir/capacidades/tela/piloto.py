@@ -446,6 +446,7 @@ class Piloto:
         self.cfg.setdefault("cerebros", ["memoria", "api"])
         self.cerebros = Cerebros(self.cfg)
         self.cerebros.aquecer()
+        self.rodadas.clear()  # cada partida com o seu placar (o arquivo do gravador guarda tudo)
         self.parar = threading.Event()
         self.desde = time.time()
         self.th = threading.Thread(target=self._laco, name="piloto", daemon=True)

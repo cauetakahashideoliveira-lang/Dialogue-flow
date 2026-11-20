@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795135507.5348694,
-    "seen": 1795135509.928149,
-    "ast_hash": "4dc7881d60f519c33fe198655b74399d",
+    "mtime": 1795135831.5289168,
+    "seen": 1795135833.5851882,
+    "ast_hash": "450b4d4657301e09ff4fdf67004b3802",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795130725.2763438,
-    "seen": 1795130728.5740101,
-    "ast_hash": "1fafc7422838cd6d11b10d3b8a4dfbba",
+    "mtime": 1795135783.1743302,
+    "seen": 1795135833.586086,
+    "ast_hash": "694bed524438b354a2f21105b7d338c3",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -444,9 +444,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/piloto.py": {
-    "mtime": 1795135458.5134676,
-    "seen": 1795135509.9280941,
-    "ast_hash": "3e5009eb086e60d15faf25bb45bbcfc0",
+    "mtime": 1795135783.160092,
+    "seen": 1795135833.5851288,
+    "ast_hash": "97ae81517d59dcf1d4c8972eab498aaf",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/quiz/quiz.html": {

@@ -386,7 +386,11 @@ class ServidorMCP:
         except Exception:  # noqa: BLE001 — auditoria nunca bloqueia
             pass
         try:
-            r = getattr(self.servico, nome)(**args)
+            if nome == "executar_capacidade" and args.get("nome") == "tela" and isinstance(args.get("argumentos"),dict) and args["argumentos"].get("acao") == "missao":
+                from . import ambiente_missao
+                r = ambiente_missao.executar(self, args, self.servico.executar_capacidade)
+            else:
+                r = getattr(self.servico, nome)(**args)
             if desconhecidos:
                 r = dict(r, argumentos_ignorados=sorted(desconhecidos))
             return self._resultado(r, False)
@@ -429,3 +433,4 @@ def _extrair_imagens(dados) -> list[dict]:
 
     varrer(res)
     return imagens
+

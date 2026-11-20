@@ -1,0 +1,25 @@
+name: Empacotar missão no POCO
+on:
+  push:
+    branches: [codex/sonnet-ambiente-nativo, codex/benchmark-planejador-estruturado]
+    paths: ['controle-ir/**', '.github/workflows/pacote-missao.yml']
+permissions:
+  contents: write
+jobs:
+  pacote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Conferir Python e gerar o ZIP
+        run: |
+          python3 -m compileall -q controle-ir
+          bash ferramentas/empacotar.sh
+          (cd dist && sha256sum -c controle-ir.zip.sha256)
+      - name: Publicar no mesmo branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dist/controle-ir.zip dist/controle-ir.zip.sha256
+          git commit -m 'Empacotar missão contextual no POCO'
+          git push origin HEAD:"$GITHUB_REF_NAME"
+

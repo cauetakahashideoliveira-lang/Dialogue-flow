@@ -270,8 +270,54 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
         envelope = mcp.chamar("cap_tela", args)["structuredContent"]
         return envelope.get("resultado", envelope)
 
+    # Um novo pedido local ou o botão Parar invalida um início que ainda aguarda o tabuleiro.
+    pedido_stockfish = 0
+    trava_stockfish = threading.Lock()
+
+    def stockfish_local(dados):
+        nonlocal pedido_stockfish
+        acao = dados.get("acao")
+        with trava_stockfish:
+            if acao == "preparar":
+                pedido_stockfish += 1
+                return {"pedido": pedido_stockfish}
+            if acao not in ("parar", "iniciar"):
+                return {"erro": "Ação de xadrez inválida."}
+            if acao == "parar":
+                pedido_stockfish += 1
+            elif dados.get("pedido") != pedido_stockfish:
+                return {"mensagem": "Início do piloto cancelado."}
+
+            def chamar(**args):
+                envelope = mcp.chamar("cap_tela", dict(acao="piloto", **args))["structuredContent"]
+                return envelope.get("resultado", envelope)
+
+            estado = chamar()
+            if "erro" in estado:
+                return {"erro": estado["erro"]}
+            if estado.get("rodando"):
+                if estado.get("cfg", {}).get("modo") != "xadrez":
+                    return {"mensagem": "Outro piloto está ativo."}
+                if acao == "iniciar":
+                    return {"mensagem": estado.get("estado") or "Stockfish já está ativo."}
+                final = chamar(parar=True)
+                if final.get("erro") or final.get("rodando"):
+                    return {"erro": final.get("erro") or "O piloto ainda está encerrando."}
+                return {"mensagem": "Piloto de xadrez desligado."}
+            if acao == "parar":
+                return {"mensagem": "Piloto de xadrez desligado."}
+            resposta = chamar(iniciar={"modo":"xadrez", "app":"com.chess", "cerebros":["memoria"], "tabuleiro_local":True,
+                                       "ms_lance":200, "threads":2, "hash_mb":64,
+                                       "minha_vez":dados.get("minha_vez") is True})
+            if "atividade" in resposta and resposta.get("erro"):
+                return {"aguardar_tabuleiro": True}
+            if resposta.get("rodando"):
+                return {"mensagem": "Stockfish ativo. Abra ou retome o tabuleiro no Chess.com."}
+            return {"erro": resposta.get("erro") or resposta.get("estado") or "Falha ao iniciar o piloto."}
+
     acoes = {
         "rota": rota_local,
+        "stockfish": stockfish_local,
         "pausar": lambda d: servico.pausar(origem=d.get("origem", "painel")),
         "retomar": lambda d: servico.retomar(d.get("intervalo"), d.get("a_partir_de")),
         "retestar": lambda d: servico.retestar([int(d["numero"])], d.get("intervalo")),
@@ -411,3 +457,4 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
     srv = ThreadingHTTPServer((host, porta), Manipulador)
     srv.daemon_threads = True
     return srv
+

@@ -1,7 +1,7 @@
 name: Empacotar missão no POCO
 on:
   push:
-    branches: [codex/sonnet-ambiente-nativo, codex/benchmark-planejador-estruturado]
+    branches: [codex/sonnet-ambiente-nativo, codex/benchmark-planejador-estruturado, codex/botao-stockfish-estudos]
     paths: ['controle-ir/**', '.github/workflows/pacote-missao.yml']
 permissions:
   contents: write
@@ -13,6 +13,8 @@ jobs:
       - name: Conferir Python e gerar o ZIP
         run: |
           python3 -m compileall -q controle-ir
+          python3 testes/test_stockfish_local.py
+          PYTHONPATH=testes python3 -m unittest test_controle_ir.TestPiloto.test_xadrez_joga_na_vez_certa
           bash ferramentas/empacotar.sh
           (cd dist && sha256sum -c controle-ir.zip.sha256)
       - name: Publicar no mesmo branch
@@ -22,4 +24,5 @@ jobs:
           git add dist/controle-ir.zip dist/controle-ir.zip.sha256
           git commit -m 'Empacotar missão contextual no POCO'
           git push origin HEAD:"$GITHUB_REF_NAME"
+
 

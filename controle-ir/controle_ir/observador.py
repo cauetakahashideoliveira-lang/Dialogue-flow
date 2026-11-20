@@ -95,8 +95,10 @@ def em_uso(pasta, android: bool = False, ao_vivo: bool = False) -> dict:
         r["itens"].append({"tipo": "tela", "desc": "tela transmitida para a Central de Controle", "recursos": ["tela"]})
     if android:
         try:
-            out, _, _ = _tela().rish("dumpsys appops --op CAMERA; echo '#####'; dumpsys appops --op RECORD_AUDIO",
+            out, _, codigo = _tela().rish("dumpsys appops --op CAMERA; echo '#####'; dumpsys appops --op RECORD_AUDIO",
                                      timeout=15)
+            if codigo != 0:
+                raise RuntimeError(f"consulta ao Android terminou com código {codigo}")
             r.update(apps_usando(out))
             r["shizuku"] = True
         except Exception as e:  # noqa: BLE001 — sem Shizuku o resto do relatório continua valendo

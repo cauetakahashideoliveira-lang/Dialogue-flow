@@ -192,6 +192,9 @@ def parar_servico(esperar: float = 15.0) -> bool:
         if not _pid_do_servico(pid) and not (porta and _saude(porta, 0.5)):
             break
         time.sleep(0.3)
+    else:
+        print("O serviço ainda não confirmou o encerramento.")
+        return False
     (PASTA / "servidor.json").unlink(missing_ok=True)
     print("Serviço encerrado.")
     return True
@@ -253,7 +256,8 @@ def inicio_automatico(acao: str, silencioso: bool = False) -> int:
     return 0
 
 
-ATALHOS = {"Ligar Controle IR": "ligar", "Desligar Controle IR": "desligar"}
+ATALHOS = {"Ligar Controle IR": "ligar", "Desligar Controle IR": "desligar",
+           "Reiniciar Controle IR": "reiniciar"}
 MODOS_WIDGET = {"Armar Controle IR": "armar",
                 "Desarmar Controle IR": "desarmar",
                 "Modo autonomo Controle IR": "exec modo autonomo",
@@ -300,7 +304,7 @@ def criar_atalhos(silencioso: bool = False) -> int:
         os.replace(tmp, arq)
     if silencioso:
         return 0
-    print("✔ Atalhos criados: Ligar, Desligar, Armar, Desarmar, Reverter, Modo autonomo, Modo cauteloso e Travar "
+    print("✔ Atalhos criados: Ligar, Reiniciar, Desligar, Armar, Desarmar, Reverter, Modo autonomo, Modo cauteloso e Travar "
           "(Controle IR).")
     print("  Para pôr na tela inicial (uma vez só):")
     print("  1. Instale o app Termux:Widget do F-Droid (mesma fonte do Termux).")
@@ -926,10 +930,17 @@ def _iniciar(args, trava):
             _aviso(f"Controle IR: {motivo}")
         from . import observador
         from .canal import Canal
+        def relatar_uso(observar, ao_vivo):
+            relato = observador.em_uso(PASTA, observar, ao_vivo)
+            if observar:
+                # Uma consulta real quando o dono abre o painel. O backend normal guarda as faixas em cache.
+                relato["emissor_ir"] = (EmissorSimulado() if args.simulado else EmissorTermux()).disponivel()["disponivel"]
+            return relato
+
         sinc = painel_mod.Sincronizador(PASTA, __version__, reduzir,
                                         url_mcp=lambda: f"{servico.url_publica}/mcp/{c['segredo']}"
                                         if servico.url_publica else None,
-                                        em_uso=lambda observar, ao_vivo: observador.em_uso(PASTA, observar, ao_vivo),
+                                        em_uso=relatar_uso,
                                         quadro=observador.quadro).iniciar()
         # canal direto com a Central (WebSocket aberto pelo celular): chamadas sem túnel e avisos na hora
         servico.canal = Canal(PASTA, porta, c["segredo"], ao_sincronizar=sinc.acordar,
@@ -1063,6 +1074,7 @@ def main(argv=None):
     pb = sub.add_parser("inicio-automatico", help="abre o serviço quando o celular liga (app Termux:Boot)")
     pb.add_argument("acao", nargs="?", default="status", choices=["sim", "nao", "status"])
     pb.add_argument("--silencioso", action="store_true")
+    sub.add_parser("reiniciar", help="reinicia o serviço e suas conexões, preservando a configuração")
     sub.add_parser("ligar", help="liga em segundo plano e avisa na tela (atalho do Termux:Widget)")
     sub.add_parser("desligar", help="encerra o serviço e avisa na tela (libera a bateria)")
     pk = sub.add_parser("capacidade", help="capacidades plugáveis: listar, ver, aprovar, recusar, remover, executar")
@@ -1155,6 +1167,20 @@ def main(argv=None):
         if a.modo == "exigir" and any(not o.dentro(ip, pol["redes"]) for ip in vistos):
             print("ATENÇÃO: já houve chamadas de fora da rede permitida; se forem suas, volte com: controle-ir origens observar")
         return 0
+    if cmd == "reiniciar":
+        trava = _travar_inicio()
+        try:
+            _registrar("reiniciar: pedido")
+            if servico_ativo() or _pid_do_servico(estado_servidor().get("pid") or 0):
+                if not parar_servico():
+                    _aviso("Controle IR: encerramento não confirmado. Consulte o log.")
+                    return 1
+            _aviso("Reconectando o Controle IR…")
+            args = ap.parse_args(["iniciar", "--fundo"])
+            args.avisar = True
+            return _iniciar(args, trava)
+        finally:
+            _soltar_inicio(trava)
     if cmd == "ligar":
         # chamado pelo atalho do widget, sem terminal: registra desde o primeiro instante e mostra o motivo de
         # qualquer falha na tela (antes, um erro aqui sumia sem deixar rastro)

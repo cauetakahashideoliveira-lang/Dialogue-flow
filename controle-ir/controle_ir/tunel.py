@@ -95,7 +95,10 @@ class Tunel:
                                              bufsize=1, start_new_session=True, env=env)
             except OSError as e:
                 self.ultimo_erro = str(e)
-                return
+                self.log(f"falha ao iniciar o túnel; nova tentativa em {espera} s")
+                self.parar_evento.wait(espera)
+                espera = min(espera * 2, 60)
+                continue
             inicio = time.monotonic()
             for linha in self.proc.stdout:
                 if self.parar_evento.is_set():

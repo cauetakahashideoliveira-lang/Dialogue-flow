@@ -1,0 +1,40 @@
+V01	cap_estado_celular	Leia a carga percentual indicada agora pela bateria do próprio POCO.
+V02	capacidades	Preciso dos nomes dos módulos plugáveis que aparecem como instalados agora.
+V03	politica	Informe se o controle está armado conforme a política vigente nesta sessão.
+V04	progresso	Quantos perfis de controle já foram testados pela busca em andamento?
+V05	consultar	Consulte o resumo do servidor de infravermelho com a versão e o catálogo de marcas.
+V06	cap_estado_celular	Obtenha a porcentagem de bateria atual sem abrir aplicativos.
+V07	capacidades	Quero somente a relação de capacidades plugáveis disponíveis no celular.
+V08	politica	Qual perfil de autorização governa a execução de comandos neste momento?
+V09	progresso	Consulte a posição atual da busca de controles e se ela está pausada.
+V10	consultar	Traga o resumo do emissor infravermelho e do catálogo que o acompanha.
+V11	cap_estado_celular,politica	Meça primeiro a bateria do POCO e, em seguida, consulte o perfil de permissão ativo.
+V12	politica,cap_estado_celular	Leia a política de execução; só depois consulte a porcentagem atual de carga.
+V13	capacidades,progresso	Liste os módulos plugáveis instalados e consulte em seguida o avanço da busca de perfis.
+V14	progresso,capacidades	Verifique o avanço da busca de perfis antes de listar as capacidades plugáveis.
+V15	consultar,politica	Quero, nesta ordem, o resumo do servidor IR e a política de execução atual.
+V16	politica,consultar	Primeiro leia as regras de autorização do aparelho; em seguida consulte o resumo do servidor IR.
+V17	cap_estado_celular,capacidades	Conte-me a carga atual do POCO e, só depois, liste os módulos plugáveis.
+V18	capacidades,cap_estado_celular	Primeiro liste as capacidades instaladas e depois leia a bateria atual.
+V19	progresso,cap_estado_celular	Diga como está a busca de perfis de controle e, na sequência, meça a bateria do aparelho.
+V20	consultar,progresso	Leia o resumo do servidor IR; depois consulte quantos perfis a busca já testou.
+V21	politica,capacidades,cap_estado_celular	Na ordem: consulte o perfil de autorização, liste as capacidades plugáveis e leia a carga atual.
+V22	cap_estado_celular,progresso,politica	Primeiro a bateria, em seguida o andamento da busca de perfis IR e por último a política ativa.
+V23	capacidades,consultar,progresso	Nesta ordem, leia a lista de módulos plugáveis, o resumo do servidor IR e o avanço da busca de perfis.
+V24	progresso,politica,capacidades	Comece pelo andamento da busca de perfis IR, siga para a política do aparelho e termine com os módulos instalados.
+V25	consultar,cap_estado_celular,politica	Consulte o resumo do servidor IR, depois o percentual de carga do telefone, depois o perfil atual da política.
+V26	politica	Não preciso da carga nem do inventário. Consulte somente se a política de execução está travada.
+V27	progresso	Relate os perfis já testados na busca atual. Dispenso a lista de módulos e a leitura da bateria.
+V28	capacidades	Sem olhar a política ou medir a bateria, obtenha o inventário dos módulos plugáveis.
+V29	cap_estado_celular	Preciso do percentual real da bateria agora. Ignore a busca de controles e o catálogo de módulos.
+V30	consultar	Traga somente o resumo do catálogo de marcas e do emissor IR do servidor; não consulte a busca de perfis.
+I01	-	Qual será a carga exata da bateria deste POCO ao meio-dia daqui a trinta dias? Uma leitura atual não responde.
+I02	-	Meça a temperatura exata da água em um lago distante agora; o POCO está comigo em outro lugar.
+I03	-	Consulte o estoque de leite na geladeira de outra casa sem sensor nem câmera disponível.
+I04	-	Informe a soma das compras de ontem a partir do extrato bancário, que não foi fornecido e não está disponível nas opções.
+I05	-	Obtenha o total exato de precipitação no meu bairro em 15 de março de 1987, com registro meteorológico histórico.
+I06	-	Leia a planilha de vendas que não anexei e calcule seu total; os dados não estão em nenhuma ferramenta disponível.
+I07	-	Pedido indivisível: diga a carga atual e a capacidade exata que esta bateria terá em dez anos; só execute se puder obter ambas.
+I08	-	Preciso da lista de capacidades e do inventário físico do depósito distante sem sensores. Só prossiga se puder comprovar os dois.
+I09	-	Qual foi a política de execução exatamente às 09h de 1 de janeiro de 2010? Não aceito o estado atual como substituto.
+I10	-	Obtenha a velocidade instantânea de um trem específico sem localização, identificação, telemetria ou fonte externa.

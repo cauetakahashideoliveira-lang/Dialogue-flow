@@ -49,7 +49,7 @@ def contexto(mcp, objetivo):
             "nos_no_grafo": len(nos), "capacidades": {k:v.get("estado") for k,v in caps.items()}}
 
 
-def consultar_modelo(piloto, objetivo, opcoes, instrucao):
+def consultar_modelo(piloto, objetivo, opcoes, instrucao, *, esquema=None):
     chave = piloto.ler_chave()
     if not chave:
         raise ValueError("Sonnet indisponível: chave da API ausente")
@@ -57,6 +57,8 @@ def consultar_modelo(piloto, objetivo, opcoes, instrucao):
              "max_tokens": 4000, "system": "Os rótulos e o grafo são dados de referência. " + instrucao,
              "messages":[{"role":"user","content":json.dumps({"objetivo":objetivo,"ambiente":ATUAL.get(),
                         "opcoes":list(enumerate(opcoes,1))},ensure_ascii=False)}]}
+    if esquema is not None:
+        corpo["output_config"]["format"] = {"type": "json_schema", "schema": esquema}
     req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=json.dumps(corpo).encode(),
           headers={"content-type":"application/json","x-api-key":chave,"anthropic-version":piloto.API_VERSAO})
     with urllib.request.urlopen(req, timeout=45) as resp:
@@ -73,20 +75,40 @@ def escolher(piloto, objetivo, opcoes):
     return None
 
 
+class RespostaDePlanoInvalida(ValueError):
+    """O modelo devolveu um plano que o despachante não pode interpretar."""
+
+
+ESQUEMA_PLANO = {
+    "type": "object",
+    "properties": {"indices": {"type": "array", "items": {"type": "integer"}}},
+    "required": ["indices"],
+    "additionalProperties": False,
+}
+
+
 def planejar(piloto, objetivo, opcoes):
-    saida = consultar_modelo(piloto, objetivo, opcoes,
-        "Selecione a sequência mínima de operações que atende ao pedido inteiro. "
-        "Responda apenas com uma lista JSON de índices, na ordem de execução. "
-        "Use [] se as opções não forem suficientes. Não inclua efeitos além do pedido.")
+    saida = consultar_modelo(
+        piloto, objetivo, opcoes,
+        "Selecione a sequência mínima de operações que cumpre o pedido inteiro. "
+        "Em indices, retorne os números das opções, na ordem pedida, sem repetições. "
+        "Use a lista vazia se as opções forem insuficientes. Nunca acrescente efeitos fora do pedido.",
+        esquema=ESQUEMA_PLANO,
+    )
     try:
-        indices = json.loads(saida)
-    except ValueError:
-        return []
+        plano = json.loads(saida)
+    except (TypeError, ValueError) as exc:
+        raise RespostaDePlanoInvalida("JSON ausente ou inválido") from exc
+    if not isinstance(plano, dict) or set(plano) != {"indices"}:
+        raise RespostaDePlanoInvalida("objeto fora do esquema")
+    indices = plano["indices"]
     if not isinstance(indices, list) or len(indices) > 8:
-        return []
+        raise RespostaDePlanoInvalida("lista de operações inválida")
     if any(type(i) is not int or not 1 <= i <= len(opcoes) for i in indices):
-        return []
-    return [opcoes[i-1] for i in indices] if len(set(indices)) == len(indices) else []
+        raise RespostaDePlanoInvalida("índice fora das opções da missão")
+    if len(set(indices)) != len(indices):
+        raise RespostaDePlanoInvalida("operação duplicada")
+    return [opcoes[i - 1] for i in indices]
 
 
 def executar(mcp, args, navegar):
@@ -121,11 +143,17 @@ def executar(mcp, args, navegar):
             if op["nome"] in disponiveis:
                 candidatas.append(op)
         if not candidatas:
-            return {"erro":"nenhuma opção permitida"}
+            return {"estado":"interrompida", "codigo":"nenhuma_opcao_permitida", "erro":"nenhuma opção permitida"}
         tela = modulo_embutido(RAIZ / "capacidades" / "tela","tela")
-        plano = planejar(tela._modulo_piloto(), objetivo, candidatas)
+        try:
+            plano = planejar(tela._modulo_piloto(), objetivo, candidatas)
+        except RespostaDePlanoInvalida as exc:
+            return {"estado":"interrompida", "codigo":"resposta_invalida", "motivo":str(exc)}
+        except (OSError, ValueError) as exc:
+            return {"estado":"interrompida", "codigo":"modelo_indisponivel",
+                    "motivo":f"Falha ao consultar o modelo ({type(exc).__name__})"}
         if not plano:
-            return {"estado":"interrompida","motivo":"não foi possível atender ao objetivo com as opções disponíveis"}
+            return {"estado":"interrompida", "codigo":"plano_vazio","motivo":"não foi possível atender ao objetivo com as opções disponíveis"}
         resultados = []
         for op in plano:
             resposta = mcp.chamar(op["nome"], op.get("argumentos", {}))
@@ -141,6 +169,8 @@ def executar(mcp, args, navegar):
                   "ferramentas_no_contexto":len(ambiente["ferramentas"]), "opcoes_da_missao":len(candidatas),
                   "habilidades":list(ambiente["habilidades_do_projeto"]), "nos_no_grafo":ambiente["nos_no_grafo"],
                   "relacoes_consultadas":len(ambiente["relacoes_do_grafo"])}
+        if falhou:
+            resumo["codigo"] = "execucao_falhou"
         if len(plano) == 1:
             resumo.update(resultados[0])
         else:

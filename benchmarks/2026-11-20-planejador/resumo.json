@@ -1,0 +1,61 @@
+{
+  "versoes": {
+    "base": {
+      "viaveis": 46,
+      "inviaveis": 20,
+      "extras": 1,
+      "chamadas": 77,
+      "estado_por_codigo": {
+        "interrompida": 33,
+        "concluída": 47
+      },
+      "total": 66,
+      "mediana_ms": 5547.5,
+      "p95_ms": 7289,
+      "mediana_viavel_ms": 5636.0,
+      "pedidos_com_resultado_variavel": 4,
+      "erros_transporte": 0
+    },
+    "candidata": {
+      "viaveis": 60,
+      "inviaveis": 20,
+      "extras": 0,
+      "chamadas": 100,
+      "estado_por_codigo": {
+        "plano_vazio": 20,
+        "concluída": 60
+      },
+      "total": 80,
+      "mediana_ms": 5262.0,
+      "p95_ms": 6651,
+      "mediana_viavel_ms": 5338.0,
+      "pedidos_com_resultado_variavel": 0,
+      "erros_transporte": 0
+    }
+  },
+  "tempos_pareados_viaveis": {
+    "n": 46,
+    "mediana_diferenca_ms": 15.5
+  },
+  "acertos_por_tamanho_do_pedido": {
+    "base": {
+      "0": 20,
+      "1": 25,
+      "2": 13,
+      "3": 8
+    },
+    "candidata": {
+      "0": 20,
+      "1": 30,
+      "2": 20,
+      "3": 10
+    }
+  },
+  "pares": {
+    "ambas_passam": 66,
+    "melhorou": 14,
+    "regrediu": 0,
+    "ambas_falham": 0
+  },
+  "aprovada_na_bateria": true
+}

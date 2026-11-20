@@ -422,6 +422,87 @@ def gravar_memoria(mem):
     os.replace(tmp, MEMORIA_ARQ)
 
 
+# ----------------------------------------------------------------------------------------------------- xadrez
+INICIAL = "rnbqkbnrpppppppp" + "." * 32 + "PPPPPPPPRNBQKBNR"  # 8ª fileira primeiro
+
+
+def tabuleiro_txt(casas):
+    """64 caracteres, 8ª fileira primeiro (a8..h8, a7..h7, …), '.' vazia."""
+    return "".join(casas[f"{c}{r}"][2] or "." for r in range(8, 0, -1) for c in "abcdefgh")
+
+
+def minha_cor(casas):
+    """Quem está embaixo na tela é quem joga (o app vira o tabuleiro para as pretas)."""
+    return "w" if casas["a1"][1] > casas["a8"][1] else "b"
+
+
+def quem_mexeu(antes, agora):
+    """Cor de quem fez o lance entre dois tabuleiros: a peça que chegou numa casa (vazia ou de outra cor)."""
+    for i, (a, b) in enumerate(zip(antes, agora)):
+        if b != "." and a != b:
+            return "w" if b.isupper() else "b"
+    return None
+
+
+def fen(tab, vez):
+    linhas = []
+    for r in range(8):
+        lin, vazio = "", 0
+        for ch in tab[8 * r:8 * r + 8]:
+            if ch == ".":
+                vazio += 1
+            else:
+                lin += (str(vazio) if vazio else "") + ch
+                vazio = 0
+        linhas.append(lin + (str(vazio) if vazio else ""))
+    roque = ""  # direitos de roque presumidos pelas peças nas casas de origem
+    if tab[60] == "K":
+        roque += ("K" if tab[63] == "R" else "") + ("Q" if tab[56] == "R" else "")
+    if tab[4] == "k":
+        roque += ("k" if tab[7] == "r" else "") + ("q" if tab[0] == "r" else "")
+    return f"{'/'.join(linhas)} {vez} {roque or '-'} - 0 1"
+
+
+class Motor:
+    """Stockfish (UCI) residente: cada lance em `ms` milissegundos."""
+
+    def __init__(self, caminho="stockfish", elo=None):
+        import subprocess
+        self.p = subprocess.Popen([caminho], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+        self._mandar("uci")
+        self._ate("uciok")
+        if elo:
+            self._mandar("setoption name UCI_LimitStrength value true")
+            self._mandar(f"setoption name UCI_Elo value {int(elo)}")
+        self._mandar("isready")
+        self._ate("readyok")
+
+    def _mandar(self, linha):
+        self.p.stdin.write(linha + "\n")
+        self.p.stdin.flush()
+
+    def _ate(self, prefixo):
+        while True:
+            linha = self.p.stdout.readline()
+            if not linha:
+                raise RuntimeError("o motor fechou")
+            if linha.startswith(prefixo):
+                return linha.strip()
+
+    def lance(self, fen_, ms):
+        self._mandar(f"position fen {fen_}")
+        self._mandar(f"go movetime {int(ms)}")
+        r = self._ate("bestmove").split()
+        return r[1] if len(r) > 1 and r[1] != "(none)" else None
+
+    def fechar(self):
+        try:
+            self._mandar("quit")
+            self.p.wait(timeout=2)
+        except Exception:  # noqa: BLE001
+            self.p.kill()
+
+
 # ----------------------------------------------------------------------------------------------------- o laço
 class Piloto:
     """Laço contínuo no celular. `ferramentas` traz as funções do agente de tela (para testar sem o aparelho)."""
@@ -449,7 +530,8 @@ class Piloto:
         self.rodadas.clear()  # cada partida com o seu placar (o arquivo do gravador guarda tudo)
         self.parar = threading.Event()
         self.desde = time.time()
-        self.th = threading.Thread(target=self._laco, name="piloto", daemon=True)
+        alvo = self._laco_xadrez if self.cfg.get("modo") == "xadrez" else self._laco
+        self.th = threading.Thread(target=alvo, name="piloto", daemon=True)
         self.th.start()
         return self.estado()
 
@@ -458,6 +540,87 @@ class Piloto:
         if self.th and self.th.is_alive():
             self.th.join(timeout=3)
         self.estado_txt = "parado"
+
+    def _laco_xadrez(self):
+        """Xadrez contra o robô: lê o tabuleiro, percebe a vez (a última peça que se mexeu foi do adversário), pede o
+        lance ao motor e toca origem e destino. Só na tela de partida contra robô (f["contra_robo"])."""
+        f, cfg = self.f, self.cfg
+        ms = max(50, min(int(cfg.get("ms_lance", 300)), 5000))
+        fim = time.time() + max(10, min(float(cfg.get("duracao", 600)), 3600))
+        try:
+            motor = Motor(cfg.get("motor", "stockfish"), cfg.get("elo"))
+        except Exception as e:  # noqa: BLE001
+            self.estado_txt = f"erro: motor não abriu ({str(e)[:80]})"
+            return
+        visto, meu_ultimo, contador, conferido = None, None, 0, 0.0
+        self.estado_txt = "olhando o tabuleiro"
+        try:
+            while not self.parar.is_set() and time.time() < fim:
+                if time.time() - conferido > 3:  # a trava: só contra o robô
+                    conferido = time.time()
+                    if not f["contra_robo"]():
+                        self.estado_txt = "parado: não é partida contra robô"
+                        break
+                contador = f["aguardar"](contador, 250)
+                t_mud = time.time()
+                casas = f["casas"]()
+                if not casas:
+                    continue
+                tab = tabuleiro_txt(casas)
+                c_b = f["casas"]()  # duas leituras iguais: peça a meio caminho não conta
+                if not c_b or tabuleiro_txt(c_b) != tab:
+                    continue
+                cor = minha_cor(casas)
+                if visto is None:  # começo: brancas no início, ou `minha_vez` dito por quem ligou no meio da partida
+                    minha_vez = (cor == "w" and tab == INICIAL) or bool(cfg.get("minha_vez"))
+                elif tab == visto:
+                    if meu_ultimo != "refazer":
+                        continue
+                    minha_vez = True  # o último toque não pegou: joga de novo
+                else:
+                    minha_vez = quem_mexeu(visto, tab) not in (None, cor)
+                visto = tab
+                if not minha_vez:
+                    continue
+                t_lido = time.time()
+                lance = motor.lance(fen(tab, cor), ms)
+                t_dec = time.time()
+                if not lance:
+                    self.estado_txt = "fim de jogo (sem lance)"
+                    break
+                a, b = casas[lance[:2]], casas[lance[2:4]]
+                f["tocar"](a[0], a[1])
+                time.sleep(0.06)
+                f["tocar"](b[0], b[1])
+                if len(lance) == 5:  # promoção: o app mostra as peças sobre a casa de destino (a dama primeiro)
+                    time.sleep(0.25)
+                    f["tocar"](b[0], b[1])
+                t_toque = time.time()
+                meu_ultimo = None
+                # confirmação: o tabuleiro tem de mudar com uma peça MINHA; senão, refaz na próxima volta
+                ok = False
+                limite = time.time() + 1.0
+                while time.time() < limite:
+                    contador = f["aguardar"](contador, 150)
+                    c2 = f["casas"]()
+                    if c2:
+                        t2 = tabuleiro_txt(c2)
+                        if t2 != tab and quem_mexeu(tab, t2) == cor:
+                            visto, ok = t2, True
+                            break
+                if not ok:
+                    meu_ultimo = "refazer"
+                self.rodadas.append({"t": round(t_mud, 3), "lance": lance, "ok": ok,
+                                     "ler_ms": int((t_lido - t_mud) * 1000), "decidir_ms": int((t_dec - t_lido) * 1000),
+                                     "tocar_ms": int((t_toque - t_dec) * 1000), "total_ms": int((t_toque - t_mud) * 1000),
+                                     "fonte": "motor"})
+                self.estado_txt = f"jogando ({len(self.rodadas)} lances)"
+        except Exception as e:  # noqa: BLE001
+            self.estado_txt = f"erro: {str(e)[:120]}"
+        finally:
+            motor.fechar()
+            if not self.estado_txt.startswith(("parado", "erro", "fim")):
+                self.estado_txt = "parado"
 
     def _laco(self):
         f, cfg = self.f, self.cfg

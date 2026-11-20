@@ -2114,7 +2114,15 @@ def _ferramentas_piloto():
             rish(f"input tap {int(x)} {int(y)}", timeout=5)
 
     return {"aguardar": aguardar, "elementos": lambda: elementos(dump_ui(), limite=300), "tocar": tocar,
-            "bloqueado": lambda app: bool(app) and bloqueado(app, bloqueados())}
+            "bloqueado": lambda app: bool(app) and bloqueado(app, bloqueados()),
+            "casas": lambda: casas_xadrez(elementos(dump_ui(), limite=300)), "contra_robo": partida_contra_robo}
+
+
+def partida_contra_robo():
+    """Xadrez só contra a máquina: a atividade em primeiro plano tem de ser a partida contra robô do app.
+    Partida ao vivo contra pessoas = trapaça (e banimento): o piloto não joga."""
+    pac, cls = atividade_no_topo()
+    return bool(pac and cls) and ("Bot" in cls or "Computer" in cls) and "Live" not in cls
 
 
 def piloto(a):
@@ -2152,6 +2160,9 @@ def piloto(a):
         cfg = a["iniciar"] if isinstance(a["iniciar"], dict) else {}
         if cfg.get("app") and bloqueado(cfg["app"], bloqueados()):
             return {"erro": "app bloqueado para o agente de tela"}
+        if cfg.get("modo") == "xadrez" and not partida_contra_robo():
+            return {"erro": "o modo xadrez só joga na tela de partida contra robô (nunca contra pessoas)",
+                    "atividade": "/".join(x or "" for x in atividade_no_topo())}
         return p.iniciar(cfg)
     return p.estado(int(a.get("ultimas", 8)))
 

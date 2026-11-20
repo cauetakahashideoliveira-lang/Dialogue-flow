@@ -2624,6 +2624,66 @@ class TestPiloto(unittest.TestCase):
         self.assertEqual(len(tocados), 1)  # mesma pergunta não é respondida duas vezes
         self.assertTrue((self.tmp / "rodadas.jsonl").exists())
 
+    def test_xadrez_joga_na_vez_certa(self):
+        m = self.m
+        self.assertEqual(m.fen(m.INICIAL, "w"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+        estado = {"tab": list(m.INICIAL)}
+        idx = {f"{c}{r}": (8 - r) * 8 + "abcdefgh".index(c) for r in range(1, 9) for c in "abcdefgh"}
+
+        def casas():
+            return {sq: (80 + 160 * "abcdefgh".index(sq[0]), 967 + 160 * (8 - int(sq[1])),
+                         "" if estado["tab"][i] == "." else estado["tab"][i]) for sq, i in idx.items()}
+        pos = {(v[0], v[1]): k for k, v in casas().items()}
+
+        def mover(a, b):
+            t = estado["tab"]
+            t[idx[b]], t[idx[a]] = t[idx[a]], "."
+
+        respostas = iter([("e7", "e5"), ("b8", "c6")])
+        toques = []
+
+        def tocar(x, y):
+            toques.append(pos[(x, y)])
+            if len(toques) % 2 == 0:
+                mover(toques[-2], toques[-1])  # o app aplica o meu lance…
+
+                def robo():  # …e o robô responde um pouco depois
+                    time.sleep(0.15)
+                    a, b = next(respostas, (None, None))
+                    if a:
+                        mover(a, b)
+                threading.Thread(target=robo, daemon=True).start()
+
+        class MotorFalso:
+            lances = iter(["e2e4", "g1f3", "f1c4"])
+
+            def __init__(self, *a, **k):
+                pass
+
+            def lance(self, fen_, ms):
+                return next(self.lances)
+
+            def fechar(self):
+                pass
+        m.Motor = MotorFalso
+        f = {"aguardar": lambda c, ms: (time.sleep(0.02), c + 1)[1], "casas": casas, "tocar": tocar,
+             "contra_robo": lambda: True, "bloqueado": lambda app: False}
+        p = m.Piloto(f)
+        p.iniciar({"modo": "xadrez", "duracao": 10})
+        fim = time.time() + 4
+        while len(toques) < 6 and time.time() < fim:
+            time.sleep(0.02)
+        time.sleep(0.3)
+        p.encerrar()
+        self.assertEqual(toques, ["e2", "e4", "g1", "f3", "f1", "c4"])  # 3 lances, cada um na sua vez
+        self.assertTrue(all(r["ok"] for r in p.rodadas))
+        # contra pessoas (não é partida contra robô): o piloto não joga
+        p2 = m.Piloto(dict(f, contra_robo=lambda: False))
+        p2.iniciar({"modo": "xadrez", "duracao": 10})
+        time.sleep(0.2)
+        self.assertIn("não é partida contra robô", p2.estado()["estado"])
+        p2.encerrar()
+
     def test_sobreposicao_do_sistema_nao_trava_o_piloto(self):
         url = self._servidor_sse(["2"])
         barra = [{"texto": "12:00", "pacote": "com.android.systemui", "x": 50, "y": 20, "l": 80, "a": 40}]

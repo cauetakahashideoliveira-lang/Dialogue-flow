@@ -299,20 +299,20 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
                 if estado.get("cfg", {}).get("modo") != "xadrez":
                     return {"mensagem": "Outro piloto está ativo."}
                 if acao == "iniciar":
-                    return {"mensagem": "Stockfish já está jogando."}
+                    return {"mensagem": estado.get("estado") or "Stockfish já está ativo."}
                 final = chamar(parar=True)
                 if final.get("erro") or final.get("rodando"):
                     return {"erro": final.get("erro") or "O piloto ainda está encerrando."}
                 return {"mensagem": "Piloto de xadrez desligado."}
             if acao == "parar":
                 return {"mensagem": "Piloto de xadrez desligado."}
-            resposta = chamar(iniciar={"modo":"xadrez", "app":"com.chess", "cerebros":["memoria"],
+            resposta = chamar(iniciar={"modo":"xadrez", "app":"com.chess", "cerebros":["memoria"], "tabuleiro_local":True,
                                        "ms_lance":200, "threads":2, "hash_mb":64,
                                        "minha_vez":dados.get("minha_vez") is True})
             if "atividade" in resposta and resposta.get("erro"):
                 return {"aguardar_tabuleiro": True}
             if resposta.get("rodando"):
-                return {"mensagem": "Stockfish ativado na partida contra o robô."}
+                return {"mensagem": "Stockfish ativo. Abra ou retome o tabuleiro no Chess.com."}
             return {"erro": resposta.get("erro") or resposta.get("estado") or "Falha ao iniciar o piloto."}
 
     acoes = {

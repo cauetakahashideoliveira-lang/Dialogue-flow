@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -13,9 +14,58 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "controle-ir"))
 from controle_ir import cli, estudo_xadrez, servidor
+from controle_ir.capacidades import modulo_embutido
 
 
 class TestStockfishLocal(unittest.TestCase):
+    def test_historico_indica_vez_mesmo_no_meio_da_partida(self):
+        tela = modulo_embutido(ROOT / "controle-ir/capacidades/tela", "tela")
+        def linha(*textos):
+            return [{"texto": texto, "x": x * 100, "y": 400} for x, texto in enumerate(textos)]
+        self.assertEqual(tela.vez_no_historico(linha("cxd4", "4.", "nxd4", "Nf6")), "w")
+        self.assertEqual(tela.vez_no_historico(linha("9.", "O-O", "e5", "10.", "exd6")), "b")
+        self.assertIsNone(tela.vez_no_historico(linha("4.", "Opções")))
+        self.assertIsNone(tela.vez_no_historico(linha("0:46", "0:55")))
+
+    def test_perder_foco_antes_do_toque_espera_e_retoma(self):
+        tela = modulo_embutido(ROOT / "controle-ir/capacidades/tela", "tela")
+        m = tela._modulo_piloto()
+        casas = {f"{c}{r}": (x, 8-r, m.INICIAL[(8-r)*8+x].replace(".", ""))
+                 for r in range(1, 9) for x, c in enumerate("abcdefgh")}
+        foco = threading.Event()
+        foco.set()
+        interrompido = threading.Event()
+        jogou = threading.Event()
+        toques = []
+        def tocar(x, y):
+            toques.append((x, y, foco.is_set()))
+            if len(toques) == 2:
+                jogou.set()
+        def decidir(*_):
+            if not interrompido.is_set():
+                foco.clear()
+                interrompido.set()
+            return "e2e4"
+        motor = Mock()
+        motor.lance.side_effect = decidir
+        motor.tab_apos.return_value = m.INICIAL
+        piloto = m.Piloto({"tabuleiro_local": foco.is_set, "vez": lambda: None,
+                           "aguardar": lambda c, ms: c, "casas": lambda: casas, "tocar": tocar})
+        with patch.object(m, "Motor", return_value=motor):
+            try:
+                piloto.iniciar({"modo":"xadrez", "app":"com.chess", "tabuleiro_local":True, "cerebros":["memoria"]})
+                self.assertTrue(interrompido.wait(2))
+                limite = time.monotonic() + 2
+                while "aguardando o tabuleiro" not in piloto.estado_txt and time.monotonic() < limite:
+                    time.sleep(0.01)
+                self.assertTrue(piloto.rodando)
+                self.assertEqual(toques, [])
+                foco.set()
+                self.assertTrue(jogou.wait(3))
+                self.assertEqual(toques[:2], [(4, 6, True), (4, 4, True)])
+            finally:
+                piloto.encerrar()
+
     def test_atalho_interativo(self):
         with tempfile.TemporaryDirectory() as d, patch.object(cli, "pasta_atalhos", return_value=Path(d)/".shortcuts/tasks"):
             for _ in range(2):

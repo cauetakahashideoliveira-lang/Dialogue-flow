@@ -572,10 +572,11 @@ class Piloto:
         self.estado_txt = "parado"
 
     def _laco_xadrez(self):
-        """Xadrez contra o robô: lê o tabuleiro, percebe a vez (a última peça que se mexeu foi do adversário), pede o
-        lance ao motor e toca origem e destino. Só na tela de partida contra robô (f["contra_robo"])."""
+        """Lê o tabuleiro e a vez, calcula o lance e confirma a mudança após os toques."""
         f, cfg = self.f, self.cfg
-        validar_partida = (lambda: f["contra_robo"](cfg["app"])) if cfg.get("app") else f["contra_robo"]
+        local = cfg.get("tabuleiro_local") is True
+        validar_partida = f["tabuleiro_local"] if local else (
+            (lambda: f["contra_robo"](cfg["app"])) if cfg.get("app") else f["contra_robo"])
         ms = max(50, min(int(cfg.get("ms_lance", 300)), 30000))
         fim = time.time() + max(10, min(float(cfg.get("duracao", 600)), 3600))
         try:
@@ -584,12 +585,20 @@ class Piloto:
             self.estado_txt = f"erro: motor não abriu ({str(e)[:80]})"
             return
         visto, meu_ultimo, contador, conferido = None, None, 0, 0.0
+        retomando = False
         self.estado_txt = "olhando o tabuleiro"
         try:
             while not self.parar.is_set() and time.time() < fim:
-                if time.time() - conferido > 3:  # a trava: só contra o robô
+                if time.time() - conferido > 3:
                     conferido = time.time()
                     if not validar_partida():
+                        if local:
+                            self.estado_txt = "aguardando o tabuleiro do Chess.com"
+                            retomando = True
+                            self.parar.wait(0.7)
+                            fim += time.time() - conferido
+                            conferido = 0
+                            continue
                         self.estado_txt = "parado: não é partida contra robô"
                         break
                 contador = f["aguardar"](contador, 250)
@@ -602,16 +611,23 @@ class Piloto:
                 if not c_b or tabuleiro_txt(c_b) != tab:
                     continue
                 cor = minha_cor(casas)
-                if visto is None:  # começo: brancas no início, ou `minha_vez` dito por quem ligou no meio da partida
+                vez = f["vez"]() if local and (visto is None or retomando) and tab != INICIAL else None
+                if vez:
+                    minha_vez = cor == vez
+                elif visto is None:
                     minha_vez = (cor == "w" and tab == INICIAL) or bool(cfg.get("minha_vez"))
                 elif tab == visto:
                     if meu_ultimo != "refazer":
+                        retomando = False
+                        self.estado_txt = "aguardando mudança no tabuleiro"
                         continue
                     minha_vez = True  # o último toque não pegou: joga de novo
                 else:
                     minha_vez = quem_mexeu(visto, tab) not in (None, cor)
+                retomando = False
                 visto = tab
                 if not minha_vez:
+                    self.estado_txt = "aguardando a vez no tabuleiro"
                     continue
                 t_lido = time.time()
                 n = len(self.rodadas)  # relógio: pensa menos conforme a partida se alonga (bullet não perde no tempo)
@@ -624,7 +640,13 @@ class Piloto:
                     break
                 esperado = motor.tab_apos(posicao, lance)
                 respostas = None
-                if self.parar.is_set() or not validar_partida():
+                if self.parar.is_set():
+                    break
+                if not validar_partida():
+                    if local:
+                        meu_ultimo, conferido, retomando = "refazer", 0, True
+                        self.estado_txt = "aguardando o tabuleiro do Chess.com"
+                        continue
                     self.estado_txt = "parado: tabuleiro do robô indisponível"
                     break
                 a, b = casas[lance[:2]], casas[lance[2:4]]

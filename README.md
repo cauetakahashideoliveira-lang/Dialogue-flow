@@ -80,8 +80,10 @@ lances como `e2e4 e7e5`. Pressione Enter para consultar a posição, use `voltar
 um lance ou `sair` para fechar. O estudo funciona offline, inclusive com o serviço Controle IR desligado.
 O comando equivalente no Termux é `controle-ir stockfish`.
 
-Para usar o piloto, prepare uma partida contra um robô no Chess.com. No botão Stockfish,
-digite `piloto`, informe se já é a sua vez e volte ao tabuleiro em até 45 segundos.
+Para jogar, digite `piloto` no atalho e abra o tabuleiro no Chess.com. O motor aguarda as 64 casas
+e consulta o histórico de lances para identificar a vez numa partida em andamento. Ao trocar de app,
+o piloto espera e retoma quando você volta. Se o histórico estiver oculto e já for sua vez ao ativar,
+use `piloto agora`.
 Esse modo usa o Shizuku e as permissões vigentes do Controle IR. Digite `parar` para cancelar
 uma ativação pendente ou encerrar o piloto. Se faltar o motor, instale-o com `pkg install stockfish`.
 

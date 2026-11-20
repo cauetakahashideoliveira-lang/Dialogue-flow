@@ -1,4 +1,4 @@
-"""Estudo local com Stockfish e acesso ao piloto de partidas contra robôs."""
+"""Estudo local com Stockfish e controle do piloto no tabuleiro do Chess.com."""
 import shutil
 import time
 
@@ -21,13 +21,13 @@ def estudar(motor):
     print("Sugestão inicial:", motor.lance(INICIAL, 500))
     print("Digite um lance (e2e4) ou uma sequência (e2e4 e7e5).")
     print("Enter sugere um lance. Digite voltar para desfazer ou sair para encerrar.")
-    print("Para o Chess.com: digite piloto para ativar contra o robô ou parar para desligar.")
+    print("Chess.com: digite piloto para jogar ou parar para desligar. Se precisar indicar sua vez, use piloto agora.")
     while True:
         atual = posicoes[-1]
         mostrar(atual)
         vez = "Brancas" if atual.split()[1] == "w" else "Pretas"
         linha = input(f"{vez} › ").strip().lower()
-        if linha in ("sair", "piloto", "parar"):
+        if linha in ("sair", "piloto", "piloto agora", "parar"):
             return linha
         if linha == "voltar":
             if len(posicoes) > 1:
@@ -49,7 +49,7 @@ def estudar(motor):
             posicoes.extend(novas)
 
 
-def piloto_local(iniciar):
+def piloto_local(iniciar, minha_vez=False):
     from . import cli
     if not cli.servico_ativo():
         if not iniciar:
@@ -64,21 +64,15 @@ def piloto_local(iniciar):
             time.sleep(0.5)
     dados = {"acao":"parar"}
     if iniciar:
-        minha_vez = input("Já está no meio da partida e é a sua vez? [s/N] › ").strip().lower() == "s"
         preparo = cli._api("stockfish", {"acao":"preparar"}, sair=False)
         if "pedido" not in preparo:
             print(preparo.get("erro", "Não foi possível preparar o piloto."))
             return
         dados = {"acao":"iniciar", "pedido":preparo["pedido"], "minha_vez":minha_vez}
-        cli._aviso("Volte à partida contra o robô no Chess.com em até 45 segundos.")
-    limite = time.monotonic() + 45
     while True:
         resposta = cli._api("stockfish", dados, sair=False)
         if not resposta.get("aguardar_tabuleiro"):
             cli._aviso(resposta.get("mensagem") or resposta.get("erro") or "Resposta local inesperada.")
-            return
-        if time.monotonic() >= limite:
-            cli._aviso("Tempo encerrado. Abra a partida contra o robô e tente novamente.")
             return
         time.sleep(1)
 
@@ -96,8 +90,8 @@ def abrir():
             acao = estudar(motor)
         finally:
             motor.fechar()
-        if acao in ("piloto", "parar"):
-            piloto_local(acao == "piloto")
+        if acao in ("piloto", "piloto agora", "parar"):
+            piloto_local(acao != "parar", minha_vez=acao == "piloto agora")
     except (EOFError, KeyboardInterrupt):
         print()
     except (OSError, RuntimeError) as exc:

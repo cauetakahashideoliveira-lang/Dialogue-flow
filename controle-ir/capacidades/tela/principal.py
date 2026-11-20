@@ -523,6 +523,20 @@ def casas_xadrez(els):
     return casas if len(casas) == 64 else None
 
 
+def vez_no_historico(els):
+    """Cor a jogar segundo a última coluna numerada da lista de lances do Chess.com."""
+    numeros = [e for e in els if re.fullmatch(r"[1-9]\d*\.", e.get("texto", ""))]
+    if not numeros:
+        return None
+    ultimo = max(numeros, key=lambda e: int(e["texto"][:-1]))
+    lances = [e["texto"] for e in els if e.get("texto") and e["x"] > ultimo["x"]
+              and abs(e["y"] - ultimo["y"]) <= 5]
+    san = r"(?:[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?|O-O(?:-O)?)[+#]?[!?]*"
+    if len(lances) in (1, 2) and all(re.fullmatch(san, s, re.I) for s in lances):
+        return "b" if len(lances) == 1 else "w"
+    return None
+
+
 def tabuleiro_curto(els):
     """O tabuleiro em 8 linhas (8ª fileira primeiro, FEN: KQRBNP brancas, kqrbnp pretas, . vazia), os relógios
     (esquerda → direita, como aparecem) e os últimos lances escritos na tela. Sem tabuleiro: os textos da tela."""
@@ -2113,7 +2127,14 @@ def _ferramentas_piloto():
         if not _injetar(f"toques 0:30 {int(x)} {int(y)}"):
             rish(f"input tap {int(x)} {int(y)}", timeout=5)
 
+    def tela_chess():
+        return [e for e in elementos(dump_ui(), limite=300) if e["pacote"] == "com.chess"]
+
+    def tabuleiro_local():
+        return atividade_no_topo()[0] == "com.chess" and casas_xadrez(tela_chess()) is not None
+
     return {"aguardar": aguardar, "elementos": lambda: elementos(dump_ui(), limite=300), "tocar": tocar,
+            "tabuleiro_local": tabuleiro_local, "vez": lambda: vez_no_historico(tela_chess()),
             "bloqueado": lambda app: bool(app) and bloqueado(app, bloqueados()),
             "casas": lambda: casas_xadrez(elementos(dump_ui(), limite=300)), "contra_robo": partida_contra_robo}
 
@@ -2160,7 +2181,10 @@ def piloto(a):
         cfg = a["iniciar"] if isinstance(a["iniciar"], dict) else {}
         if cfg.get("app") and bloqueado(cfg["app"], bloqueados()):
             return {"erro": "app bloqueado para o agente de tela"}
-        if cfg.get("modo") == "xadrez" and not partida_contra_robo(cfg.get("app")):
+        local = cfg.get("tabuleiro_local") is True
+        if local and cfg.get("app") != "com.chess":
+            return {"erro": "O atalho de xadrez usa o tabuleiro do Chess.com."}
+        if cfg.get("modo") == "xadrez" and not local and not partida_contra_robo(cfg.get("app")):
             return {"erro": "o modo xadrez só joga na tela de partida contra robô (nunca contra pessoas)",
                     "atividade": "/".join(x or "" for x in atividade_no_topo())}
         return p.iniciar(cfg)

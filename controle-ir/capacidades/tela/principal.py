@@ -2176,13 +2176,13 @@ def executar(a):
         _CORTE[0] = 80
 
 
-def navegar(app, objetivo, marcador, controles):
+def navegar(app, objetivo, marcador, controles, descobrir=False):
     from pathlib import Path
     import hashlib
     import tempfile
     if not all(isinstance(x, str) and x.strip() for x in (app, objetivo, marcador)):
         return {"erro":"informe pacote, objetivo e marcador"}
-    if not isinstance(controles,list) or not 1 <= len(controles) <= 32 or not all(isinstance(c,str) and c for c in controles):
+    if not descobrir and (not isinstance(controles,list) or not 1 <= len(controles) <= 32 or not all(isinstance(c,str) and c for c in controles)):
         return {"erro":"controles inválidos"}
     if bloqueado(app, bloqueados()):
         return {"erro":"app bloqueado"}
@@ -2197,7 +2197,7 @@ def navegar(app, objetivo, marcador, controles):
     inicio = time.monotonic()
     def resultado(estado):
         return dict(estado=estado, gestos=feitos, consultas=consultas, ms=round(1000*(time.monotonic()-inicio)))
-    if len(controles) == 1 and _ajudante():
+    if not descobrir and len(controles) == 1 and _ajudante():
         campos = " ".join(v.encode().hex() for v in (app, controles[0], marcador))
         retorno = _ajudante().pedir("navegar " + campos, 4)
         if retorno in ("feito", "presente"):
@@ -2218,7 +2218,12 @@ def navegar(app, objetivo, marcador, controles):
                     json.dump({**memoria, **novos}, f)
                 os.replace(f.name, arquivo)
             return resultado("objetivo confirmado")
-        visiveis = sorted(nomes.intersection(controles))
+        if descobrir:
+            visiveis = sorted({e["texto"] or e["desc"] for e in els if e.get("pacote") == app
+                               and e.get("clicavel") and not e.get("desativado") and not e.get("editavel")
+                               and (e["texto"] or e["desc"])})[:32]
+        else:
+            visiveis = sorted(nomes.intersection(controles))
         estado = json.dumps([visiveis, sorted({e["id"] for e in els if e.get("pacote")==app and e.get("id")}), sorted(e["texto"] or e["desc"] for e in els if e.get("selecionado") and e.get("pacote")==app)], ensure_ascii=False)
         assinatura = hashlib.sha256(estado.encode()).hexdigest()
         if (not visiveis or assinatura in novos) and time.monotonic() < prazo:
@@ -2231,7 +2236,7 @@ def navegar(app, objetivo, marcador, controles):
             return resultado("sem avanço confirmado")
         alvo = memoria.get(assinatura)
         if alvo not in visiveis:
-            if len(visiveis)==1:
+            if len(visiveis)==1 and not descobrir:
                 alvo = visiveis[0]
             else:
                 opcoes = visiveis + ["Parar"]
@@ -2306,6 +2311,8 @@ def navegar_etapas(a):
                 for k in ("texto", "marcador")):
             return {"erro": "etapa sem objetivo ou marcador"}
         controles = passo.get("controles")
+        if controles is None and cfg.get("descobrir") is True:
+            continue
         if not isinstance(controles, list) or not 1 <= len(controles) <= 32 or not all(
                 isinstance(c, str) and c.strip() for c in controles):
             return {"erro": "etapa com controles inválidos"}
@@ -2318,7 +2325,8 @@ def navegar_etapas(a):
             return {"erro": "app não assumiu o primeiro plano"}
     medidas = []
     for passo in passos:
-        r = navegar(a.get("pacote"), passo["texto"], passo["marcador"], passo["controles"])
+        r = navegar(a.get("pacote"), passo["texto"], passo["marcador"], passo.get("controles"),
+                    descobrir=cfg.get("descobrir") is True and passo.get("controles") is None)
         medidas.append(r)
         if r.get("estado") != "objetivo confirmado":
             break
@@ -2344,6 +2352,15 @@ def _executar(a):
                     so_mudancas=bool(a.get("so_mudancas")), formato=a.get("formato", "curto"))
         elif acao == "grade":
             r = grade(a)
+        elif acao == "missao":
+            from controle_ir import missao
+            def escolher(objetivo, pedido, rotas):
+                m = _modulo_piloto()
+                agente = m.Cerebros({"cerebros": ["api"], "modelos": [m.MODELO], "pensar": False})
+                opcoes = [{"texto": nome} for nome in rotas] + [{"texto": "Nenhuma rota compatível"}]
+                i, _, _, _ = agente.decidir(f"Missão: {objetivo}. Escolha a rota que cumpre exatamente a etapa: {pedido}. Se nenhuma cumprir, escolha a última opção.", opcoes, 6)
+                return rotas[i] if i is not None and 0 <= i < len(rotas) else None
+            r = missao.executar(a, navegar_etapas, escolher)
         elif acao == "navegar":
             r = navegar_etapas(a)
         elif acao == "rotina":

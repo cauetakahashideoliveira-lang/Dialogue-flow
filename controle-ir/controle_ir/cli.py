@@ -296,8 +296,10 @@ def criar_atalhos(silencioso: bool = False) -> int:
     for nome, args in MODOS_WIDGET.items():
         corpos[nome] = (f"#!{PREFIXO_TERMUX}/bin/sh\n# Atalho do Termux:Widget criado por: controle-ir atalhos\n"
                         f"exec \"{cli}\" {args}\n")
-    for nome, corpo in corpos.items():
-        arq = pasta / nome
+    # Na raiz, o Termux:Widget abre um terminal para receber os lances de estudo.
+    arquivos = {pasta / nome: corpo for nome, corpo in corpos.items()}
+    arquivos[pasta.parent / "Stockfish"] = f'#!{PREFIXO_TERMUX}/bin/sh\nexec "{cli}" stockfish\n'
+    for arq, corpo in arquivos.items():
         tmp = arq.with_name(arq.name + ".novo")
         tmp.write_text(corpo)
         os.chmod(tmp, 0o700)
@@ -309,7 +311,7 @@ def criar_atalhos(silencioso: bool = False) -> int:
     print("  Para pôr na tela inicial (uma vez só):")
     print("  1. Instale o app Termux:Widget do F-Droid (mesma fonte do Termux).")
     print("  2. Toque e segure num espaço vazio da tela inicial → Widgets → Termux:Widget.")
-    print("  3. Arraste o “Termux shortcut” (1 ícone) e escolha “Ligar Controle IR”; repita com “Desligar”.")
+    print("  3. Arraste o “Termux shortcut” (1 ícone) e escolha “Stockfish” para estudar ou selecione um dos atalhos de controle.")
     print("  Ligar avisa “Controle IR ligado” em alguns segundos; desligar libera a bateria (sem wake lock).")
     return 0
 
@@ -1102,6 +1104,7 @@ def main(argv=None):
                                        "atualização até a meia-noite ou por HORAS")
     par.add_argument("horas", nargs="?", type=float)
     sub.add_parser("desarmar", help="desarma: pelo conector só passam infravermelho, consulta e travar")
+    sub.add_parser("stockfish", help="abre o estudo de xadrez local e o controle do piloto contra robô")
     pa = sub.add_parser("atalhos", help="cria os atalhos Ligar/Desligar para o Termux:Widget")
     pa.add_argument("--silencioso", action="store_true")
     pl = sub.add_parser("log", help="últimas linhas do registro do serviço em segundo plano")
@@ -1137,6 +1140,9 @@ def main(argv=None):
         return iniciar(a)
     if cmd == "inicio-automatico":
         return inicio_automatico(a.acao, a.silencioso)
+    if cmd == "stockfish":
+        from .estudo_xadrez import abrir
+        return abrir()
     if cmd == "atalhos":
         return criar_atalhos(a.silencioso)
     if cmd == "rota":
@@ -1311,3 +1317,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+

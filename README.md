@@ -72,6 +72,19 @@ No terminal: `controle-ir ligar` / `controle-ir desligar`.
 Outros atalhos criados junto: **Modo autonomo**, **Modo cauteloso** e **Travar** (freio), além de **Reverter**. Com o serviço desligado o Claude não alcança o celular:
 ligar precisa ser no celular.
 
+### Botão Stockfish para estudos
+
+Escolha **Stockfish** no seletor do **Termux shortcut** para fixar o botão na tela inicial.
+Cada toque abre o motor instalado no POCO e mostra uma sugestão na posição inicial. Digite os
+lances como `e2e4 e7e5`. Pressione Enter para consultar a posição, use `voltar` para desfazer
+um lance ou `sair` para fechar. O estudo funciona offline, inclusive com o serviço Controle IR desligado.
+O comando equivalente no Termux é `controle-ir stockfish`.
+
+Para usar o piloto, prepare uma partida contra um robô no Chess.com. No botão Stockfish,
+digite `piloto`, informe se já é a sua vez e volte ao tabuleiro em até 45 segundos.
+Esse modo usa o Shizuku e as permissões vigentes do Controle IR. Digite `parar` para cancelar
+uma ativação pendente ou encerrar o piloto. Se faltar o motor, instale-o com `pkg install stockfish`.
+
 ### Início automático quando o celular liga (Termux:Boot)
 
 1. Instale o app **Termux:Boot** do F-Droid (mesma fonte do Termux) e **abra-o uma vez**.
@@ -231,3 +244,4 @@ PYTHONPATH=controle-ir python3 -m controle_ir iniciar --simulado --sem-tunel   #
 
 Licenças dos dados: veja `controle-ir/LICENCAS/LEIA-ME.md` (SmartIR — MIT; Flipper-IRDB — CC0 para
 contribuições a partir de ago/2025; a Flipper-IRDB completa é baixada pelo usuário no celular).
+

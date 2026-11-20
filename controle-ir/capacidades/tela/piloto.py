@@ -505,6 +505,14 @@ class Motor:
         linhas = self._ate("Fen:").split()[1].replace("/", "")
         return "".join("." * int(c) if c.isdigit() else c for c in linhas)
 
+    def fen_apos_lance_legal(self, fen, lance):
+        self._mandar(f"position fen {fen}")
+        if lance not in set(self.respostas()):
+            return None
+        self._mandar(f"position fen {fen} moves {lance}")
+        self._mandar("d")
+        return self._ate("Fen:").partition(":")[2].strip()
+
     def respostas(self):
         self._mandar("go perft 1")
         while True:
@@ -567,6 +575,7 @@ class Piloto:
         """Xadrez contra o robô: lê o tabuleiro, percebe a vez (a última peça que se mexeu foi do adversário), pede o
         lance ao motor e toca origem e destino. Só na tela de partida contra robô (f["contra_robo"])."""
         f, cfg = self.f, self.cfg
+        validar_partida = (lambda: f["contra_robo"](cfg["app"])) if cfg.get("app") else f["contra_robo"]
         ms = max(50, min(int(cfg.get("ms_lance", 300)), 30000))
         fim = time.time() + max(10, min(float(cfg.get("duracao", 600)), 3600))
         try:
@@ -580,7 +589,7 @@ class Piloto:
             while not self.parar.is_set() and time.time() < fim:
                 if time.time() - conferido > 3:  # a trava: só contra o robô
                     conferido = time.time()
-                    if not f["contra_robo"]():
+                    if not validar_partida():
                         self.estado_txt = "parado: não é partida contra robô"
                         break
                 contador = f["aguardar"](contador, 250)
@@ -615,6 +624,9 @@ class Piloto:
                     break
                 esperado = motor.tab_apos(posicao, lance)
                 respostas = None
+                if self.parar.is_set() or not validar_partida():
+                    self.estado_txt = "parado: tabuleiro do robô indisponível"
+                    break
                 a, b = casas[lance[:2]], casas[lance[2:4]]
                 f["tocar"](a[0], a[1])
                 time.sleep(0.06)
@@ -773,3 +785,4 @@ class Piloto:
                 "aprendizado": self.cerebros.aprendizado() if self.cerebros else None,
                 "cfg": {k: v for k, v in self.cfg.items() if k != "politica"},
                 "ultimas": list(self.rodadas)[-ultimas:]}
+

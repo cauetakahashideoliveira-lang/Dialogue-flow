@@ -1,7 +1,7 @@
 # Graph Report - Dialogue-flow  (2026-11-20)
 
 ## Corpus Check
-- 71 files · ~123,752 words
+- 71 files · ~123,934 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 8 file(s) not represented in the graph (top: (none) 3, .ir 3, .gz 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 157,587 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `cbef2ee4`
+- Built from commit: `a9cae1d4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -115,16 +115,16 @@
 10. `normalizar()` - 26 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `3b. Gateway OAuth na borda (1.0.26, implementada)` --references--> `TestPainel`  [INFERRED]
-  docs/seguranca.md → testes/test_controle_ir.py
 - `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `Catalogo`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/catalogo.py
+- `3b. Gateway OAuth na borda (1.0.26, implementada)` --references--> `TestPainel`  [INFERRED]
+  docs/seguranca.md → testes/test_controle_ir.py
 - `Túnel ngrok com domínio fixo` --conceptually_related_to--> `Tunel`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/tunel.py
-- `variante()` --implements--> `Variante Gree a partir da captura real (troca só os bits)`  [INFERRED]
-  ferramentas/gree_variante.py → docs/aparelhos/quarto/ar-do-quarto.md
 - `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `ampliar_catalogo()`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/cli.py
+- `variante()` --implements--> `Variante Gree a partir da captura real (troca só os bits)`  [INFERRED]
+  ferramentas/gree_variante.py → docs/aparelhos/quarto/ar-do-quarto.md
 
 ## Import Cycles
 - None detected.
@@ -380,17 +380,17 @@ Nodes (4): _resumo_volta(), rotina(), gravar(), _rotinas()
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `TestTelaPorArquivo` connect `TestTelaPorArquivo` to `test_controle_ir.py`?**
-  _High betweenness centrality (0.068) - this node is a cross-community bridge._
+- **Why does `Catalogo` connect `Servico` to `time`, `Sinal`, `main`, `Sinal`, `_iniciar`, `tv do quarto (TV Samsung)`?**
+  _High betweenness centrality (0.043) - this node is a cross-community bridge._
 - **Are the 10 inferred relationships involving `Servico` (e.g. with `ServidorMCP` and `criar_servidor()`) actually correct?**
   _`Servico` has 10 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Versão do servidor (celular 1.0.4, repositório 1.0.5)` to the rest of the system?**
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `index.js` be split into smaller, more focused modules?**
   _Cohesion score 0.09830508474576272 - nodes in this community are weakly interconnected._
-- **Why does `Servico` connect `Servico` to `cli.py`, `time`, `servidor.py`, `re`, `Controlador`, `capacidades.py`, `novo_servico`, `Servico`, `Aparelhos`, `Fluxo para criar um botão novo (gerar, enviar_sinal, perguntar, salvar)`, `_iniciar`, `tv do quarto (TV Samsung)`?**
-  _High betweenness centrality (0.036) - this node is a cross-community bridge._
+- **Why does `criar_servidor()` connect `Servico` to `cli.py`, `Reenvios`, `servidor.py`, `TestPainel`, `novo_servico`, `Aparelhos`, `main`, `_iniciar`, `tv do quarto (TV Samsung)`?**
+  _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **Should `TestPainel` be split into smaller, more focused modules?**
   _Cohesion score 0.09359605911330049 - nodes in this community are weakly interconnected._
-- **Why does `Catalogo` connect `Servico` to `time`, `Sinal`, `main`, `Sinal`, `_iniciar`, `tv do quarto (TV Samsung)`?**
-  _High betweenness centrality (0.032) - this node is a cross-community bridge._
+- **Why does `TestTelaPorArquivo` connect `TestTelaPorArquivo` to `test_controle_ir.py`?**
+  _High betweenness centrality (0.025) - this node is a cross-community bridge._

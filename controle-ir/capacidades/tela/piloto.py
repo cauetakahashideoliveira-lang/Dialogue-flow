@@ -466,11 +466,15 @@ def fen(tab, vez):
 class Motor:
     """Stockfish (UCI) residente: cada lance em `ms` milissegundos."""
 
-    def __init__(self, caminho="stockfish", elo=None):
+    def __init__(self, caminho="stockfish", elo=None, threads=None, hash_mb=None):
         import subprocess
         self.p = subprocess.Popen([caminho], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
         self._mandar("uci")
         self._ate("uciok")
+        if threads:
+            self._mandar(f"setoption name Threads value {max(1, min(int(threads), 8))}")
+        if hash_mb:
+            self._mandar(f"setoption name Hash value {max(16, min(int(hash_mb), 2048))}")
         if elo:
             self._mandar("setoption name UCI_LimitStrength value true")
             self._mandar(f"setoption name UCI_Elo value {int(elo)}")
@@ -545,10 +549,10 @@ class Piloto:
         """Xadrez contra o robô: lê o tabuleiro, percebe a vez (a última peça que se mexeu foi do adversário), pede o
         lance ao motor e toca origem e destino. Só na tela de partida contra robô (f["contra_robo"])."""
         f, cfg = self.f, self.cfg
-        ms = max(50, min(int(cfg.get("ms_lance", 300)), 5000))
+        ms = max(50, min(int(cfg.get("ms_lance", 300)), 30000))
         fim = time.time() + max(10, min(float(cfg.get("duracao", 600)), 3600))
         try:
-            motor = Motor(cfg.get("motor", "stockfish"), cfg.get("elo"))
+            motor = Motor(cfg.get("motor", "stockfish"), cfg.get("elo"), cfg.get("threads"), cfg.get("hash_mb"))
         except Exception as e:  # noqa: BLE001
             self.estado_txt = f"erro: motor não abriu ({str(e)[:80]})"
             return
@@ -583,7 +587,9 @@ class Piloto:
                 if not minha_vez:
                     continue
                 t_lido = time.time()
-                lance = motor.lance(fen(tab, cor), ms)
+                n = len(self.rodadas)  # relógio: pensa menos conforme a partida se alonga (bullet não perde no tempo)
+                ms_agora = ms if n < 30 else (max(100, ms // 2) if n < 50 else 100)
+                lance = motor.lance(fen(tab, cor), ms_agora)
                 t_dec = time.time()
                 if not lance:
                     self.estado_txt = "fim de jogo (sem lance)"

@@ -41,6 +41,58 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **20/11 — Passagem de bastão (1.0.63):** guia `docs/HANDOFF.md` (arquitetura, publicação, credenciais sem valores,
+  o que existe só no celular e como recriar, migração para outro repositório). Repositório das atualizações
+  configurável no celular (`~/.controle-ir/repositorio` ou `CONTROLE_IR_REPO`; padrão: este repositório).
+  Varredura de segredos em arquivos e em todo o histórico: nada encontrado. Branch de trabalho juntada à principal.
+- **20/11 — Teste final: vitória contra o "Máximo" (3200) no bullet 1 min (1.0.62):** motor com 7 threads, hash
+  256 MB, 0,4 s/lance até o 30º, 0,2 s até o 50º, 0,1 s depois. **Vitória por xeque-mate em 65 lances**, mediana
+  0,62 s/lance (p95 0,76 s); avaliação do app: 39 "Melhor", 14 "Ótimo", 1 "Excelente". Para chegar ao Máximo:
+  "Jogar com Bots" → fim da lista → bloco "Engine" → arrastar o controle do topo até o fim ("Máximo 3200").
+- **20/11 — Piloto no xadrez contra robôs (1.0.61):** modo `xadrez` (Stockfish 19 residente do `pkg`, `ms_lance`
+  200–300): lê o tabuleiro pela acessibilidade, percebe a vez pela peça que se mexeu, confirma o lance. Trava:
+  só com a atividade de partida contra robô em primeiro plano (`partida_contra_robo`; para sozinho ao sair).
+  Resultados: blitz 3+2 contra o Intermediário 1200 — vitória por mate, 20 lances, mediana 0,63 s/lance,
+  precisão 99,7%; **bullet 1 min contra Rey Enigma 2500 — vitória por xeque-mate**, 32 lances, mediana 0,50 s
+  (p95 0,82 s), avaliação do app: 13 "Melhor", 3 "Brilhante", 1 "Excelente". Caminho no app: Início → Jogar →
+  "Jogar com Bots" (NUNCA "Começar Partida": é contra pessoas). A lista de acessibilidade do seletor de tempo
+  atrasa: conferir pela imagem.
+- **20/11 madrugada — Piloto com inteligência alta (1.0.56→1.0.60):**
+  * Chave da API no celular (`~/.controle-ir/anthropic.key`, 600, criada pelo dono no Termux; permanente; conta
+    Team com teto mensal de US$ 100). Latência medida da API daqui: Haiku e Sonnet ~1,3 s por resposta.
+  * **Escada de inteligência:** memória → modelo local com CERTEZA (logprobs do llama-server) → Sonnet. O Sonnet
+    roda em toda pergunta e serve de **gabarito**: a precisão do local com certeza ≥ 95% é medida na partida
+    (início otimista 9/10); o local age sozinho enquanto a precisão medida ≥ meta (90%). Memória só guarda resposta
+    do forte. Modelo local trocado para **Qwen2.5-3B Q4_0** (`-t 6`, ~0,6–0,8 s; o 1,5B errava convicto).
+  * Rodadas do quiz (placar da página, prazo 2 s): R1 só 1,5B 14/30 · R3 1,5B+Sonnet 22/30 · R4 3B+Sonnet com
+    aprendizado radical 16/30 (13 estouros: tudo esperando o Sonnet) · **R5 sem memória 29/30, 0 estouros,
+    mediana 1,62 s** · **R6 com a memória da R5: 30/30, mediana 0,70 s (nosso lado 0,22 s)**.
+  * Lição: ~0,5 s entre a página desenhar e o piloto agir (atualização da acessibilidade do Chrome + entrega do
+    toque) — próximo alvo (perceber por diferença de quadros na captura). Sobreposições do sistema (barra,
+    notificação) não travam mais o piloto; app de banco na tela faz o piloto parar.
+- **19/11 noite — PILOTO: laço rápido no celular (1.0.47→1.0.55):**
+  * Objetivo do dono: "modo deus" = ver e reagir como uma pessoa. Diagnóstico (debatido com o ChatGPT no app):
+    o celular já percebe/lê/toca em ~0,1–0,3 s; o gargalo é o ciclo do Claude (~3 s por decisão, só vê a tela no
+    retorno de cada chamada). Solução: tirar o Claude do laço — `acao=piloto` (`capacidades/tela/piloto.py`).
+  * Piloto: espera a tela mudar (Java `aguardar`), lê pergunta+opções pela acessibilidade, **corrida de
+    cérebros** (memória → modelo local → Claude Haiku pela API, streaming: toca no 1º dígito), **alvo semântico**
+    (relocaliza o TEXTO escolhido na hora do toque; descarta se a pergunta mudou), **descarte de leitura
+    rasgada** (pergunta e opções têm de mudar juntas + 2 leituras iguais), gravador `~/.controle-ir/piloto/
+    rodadas.jsonl`. `iniciar/estado/parar/ensinar/testar`.
+  * Modelo local: llama.cpp **compilado no celular** com `GGML_NATIVE` (dotprod/i8mm; o pacote do Termux é
+    genérico e 4,5x mais lento) em `~/.controle-ir/llama.cpp/build/bin`, Qwen2.5-1.5B **Q4_0**
+    (`~/.controle-ir/modelos/`), `llama-server` em 127.0.0.1:8080, `-t 4`. Pergunta nova: ~0,32–0,64 s.
+    Religar: `B=~/.controle-ir/llama.cpp/build/bin; LD_LIBRARY_PATH=$B setsid nohup $B/llama-server -m
+    ~/.controle-ir/modelos/qwen2.5-1.5b-q4_0.gguf --host 127.0.0.1 --port 8080 -c 1024 -t 4 -tb 4 --no-webui &`.
+  * Quiz de teste instrumentado: `capacidades/tela/quiz/quiz.html`, servido em 127.0.0.1:**8766** (a 8765 é do
+    serviço) e aberto com `rish am start -d URL`. Rodada 1 (só local): 30/30 respondidas, 0 estouros, mediana
+    916 ms, p95 1475 ms (medido pela página), **14/30 acertos** — quase todos os erros por leitura rasgada
+    (corrigida na 1.0.54, ainda sem nova rodada medida). Chave da API (Haiku) ainda não instalada
+    (`~/.controle-ir/anthropic.key`, nunca pelo chat).
+  * **Privacidade (1.0.55):** a leitura da tela (`ver`, piloto, sequências) descarta nós e imagem de apps da lista
+    de bloqueio (bancos/pagamentos/senhas) — antes só o toque era bloqueado.
+  * Outros: deslize do teclado da grade longe da borda (gesto "voltar"), teclado guardado entre partidas,
+    `texto_max` (ler textos longos inteiros), xadrez compacto (`lance`, `esperar_vez`, `ver_depois=tabuleiro`).
 - **19/11 — Canal direto, grade NxN, rotinas e reenvios (1.0.46 + PR da Central):**
   * **Canal direto** (`controle_ir/canal.py` + Durable Object `Canal` na Central): o celular disca para a Central
     e mantém um WebSocket; as chamadas vão por ele (sem ngrok, sem TLS por chamada) e a Central empurra avisos

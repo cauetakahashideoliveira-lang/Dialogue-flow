@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -48,7 +49,26 @@ PASTA = Path(os.environ.get("CONTROLE_IR_DIR", Path.home() / ".controle-ir"))
 PACOTE = Path(__file__).resolve().parent.parent
 DADOS = PACOTE / "dados"
 URL_FLIPPER = "https://codeload.github.com/Lucaslhm/Flipper-IRDB/zip/refs/heads/main"
-REPO = "https://github.com/cauetakahashideoliveira-lang/Dialogue-flow"
+REPO_PADRAO = "https://github.com/cauetakahashideoliveira-lang/Dialogue-flow"
+
+
+def repositorio() -> str:
+    """De onde o celular baixa as atualizações: CONTROLE_IR_REPO, ou o arquivo ~/.controle-ir/repositorio (uma URL
+    https://github.com/dono/repo), ou o padrão. Trocar de repositório sem republicar o código: escreva a URL nova
+    nesse arquivo no celular (o repositório precisa ser público: o download é sem login)."""
+    url = os.environ.get("CONTROLE_IR_REPO", "").strip()
+    if not url:
+        try:
+            url = (PASTA / "repositorio").read_text().strip()
+        except OSError:
+            url = ""
+    url = url.rstrip("/")
+    if not re.match(r"^https://github\.com/[\w.-]+/[\w.-]+$", url):
+        url = REPO_PADRAO
+    return url
+
+
+REPO = REPO_PADRAO  # compatibilidade (o valor usado de verdade vem de repositorio())
 PREFIXO_TERMUX = os.environ.get("PREFIX") or "/data/data/com.termux/files/usr"
 LIMITE_LOG = 1_000_000
 # conexões com o próprio servidor nunca passam por proxy (HTTP_PROXY do ambiente)
@@ -303,7 +323,7 @@ def atualizar(ref: str) -> int:
 termux-wake-lock 2>/dev/null || true
 echo "=== atualização para {ref}: $(date) ==="
 cd "${{TMPDIR:-$HOME}}"
-curl -fL --retry 3 -o cir-atualizacao.zip "{REPO}/raw/{ref}/dist/controle-ir.zip"
+curl -fL --retry 3 -o cir-atualizacao.zip "{repositorio()}/raw/{ref}/dist/controle-ir.zip"
 unzip -tq cir-atualizacao.zip
 rm -rf "$HOME/controle-ir.anterior"
 cp -a "$HOME/controle-ir" "$HOME/controle-ir.anterior"

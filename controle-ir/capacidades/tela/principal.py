@@ -56,6 +56,21 @@ def ler_bounds(b):
     return tuple(int(v) for v in m.groups()) if m else None
 
 
+_BLOQ_CACHE = {"t": 0.0, "lista": None}
+
+
+def _privado(pacote):
+    """App de banco/pagamento/senha/autenticador (a lista de bloqueio): o conteúdo dele NUNCA é lido nem enviado."""
+    if not pacote:
+        return False
+    if time.time() - _BLOQ_CACHE["t"] > 5 or _BLOQ_CACHE["lista"] is None:
+        _BLOQ_CACHE.update(t=time.time(), lista=bloqueados())
+    return bloqueado(pacote, _BLOQ_CACHE["lista"])
+
+
+_CORTE = [80]  # tamanho máximo de cada texto devolvido (texto_max na chamada: até 4000, p/ ler respostas longas)
+
+
 def elementos(xml_texto, limite=120):
     """Elementos úteis do dump do uiautomator: com texto, descrição ou clicáveis, com o centro para tocar."""
     try:
@@ -72,7 +87,9 @@ def elementos(xml_texto, limite=120):
         b = ler_bounds(a.get("bounds"))
         if not b or b[2] <= b[0] or b[3] <= b[1] or not (texto or desc or clicavel or editavel or rolavel or marcavel):
             continue
-        out.append({"texto": texto[:80], "desc": desc[:80], "id": a.get("resource-id", "").split("/")[-1],
+        if _privado(a.get("package", "")):
+            continue  # privacidade: nada de app de banco/senha sai do celular
+        out.append({"texto": texto[:_CORTE[0]], "desc": desc[:_CORTE[0]], "id": a.get("resource-id", "").split("/")[-1],
                     "classe": a.get("class", "").split(".")[-1], "clicavel": clicavel, "editavel": editavel,
                     "x": (b[0] + b[2]) // 2, "y": (b[1] + b[3]) // 2, "pacote": a.get("package", ""),
                     "l": b[2] - b[0], "a": b[3] - b[1],
@@ -440,6 +457,8 @@ def historico(desde):
 
 def _janela_curta(info):
     pac, cls, txt = (info.split("|") + ["", "", ""])[:3]
+    if _privado(pac):
+        return f"{pac} (app privado: conteúdo não lido)"
     return f"{pac} {cls.split('.')[-1]}" + (f" «{txt}»" if txt else "")
 
 
@@ -477,6 +496,46 @@ def diferenca_curta(dif):
         else:
             linhas.append(f"~ {curto(agora)} (era {', '.join(f'{k}={v}' for k, v in antes.items())})")
     return linhas
+
+
+# --------------------------------------------------------------------------- tabuleiro de xadrez (acessibilidade)
+_PECAS = {"rei": "k", "dama": "q", "torre": "r", "bispo": "b", "cavalo": "n", "peao": "p",
+          "king": "k", "queen": "q", "rook": "r", "bishop": "b", "knight": "n", "pawn": "p"}
+_CASA_PECA = re.compile(r"^(brancas|pretas|white|black) (\w+) (?:em|on) ([a-h][1-8])$")
+_CASA_VAZIA = re.compile(r"^([a-h][1-8]),? (?:vazio|vazia|empty)$")
+_RELOGIO = re.compile(r"^\d{1,2}:\d\d(\.\d)?$")
+
+
+def casas_xadrez(els):
+    """{casa: (x, y, peça)} dos apps que descrevem cada casa ("Brancas Cavalo em f3", "e4, vazio"); peça em FEN
+    (maiúscula = brancas, '' = vazia). None se não houver um tabuleiro inteiro na tela."""
+    casas = {}
+    for e in els:
+        d = normalizar(e.get("desc") or e.get("texto") or "")
+        m = _CASA_PECA.match(d)
+        if m and m.group(2) in _PECAS:
+            pc = _PECAS[m.group(2)]
+            casas[m.group(3)] = (e["x"], e["y"], pc.upper() if m.group(1) in ("brancas", "white") else pc)
+            continue
+        m = _CASA_VAZIA.match(d)
+        if m:
+            casas[m.group(1)] = (e["x"], e["y"], "")
+    return casas if len(casas) == 64 else None
+
+
+def tabuleiro_curto(els):
+    """O tabuleiro em 8 linhas (8ª fileira primeiro, FEN: KQRBNP brancas, kqrbnp pretas, . vazia), os relógios
+    (esquerda → direita, como aparecem) e os últimos lances escritos na tela. Sem tabuleiro: os textos da tela."""
+    casas = casas_xadrez(els)
+    if not casas:
+        return {"textos": [e["texto"] for e in els if e.get("texto")][:25]}
+    linhas = ["".join(casas[f"{c}{r}"][2] or "." for c in "abcdefgh") + f" {r}" for r in range(8, 0, -1)]
+    rel = sorted((e for e in els if _RELOGIO.match(e.get("texto") or "")), key=lambda e: (e["y"], e["x"]))
+    banda = [e for e in els if e.get("texto") and re.match(r"^(O-O(-O)?|[KQRBNkqrbn]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBNqrbn])?)[+#]?$",
+                                                         e["texto"])]
+    banda.sort(key=lambda e: e["x"])
+    return {"tabuleiro": linhas + ["abcdefgh"], "relogios": [e["texto"] for e in rel],
+            "ultimos": [e["texto"] for e in banda][-2:]}
 
 
 TECLADO = re.compile(r"SoftInputWindow|InputMethod", re.I)
@@ -632,6 +691,24 @@ def _ler_grade(aj, reg, n, k):
     return (g if len(g) == n else None), duv, desc
 
 
+def _teclado_parado(reg, ate=1.5):
+    """O teclado depois de um deslize: duas leituras iguais seguidas (a fileira ainda pode estar rolando)."""
+    novo, prev, fim = None, None, time.time() + ate
+    while time.time() < fim:
+        novo = teclado_da_grade(elementos(dump_ui(), limite=300), reg)
+        pos = [t[0] for t in novo] if novo else None
+        if pos and pos == prev:
+            break
+        prev = pos
+        time.sleep(0.1)
+    return novo
+
+
+# modelos do teclado já guardados no leitor: {chave: (token do leitor, páginas, total, geometria)}. Jogo seguinte do
+# mesmo app com o mesmo teclado na 1ª página → não relê nem desliza (economiza ~3 s por partida no 16x16).
+_TECLADOS = {}
+
+
 def _modelos_do_teclado(aj, reg, els, n=None, tec=None):
     """Guarda os modelos de todas as páginas do teclado (desliza a fileira se ela rola) e volta à 1ª página.
     Devolve (páginas [(primeiro_simbolo_0based, botões)], total de símbolos, geometria do deslize)."""
@@ -642,8 +719,18 @@ def _modelos_do_teclado(aj, reg, els, n=None, tec=None):
         return [], 0, None
     x0 = min(t[0] - t[2] // 2 for t in tec)
     x1 = max(t[0] + t[2] // 2 for t in tec)
+    m = max(100, (x1 - x0) // 10)  # longe das bordas: deslize que começa na borda é o gesto "voltar" do Android
+    x0, x1 = x0 + m, x1 - m
     y = tec[0][1]
     rola = not dado and any(e.get("rolavel") and abs(e["y"] - y) < 60 for e in els)
+    if rola:  # a fileira pode estar numa página do meio (deixada assim): volta até a 1ª
+        for _ in range(3):
+            _injetar(f"deslizar {x0} {y} {x1} {y} 450")
+            calma(100, 1200)
+            antes = tec
+            tec = _teclado_parado(reg) or tec
+            if [t[0] for t in tec] == [t[0] for t in antes]:
+                break
     paginas, total = [], 0
     for _ in range(4):
         topo = min(t[1] - t[3] // 2 for t in tec)
@@ -655,14 +742,14 @@ def _modelos_do_teclado(aj, reg, els, n=None, tec=None):
         total += len(tec)
         if not rola or (n and total >= n):
             break
-        _injetar(f"deslizar {x1 - 20} {y} {x0 + 20} {y} 450")  # próxima página do teclado
+        _injetar(f"deslizar {x1} {y} {x0} {y} 450")  # próxima página do teclado
         calma(100, 1200)
-        novo = teclado_da_grade(elementos(dump_ui(), limite=300), reg)
+        novo = _teclado_parado(reg)
         if not novo or [t[0] for t in novo] == [t[0] for t in tec]:
             break  # não mudou: não há outra página
         tec = novo
     for _ in range(len(paginas) - 1):  # volta à primeira página
-        _injetar(f"deslizar {x0 + 20} {y} {x1 - 20} {y} 450")
+        _injetar(f"deslizar {x0} {y} {x1} {y} 450")
         calma(100, 1200)
     return paginas, total, (x0, x1, y)
 
@@ -687,7 +774,7 @@ def _plano(casas, sol, reg, paginas, geo, pagina_atual, intervalo, pressao):
     for p in ordem:
         while atual != p and geo:
             x0, x1, y = geo
-            d = [x1 - 20, y, x0 + 20, y, 450] if p > atual else [x0 + 20, y, x1 - 20, y, 450]
+            d = [x1, y, x0, y, 450] if p > atual else [x0, y, x1, y, 450]
             passos += [{"calma": 0.3}, {"deslizar": d, "confiar": True}, {"calma": 0.8}]
             atual += 1 if p > atual else -1
         passos.append({"tocar": por_pagina[p], "intervalo": intervalo, "pressao": pressao, "confiar": True})
@@ -732,7 +819,16 @@ def grade(a):
         return {"erro": "não achei a grade e o teclado do jogo", **({"antes": antes} if antes and antes.get("erro") else {}),
                 **({"reflexos": usados} if usados else {})}
     t1 = time.time()
-    paginas, total, geo = _modelos_do_teclado(aj, reg, els, n_pedido, a.get("teclado"))
+    chave = (n_pedido, tuple(int(v) for v in reg), tuple(tuple(int(v) for v in t) for t in tec))
+    guardado = _TECLADOS.get(chave)
+    if guardado and guardado[0] == aj.token and not a.get("teclado"):
+        _, paginas, total, geo = guardado
+        tempos["teclado"] = "guardado"
+    else:
+        paginas, total, geo = _modelos_do_teclado(aj, reg, els, n_pedido, a.get("teclado"))
+        if total and (not n_pedido or total >= n_pedido):
+            _TECLADOS.clear()
+            _TECLADOS[chave] = (aj.token, paginas, total, geo)
     n = n_pedido or total
     if total < n:
         return {"erro": f"o teclado tem {total} símbolos e a grade precisa de {n}"}
@@ -764,6 +860,7 @@ def grade(a):
     sol = resolver_grade([[max(v, 0) for v in ln] for ln in g]) if not any(v < 0 for ln in g for v in ln) else None
     tempos["resolver"] = round(time.time() - t2, 2)
     if not sol:
+        _TECLADOS.pop(chave, None)  # modelos talvez ruins: a próxima vez relê o teclado
         return {**out, "erro": "a grade lida não tem solução (leitura duvidosa)", "grade": texto(g),
                 **({"duvidas": [f"{i},{j}" for (i, j) in duv]} if duv else {}), "tempos": tempos}
     vazias = [(i, j) for i in range(n) for j in range(n) if g[i][j] == 0]
@@ -772,7 +869,7 @@ def grade(a):
     janela = (eventos() or (0, 0, None))[2]
     _ULTIMA["janela"] = janela  # as coordenadas acabaram de ser lidas desta tela
     t3 = time.time()
-    intervalo, pressao = float(a.get("intervalo", 0.008)), int(a.get("pressao", 8))
+    intervalo, pressao = float(a.get("intervalo", 0.008)), int(a.get("pressao", 12))
     passos, pagina = _plano(vazias, sol, reg, paginas, geo, 0, intervalo, pressao)
     r2 = sequencia({"passos": passos, "ver_depois": "nada"})
     tempos["preencher"] = round(time.time() - t3, 2)
@@ -1095,6 +1192,12 @@ def ver(imagem=True, largura=720, com_elementos=True, recorte=None, so_mudancas=
     rapida = foto_rapida(largura, recorte) if imagem and _ajudante() else (None, None)
     xml, png, app, acesa = observar(com_elementos, imagem and not rapida[0])
     out = {"app": app, "tela_acesa": acesa}
+    if _privado(app):  # app de banco/senha em primeiro plano: nem imagem nem elementos saem do celular
+        if png:
+            _apagar(png)
+        out["privado"] = "app bloqueado (banco, pagamento ou senha) em primeiro plano: a tela não foi lida"
+        _ULTIMA.update(app=app, els=[], regioes=[])
+        return out
     tempo = _linha_do_tempo()
     if tempo:
         out["surgiu"] = tempo
@@ -1149,13 +1252,15 @@ def _ver_depois(a, padrao=None, tocados=()):
         esperou = calma(int(a.get("calma_ms", 120)), int(a.get("calma_ate", 1000))) if a.get("calma", True) else None
         tela = ver(False, 480, True, None, so_mudancas=True, formato=a.get("formato", "curto"))
         reg = (_ULTIMA.get("regioes") or [None])[0]
-        if reg and ("elementos" in tela or any(dentro(p, reg) for p in tocados)):
+        if reg and not tela.get("privado") and ("elementos" in tela or any(dentro(p, reg) for p in tocados)):
             b64, res = foto_rapida(min(720, max(320, int(a.get("largura", 480)))), reg)
             if b64:
                 tela["_imagem"] = {"mime": "image/jpeg", "base64": b64}
                 tela["recorte"] = reg
         return {"tela": tela, **({"calma_ms": esperou} if esperou is not None else {}),
                 **({"anuncio_fechado": fechado} if fechado else {})}
+    if a.get("ver_depois") == "tabuleiro":  # xadrez: 8 linhas + relógios, sem a lista de elementos
+        return {"app": foco(), **tabuleiro_curto(elementos(dump_ui(), limite=300))}
     modo = a.get("ver_depois") or ("imagem" if a.get("imagem") else padrao)
     esperou = None
     if modo != "nada" and a.get("calma", True) is not False:
@@ -1218,7 +1323,8 @@ def _linhas_do_passo(p):
         if not re.match(r"^[A-Za-z][\w.]{2,120}$", pac):
             raise ValueError("pacote inválido")
         return [f"monkey -p {pac} -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1 || exit 4", "sleep 1"]
-    if any(k in p for k in ("esperar_texto", "esperar_sumir", "se", "se_nao", "repetir", "calma", "esperar_mudanca")):
+    if any(k in p for k in ("esperar_texto", "esperar_sumir", "se", "se_nao", "repetir", "calma", "esperar_mudanca",
+                            "lance", "esperar_vez")):
         return None
     raise ValueError(f"passo desconhecido: {json.dumps(p, ensure_ascii=False)[:80]}")
 
@@ -1706,6 +1812,15 @@ class _Executor:
                 self.bloco += linhas
                 return
             self.descarregar()  # passo que depende da tela: roda o que acumulou e olha
+        if "lance" in p:  # xadrez: "e2e4" → toca a casa de origem e a de destino (lidas agora da tela)
+            lance = str(p["lance"]).strip().lower()
+            if not re.match(r"^[a-h][1-8][a-h][1-8]$", lance):
+                raise ValueError("lance no formato e2e4")
+            casas = casas_xadrez(elementos(dump_ui(), limite=300))
+            if not casas:
+                raise _Falha({"erro": f"{onde}: não há tabuleiro de xadrez na tela", "app": foco()})
+            a_, b_ = casas[lance[:2]], casas[lance[2:]]
+            p = {"tocar": [[a_[0], a_[1]], [b_[0], b_[1]]], "intervalo": float(p.get("intervalo", 0.06)), "confiar": True}
         if "tocar" in p:
             alvo = p["tocar"]
             if isinstance(alvo, str):
@@ -1793,6 +1908,22 @@ class _Executor:
                     raise _Falha({"erro": f"{onde}: “{texto}” {'não apareceu' if quer else 'não sumiu'} a tempo",
                                   "app": foco()})
                 time.sleep(0.08 if self.rapido else 0.4)
+            self.t_esperas += time.time() - t
+        elif "esperar_vez" in p:  # xadrez: espera o adversário mexer (o tabuleiro muda depois do meu lance assentar)
+            t = time.time()
+            fim = t + min(float(p["esperar_vez"]), 30)
+            time.sleep(0.2)
+
+            def foto():
+                c = casas_xadrez(elementos(dump_ui(), limite=300))
+                return "".join(c[k][2] or "." for k in sorted(c)) if c else None
+
+            base = foto()
+            while time.time() < fim:
+                agora = foto()
+                if agora != base:
+                    break
+                time.sleep(0.03)
             self.t_esperas += time.time() - t
         elif "esperar_mudanca" in p:
             self.esperar_mudanca(min(float(p["esperar_mudanca"]), 30), p.get("ignorar") or [])
@@ -1953,8 +2084,99 @@ def agir(a):
     return res
 
 
+# --------------------------------------------------------------------------- piloto (laço rápido no celular)
+_PILOTO = []
+
+
+def _modulo_piloto():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("tela_piloto", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                                             "piloto.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def _ferramentas_piloto():
+    def aguardar(contador, ms):
+        aj = _ajudante()
+        if not aj:
+            time.sleep(ms / 1000)
+            return contador
+        r = aj.pedir(f"aguardar {int(contador)} {int(ms)}", ms / 1000 + 5)
+        try:
+            return int((r or "").strip())
+        except ValueError:
+            return contador
+
+    def tocar(x, y):
+        if not _injetar(f"toques 0:30 {int(x)} {int(y)}"):
+            rish(f"input tap {int(x)} {int(y)}", timeout=5)
+
+    return {"aguardar": aguardar, "elementos": lambda: elementos(dump_ui(), limite=300), "tocar": tocar,
+            "bloqueado": lambda app: bool(app) and bloqueado(app, bloqueados()),
+            "casas": lambda: casas_xadrez(elementos(dump_ui(), limite=300)), "contra_robo": partida_contra_robo}
+
+
+def partida_contra_robo():
+    """Xadrez só contra a máquina: a atividade em primeiro plano tem de ser a partida contra robô do app.
+    Partida ao vivo contra pessoas = trapaça (e banimento): o piloto não joga."""
+    pac, cls = atividade_no_topo()
+    return bool(pac and cls) and ("Bot" in cls or "Computer" in cls) and "Live" not in cls
+
+
+def piloto(a):
+    """O laço rápido: liga (iniciar={...}), mostra (estado), desliga (parar), ensina a memória (ensinar=[{pergunta,
+    resposta}]) ou testa os cérebros sem a tela (testar={pergunta, opcoes:[...]})."""
+    if not _PILOTO:
+        m = _modulo_piloto()
+        _PILOTO.extend([m, m.Piloto(_ferramentas_piloto())])
+    m, p = _PILOTO
+    if a.get("parar"):
+        p.encerrar()
+        return p.estado()
+    if a.get("ensinar"):
+        mem = m.carregar_memoria()
+        for item in a["ensinar"][:200]:
+            if isinstance(item, dict) and item.get("pergunta") and item.get("resposta"):
+                mem[m.norm(item["pergunta"])] = str(item["resposta"])
+        m.gravar_memoria(mem)
+        if p.cerebros:
+            p.cerebros.memoria.update(mem)
+        return {"memoria": len(mem)}
+    if a.get("testar"):
+        t = a["testar"]
+        cfg = dict(a.get("iniciar") or {}, **{k: a[k] for k in ("modelo", "pensar", "cerebros", "local_url", "politica")
+                                               if k in a})
+        c = m.Cerebros(cfg)
+        ops = [{"texto": str(o)} for o in (t.get("opcoes") or [])]
+        res = []
+        for _ in range(max(1, min(int(t.get("vezes", 1)), 5))):
+            idx, fonte, seg, erros = c.decidir(str(t.get("pergunta", "")), ops, float(t.get("prazo", 8)))
+            res.append({"escolha": ops[idx]["texto"] if idx is not None else None, "fonte": fonte,
+                        "ms": int(seg * 1000), **({"erros": erros} if erros else {})})
+        return {"testes": res, "chave_api": bool(m.ler_chave())}
+    if a.get("iniciar") is not None:
+        cfg = a["iniciar"] if isinstance(a["iniciar"], dict) else {}
+        if cfg.get("app") and bloqueado(cfg["app"], bloqueados()):
+            return {"erro": "app bloqueado para o agente de tela"}
+        if cfg.get("modo") == "xadrez" and not partida_contra_robo():
+            return {"erro": "o modo xadrez só joga na tela de partida contra robô (nunca contra pessoas)",
+                    "atividade": "/".join(x or "" for x in atividade_no_topo())}
+        return p.iniciar(cfg)
+    return p.estado(int(a.get("ultimas", 8)))
+
+
 def executar(a):
     """Ponto de entrada: o serviço chama direto (EM_PROCESSO) e o modo antigo passa por main()."""
+    _CORTE[0] = max(80, min(int(a.get("texto_max") or 80), 4000))
+    try:
+        return _executar(a)
+    finally:
+        _CORTE[0] = 80
+
+
+def _executar(a):
     acao = a.get("acao")
     try:
         if acao == "estado":
@@ -1974,6 +2196,8 @@ def executar(a):
             r = fechar_anuncio(foco(), min(float(a.get("limite", 45)), 120)) if em_anuncio(True) else {"anuncio": "nenhum"}
         elif acao == "reflexos":
             r = reflexos(a.get("regras"))
+        elif acao == "piloto":
+            r = piloto(a)
         else:
             r = agir(a)
     except SemShizuku as e:

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quiz de reação</title>
+<style>
+  :root { --fundo:#101418; --cartao:#1c232b; --texto:#eef2f5; --sub:#9fb0bf; --botao:#27323d; --ok:#2e9e5b; --erro:#c0443a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--fundo); color:var(--texto); font-family: system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+  #topo { display:flex; justify-content:space-between; color:var(--sub); font-size:15px; }
+  #barra { height:6px; background:#2a333c; border-radius:3px; margin:12px 0 24px; overflow:hidden; }
+  #tempo { height:100%; width:100%; background:#4a90d9; }
+  #pergunta { font-size:24px; line-height:1.35; min-height:96px; margin:0 0 24px; }
+  .op { display:block; width:100%; margin:0 0 14px; padding:20px 16px; font-size:20px; text-align:left;
+        background:var(--botao); color:var(--texto); border:0; border-radius:12px; }
+  .op.ok { background:var(--ok); } .op.erro { background:var(--erro); }
+  #fim { display:none; font-size:20px; line-height:1.6; }
+  #iniciar { display:block; width:100%; padding:22px; font-size:22px; background:#4a90d9; color:#fff; border:0; border-radius:12px; }
+</style>
+</head>
+<body>
+<main>
+  <div id="topo"><span id="contagem">Quiz de reação</span><span id="placar"></span></div>
+  <div id="barra"><div id="tempo"></div></div>
+  <h1 id="pergunta">30 perguntas, 2 segundos cada. Toque em Começar.</h1>
+  <div id="opcoes"><button id="iniciar">Começar</button></div>
+  <div id="fim"></div>
+</main>
+<script>
+const BANCO = [
+  ["Qual é a capital da Austrália?", "Canberra", ["Sydney", "Melbourne", "Perth"]],
+  ["Quantos lados tem um hexágono?", "6", ["5", "7", "8"]],
+  ["Quem pintou a Mona Lisa?", "Leonardo da Vinci", ["Michelangelo", "Rafael", "Van Gogh"]],
+  ["Qual é o maior planeta do Sistema Solar?", "Júpiter", ["Saturno", "Netuno", "Terra"]],
+  ["Em que ano o Brasil declarou a independência?", "1822", ["1500", "1889", "1808"]],
+  ["Qual é o símbolo químico do ouro?", "Au", ["Ag", "Fe", "Go"]],
+  ["Qual é o maior oceano da Terra?", "Pacífico", ["Atlântico", "Índico", "Ártico"]],
+  ["Quantos jogadores um time de futebol tem em campo?", "11", ["10", "9", "12"]],
+  ["Quem escreveu Dom Casmurro?", "Machado de Assis", ["José de Alencar", "Jorge Amado", "Clarice Lispector"]],
+  ["Qual é a raiz quadrada de 144?", "12", ["14", "11", "13"]],
+  ["Qual país tem a maior população do mundo em 2024?", "Índia", ["China", "Estados Unidos", "Indonésia"]],
+  ["Qual gás as plantas absorvem na fotossíntese?", "Gás carbônico", ["Oxigênio", "Nitrogênio", "Hélio"]],
+  ["Qual é a capital do Canadá?", "Ottawa", ["Toronto", "Vancouver", "Montreal"]],
+  ["Quantos minutos tem uma hora e meia?", "90", ["60", "120", "75"]],
+  ["Qual é o rio mais extenso que passa pelo Brasil?", "Amazonas", ["São Francisco", "Paraná", "Tocantins"]],
+  ["Quem formulou a teoria da relatividade?", "Albert Einstein", ["Isaac Newton", "Nikola Tesla", "Galileu Galilei"]],
+  ["Qual é o menor número primo?", "2", ["1", "3", "0"]],
+  ["Em que continente fica o Egito?", "África", ["Ásia", "Europa", "Oceania"]],
+  ["Qual é a moeda do Japão?", "Iene", ["Yuan", "Won", "Rupia"]],
+  ["Quantos ossos tem o corpo humano adulto?", "206", ["180", "250", "301"]],
+  ["Qual instrumento mede a pressão atmosférica?", "Barômetro", ["Termômetro", "Higrômetro", "Anemômetro"]],
+  ["Quem foi o primeiro homem a pisar na Lua?", "Neil Armstrong", ["Buzz Aldrin", "Yuri Gagarin", "Michael Collins"]],
+  ["Qual é a fórmula química da água?", "H2O", ["CO2", "O2", "H2O2"]],
+  ["Qual é o idioma oficial do Brasil?", "Português", ["Espanhol", "Inglês", "Tupi"]],
+  ["Quanto é 7 vezes 8?", "56", ["54", "64", "48"]],
+  ["Qual é o país do tango?", "Argentina", ["Uruguai", "Chile", "Espanha"]],
+  ["Qual animal é conhecido como rei da selva?", "Leão", ["Tigre", "Elefante", "Gorila"]],
+  ["Qual é a capital da Itália?", "Roma", ["Milão", "Veneza", "Nápoles"]],
+  ["Quantos estados tem o Brasil, sem contar o Distrito Federal?", "26", ["27", "25", "24"]],
+  ["Qual planeta é conhecido como planeta vermelho?", "Marte", ["Vênus", "Mercúrio", "Júpiter"]],
+];
+const PRAZO = 2000;
+let ordem = [], i = 0, acertos = 0, tempos = [], estouros = 0, inicio = 0, timer = null, travado = false;
+const $ = (id) => document.getElementById(id);
+function embaralhar(a) { for (let k = a.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [a[k], a[j]] = [a[j], a[k]]; } return a; }
+function mostrar() {
+  if (i >= ordem.length) return terminar();
+  const [p, certo, erradas] = ordem[i];
+  travado = false;
+  $("contagem").textContent = `Pergunta ${i + 1} de ${ordem.length}`;
+  $("placar").textContent = `${acertos} acertos`;
+  $("pergunta").textContent = p;
+  const box = $("opcoes"); box.innerHTML = "";
+  embaralhar([certo, ...erradas]).forEach((t) => {
+    const b = document.createElement("button"); b.className = "op"; b.textContent = t;
+    b.onclick = () => responder(b, t === certo); box.appendChild(b);
+  });
+  inicio = performance.now();
+  const barra = $("tempo"); barra.style.transition = "none"; barra.style.width = "100%";
+  requestAnimationFrame(() => { barra.style.transition = `width ${PRAZO}ms linear`; barra.style.width = "0%"; });
+  clearTimeout(timer); timer = setTimeout(() => { if (!travado) { travado = true; estouros++; i++; setTimeout(mostrar, 500); } }, PRAZO);
+}
+function responder(b, ok) {
+  if (travado) return; travado = true; clearTimeout(timer);
+  const ms = Math.round(performance.now() - inicio); tempos.push(ms);
+  if (ok) acertos++;
+  b.classList.add(ok ? "ok" : "erro");
+  i++; setTimeout(mostrar, 600);
+}
+function terminar() {
+  const s = [...tempos].sort((a, b) => a - b);
+  const pct = (p) => s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : "-";
+  $("contagem").textContent = "Fim"; $("pergunta").textContent = "Resultado";
+  $("opcoes").innerHTML = ""; $("barra").style.visibility = "hidden";
+  const f = $("fim"); f.style.display = "block";
+  f.textContent = `Acertos: ${acertos} de ${ordem.length}. Estouros do prazo: ${estouros}. ` +
+    `Tempo mediano: ${pct(0.5)} ms. Pior 5%: ${pct(0.95)} ms. Mais rápido: ${s[0] ?? "-"} ms.`;
+}
+async function manterAcesa() { try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch (e) {} }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") manterAcesa(); });
+manterAcesa();
+$("iniciar").onclick = () => { manterAcesa(); ordem = embaralhar(BANCO.slice()); i = 0; acertos = 0; tempos = []; estouros = 0; mostrar(); };
+</script>
+</body>
+</html>

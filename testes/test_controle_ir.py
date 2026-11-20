@@ -2171,7 +2171,7 @@ for linha in sys.stdin:
         self.assertEqual(r["vazias"], 1, r)
         self.assertTrue(r["conferido"], r)
         log = self.registro.read_text()
-        self.assertIn("leitor toquesv 8:8 83 686 1049 2362", log)  # casa (0,0) e o botão 8, leva rápida e vigiada
+        self.assertIn("leitor toquesv 8:12 83 686 1049 2362", log)  # casa (0,0) e o botão 8, leva rápida e vigiada
         self.assertNotIn("refeitos", r)
 
     def test_grade_16x16_blocos_e_correcao_de_duvida(self):
@@ -2191,6 +2191,37 @@ for linha in sys.stdin:
         g[0][1] = g[0][0]  # leitura errada vira repetição: aponta as duas casas
         self.assertTrue({(0, 0), (0, 1)} <= self.m._conflitos(g))  # (e o outro D da coluna)
         self.assertIsNone(self.m.resolver_grade(g))
+
+    def test_app_de_banco_nunca_e_lido(self):
+        xml = ('<?xml version="1.0"?><hierarchy>'
+               '<node text="Saldo R$ 1.234" package="com.c6bank.app.yellow" bounds="[0,0][100,100]" clickable="true"/>'
+               '<node text="Pergunta 1" package="com.android.chrome" bounds="[0,200][100,300]"/>'
+               '</hierarchy>')
+        textos = [e["texto"] for e in self.m.elementos(xml)]
+        self.assertEqual(textos, ["Pergunta 1"])  # o nó do banco some antes de qualquer coisa
+        self.assertTrue(self.m._privado("com.nu.production"))
+        self.assertFalse(self.m._privado("com.android.chrome"))
+        self.assertIn("app privado", self.m._janela_curta("com.c6bank.app.yellow|MainActivity|Saldo R$ 10"))
+        self.assertNotIn("Saldo", self.m._janela_curta("com.c6bank.app.yellow|MainActivity|Saldo R$ 10"))
+
+    def test_tabuleiro_de_xadrez_compacto(self):
+        ini = {"a1": "Brancas Torre", "e1": "Brancas Rei", "e4": "Brancas Peão", "e8": "Pretas Rei", "f6": "Pretas Cavalo"}
+        els = []
+        for r in range(1, 9):
+            for f in "abcdefgh":
+                sq = f + str(r)
+                els.append({"desc": f"{ini[sq]} em {sq}" if sq in ini else f"{sq}, vazio",
+                            "x": 80 + 160 * "abcdefgh".index(f), "y": 967 + 160 * (8 - r)})
+        els += [{"texto": "0:58", "x": 205, "y": 2245}, {"texto": "0:41.2", "x": 1153, "y": 2245},
+                {"texto": "e4", "x": 100, "y": 2434}, {"texto": "Nf6", "x": 200, "y": 2434}]
+        t = self.m.tabuleiro_curto(els)
+        self.assertEqual(t["tabuleiro"][0], "....k... 8")
+        self.assertEqual(t["tabuleiro"][2], ".....n.. 6")
+        self.assertEqual(t["tabuleiro"][7], "R...K... 1")
+        self.assertEqual(t["relogios"], ["0:58", "0:41.2"])
+        self.assertEqual(t["ultimos"], ["e4", "Nf6"])
+        self.assertEqual(self.m.casas_xadrez(els)["e4"], (720, 1607, "P"))
+        self.assertIsNone(self.m.casas_xadrez(els[:10]))
 
     def test_teclado_em_paginas_e_regra_de_texto_curto(self):
         reg = [17, 617, 1244, 1243]
@@ -2406,6 +2437,315 @@ class TestSonar(unittest.TestCase):
         s, _ = novo_servico(com_base=False)
         nomes = {c["nome"]: c["estado"] for c in s.capacidades()["capacidades"]}
         self.assertEqual((nomes.get("sono"), nomes.get("sonar")), ("ativa", "ativa"))
+
+
+
+class TestRepositorio(unittest.TestCase):
+    """De onde o celular baixa as atualizações (para continuar o projeto em outro repositório)."""
+
+    def test_padrao_arquivo_ambiente_e_invalido(self):
+        from controle_ir import cli
+        pasta = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, pasta, True)
+        antes = cli.PASTA
+        cli.PASTA = pasta
+        self.addCleanup(setattr, cli, "PASTA", antes)
+        os.environ.pop("CONTROLE_IR_REPO", None)
+        self.assertEqual(cli.repositorio(), cli.REPO_PADRAO)
+        (pasta / "repositorio").write_text("https://github.com/outro-dev/novo-repo/\n")
+        self.assertEqual(cli.repositorio(), "https://github.com/outro-dev/novo-repo")
+        (pasta / "repositorio").write_text("https://exemplo.com/malicioso; rm -rf ~")
+        self.assertEqual(cli.repositorio(), cli.REPO_PADRAO)  # só aceita uma URL do GitHub limpa
+        os.environ["CONTROLE_IR_REPO"] = "https://github.com/a/b"
+        self.addCleanup(os.environ.pop, "CONTROLE_IR_REPO", None)
+        self.assertEqual(cli.repositorio(), "https://github.com/a/b")
+
+class TestPiloto(unittest.TestCase):
+    """Piloto: o laço rápido no celular (percepção do quiz, memória, corrida de cérebros com streaming)."""
+
+    def setUp(self):
+        import importlib.util
+        caminho = Path(__file__).resolve().parent.parent / "controle-ir" / "capacidades" / "tela" / "piloto.py"
+        spec = importlib.util.spec_from_file_location("piloto_teste", caminho)
+        self.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.m)
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.m.PASTA = str(self.tmp)
+        self.m.MEMORIA_ARQ = str(self.tmp / "memoria.json")
+        self.m.GRAVADOR_ARQ = str(self.tmp / "rodadas.jsonl")
+
+    @staticmethod
+    def tela(pergunta="Qual é a capital da Austrália?", ops=("Sydney", "Canberra", "Melbourne", "Perth")):
+        els = [{"texto": "Pergunta 3 de 15", "x": 640, "y": 300, "l": 400, "a": 60},
+               {"texto": pergunta, "x": 640, "y": 700, "l": 1100, "a": 200},
+               {"texto": "Pular", "x": 640, "y": 2500, "l": 300, "a": 120, "clicavel": True}]
+        for i, o in enumerate(ops):  # botão clicável sem texto + o texto por dentro (como nos apps de verdade)
+            y = 1200 + 220 * i
+            els.append({"x": 640, "y": y, "l": 1100, "a": 180, "clicavel": True})
+            els.append({"texto": o, "x": 600, "y": y, "l": 500, "a": 80})
+        return els
+
+    def test_le_pergunta_e_opcoes(self):
+        perg, ops = self.m.quiz_da_tela(self.tela())
+        self.assertEqual(perg, "Qual é a capital da Austrália?")
+        self.assertEqual([o["texto"] for o in ops], ["Sydney", "Canberra", "Melbourne", "Perth"])
+        self.assertEqual((ops[1]["x"], ops[1]["y"]), (640, 1420))  # toca no botão, não no texto
+        self.assertIsNone(self.m.quiz_da_tela(self.tela()[:3]))  # sem opções não é quiz
+
+    def _servidor_sse(self, texto, atraso=0.0):
+        class H(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+
+                def pedaco(b):
+                    self.wfile.write(f"{len(b):x}\r\n".encode() + b + b"\r\n")
+                    self.wfile.flush()
+                time.sleep(atraso)
+                for t in texto:
+                    ev = {"choices": [{"delta": {"content": t}}]}
+                    pedaco(f"data: {json.dumps(ev)}\n\n".encode())
+                pedaco(b"data: [DONE]\n\n")
+                self.wfile.write(b"0\r\n\r\n")
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        return f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def test_corrida_streaming_memoria_e_prazo(self):
+        url = self._servidor_sse(["Resposta", ": 2"])
+        c = self.m.Cerebros({"cerebros": ["local"], "local_url": url})
+        ops = [{"texto": t} for t in ("Sydney", "Canberra", "Melbourne")]
+        idx, fonte, seg, erros = c.decidir("Capital da Austrália?", ops, 3)
+        self.assertEqual((idx, fonte), (1, "local"), erros)
+        idx, *_ = c.decidir("Capital da Austrália?", ops, 3)  # conexão persistente reaproveitada
+        self.assertEqual(idx, 1)
+        c.memoria[self.m.norm("Qual a cor do céu?")] = "Azul"  # memória responde sem rede
+        idx, fonte, seg, _ = c.decidir("Qual a cor do céu?", [{"texto": "Verde"}, {"texto": "Azul"}], 3)
+        self.assertEqual((idx, fonte), (1, "memoria"))
+        self.assertLess(seg, 0.05)
+        lento = self.m.Cerebros({"cerebros": ["local"], "local_url": self._servidor_sse(["1"], atraso=1.5)})
+        idx, fonte, seg, _ = lento.decidir("x?", ops, 0.4)  # prazo estoura: ninguém respondeu
+        self.assertIsNone(idx)
+        self.assertLess(seg, 1.0)
+
+    def _servidor_eventos(self, eventos, atraso=0.0):
+        """SSE com eventos JSON prontos (formato da Anthropic ou do llama-server)."""
+        class H(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                time.sleep(atraso)
+                for ev in eventos:
+                    b = f"data: {json.dumps(ev)}\n\n".encode()
+                    self.wfile.write(f"{len(b):x}\r\n".encode() + b + b"\r\n")
+                    self.wfile.flush()
+                self.wfile.write(b"0\r\n\r\n")
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        return f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def test_escada_de_inteligencia(self):
+        import math
+
+        def local(digito, prob):
+            return self._servidor_eventos([{"choices": [{"delta": {"content": digito}, "logprobs": {"content": [
+                {"token": digito, "logprob": math.log(prob)}]}}]}])
+        api = self._servidor_eventos([{"type": "content_block_delta", "delta": {"type": "text_delta", "text": "3"}}],
+                                     atraso=0.3)
+        ops = [{"texto": t} for t in ("a", "b", "c")]
+        self.m.ler_chave = lambda: "chave-falsa"
+        base = {"cerebros": ["local", "api"], "api_base": api, "modelos": ["forte"]}
+        # local com certeza alta: vai na hora, sem esperar a API
+        c = self.m.Cerebros(dict(base, local_url=local("1", 0.99)))
+        idx, fonte, seg, _ = c.decidir("p?", ops, 3)
+        self.assertEqual((idx, fonte), (0, "local 99%"))
+        self.assertLess(seg, 0.25)
+        # local em dúvida: espera o forte, que discorda — vale o forte
+        c = self.m.Cerebros(dict(base, local_url=local("1", 0.40)))
+        idx, fonte, seg, _ = c.decidir("p?", ops, 3)
+        self.assertEqual((idx, fonte), (2, "forte"))
+        # prazo curto: o forte não chega a tempo — vale a melhor que chegou (o local em dúvida)
+        c = self.m.Cerebros(dict(base, local_url=local("2", 0.40)))
+        idx, fonte, seg, _ = c.decidir("p?", ops, 0.15)
+        self.assertEqual((idx, fonte), (1, "local 40%"))
+        # aprende durante a partida: o local tocou sozinho (99%), o forte discorda depois → a precisão medida cai,
+        # o local deixa de agir sozinho e a memória corrige
+        c = self.m.Cerebros(dict(base, local_url=local("1", 0.99)))
+        idx, fonte, *_ = c.decidir("Moeda do Japão?", ops, 3)
+        self.assertEqual(idx, 0)
+        fim = time.time() + 3
+        while not c.correcoes and time.time() < fim:
+            time.sleep(0.02)
+        ap = c.aprendizado()
+        self.assertEqual(ap["discordancias"], 1)
+        self.assertFalse(ap["local_sozinho"])
+        self.assertEqual(c.memoria[self.m.chave_quiz("Moeda do Japão?", ops)], "c")
+        idx, fonte, *_ = c.decidir("Moeda do Japão?", ops, 3)
+        self.assertEqual((idx, fonte), (2, "memoria"))  # na próxima vez: certo e instantâneo
+        idx, fonte, *_ = c.decidir("Outra?", ops, 3)
+        self.assertEqual(fonte, "forte")  # sem confiança, espera o forte
+        # o forte passa a CONFIRMAR o local (mesmo dígito): a precisão medida volta e o local é liberado de novo
+        c.local = self.m.Cerebros(dict(base, local_url=local("3", 0.99))).local
+        for k in range(18):  # 2 discordâncias: (18+9)/(18+2+10) = 0,90
+            c.decidir(f"Pergunta {k}?", ops, 3)
+        fim = time.time() + 3
+        while not c.aprendizado()["local_sozinho"] and time.time() < fim:
+            time.sleep(0.02)
+        self.assertTrue(c.aprendizado()["local_sozinho"], c.aprendizado())
+        idx, fonte, seg, _ = c.decidir("Mais uma?", ops, 3)
+        self.assertEqual(fonte, "local 99%")
+        self.assertLess(seg, 0.25)
+        self.assertEqual(self.m.corpo_api("claude-haiku-5-5", "s", "u")["thinking"], {"type": "disabled"})
+        self.assertEqual(self.m.corpo_api("claude-sonnet-5-5", "s", "u")["thinking"], {"type": "between_tools"})
+        self.assertNotIn("thinking", self.m.corpo_api("claude-opus-5-5", "s", "u"))
+
+    def test_laco_toca_no_alvo_semantico_e_grava(self):
+        url = self._servidor_sse(["2"])
+        telas = [self.tela(), self.tela()]
+        # entre a leitura e o toque as opções trocam de lugar: o toque segue o TEXTO escolhido
+        trocada = self.tela(ops=("Canberra", "Sydney", "Melbourne", "Perth"))
+        sequencia = [telas[0], trocada] + [trocada] * 50
+        tocados = []
+
+        def elementos():
+            return sequencia.pop(0) if len(sequencia) > 1 else sequencia[0]
+        f = {"aguardar": lambda c, ms: (time.sleep(0.01), c + 1)[1], "elementos": elementos,
+             "tocar": lambda x, y: tocados.append((x, y)), "bloqueado": lambda app: False}
+        p = self.m.Piloto(f)
+        p.iniciar({"cerebros": ["local"], "local_url": url, "duracao": 10})
+        fim = time.time() + 3
+        while not tocados and time.time() < fim:
+            time.sleep(0.02)
+        p.encerrar()
+        self.assertEqual(tocados[0], (640, 1200))  # "Canberra" estava agora na 1ª posição
+        e = p.estado()
+        self.assertEqual(e["ultimas"][0]["escolha"], "Canberra")
+        self.assertEqual(e["ultimas"][0]["fonte"], "local")
+        self.assertEqual(len(tocados), 1)  # mesma pergunta não é respondida duas vezes
+        self.assertTrue((self.tmp / "rodadas.jsonl").exists())
+
+    def test_xadrez_joga_na_vez_certa(self):
+        m = self.m
+        self.assertEqual(m.fen(m.INICIAL, "w"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+        estado = {"tab": list(m.INICIAL)}
+        idx = {f"{c}{r}": (8 - r) * 8 + "abcdefgh".index(c) for r in range(1, 9) for c in "abcdefgh"}
+
+        def casas():
+            return {sq: (80 + 160 * "abcdefgh".index(sq[0]), 967 + 160 * (8 - int(sq[1])),
+                         "" if estado["tab"][i] == "." else estado["tab"][i]) for sq, i in idx.items()}
+        pos = {(v[0], v[1]): k for k, v in casas().items()}
+
+        def mover(a, b):
+            t = estado["tab"]
+            t[idx[b]], t[idx[a]] = t[idx[a]], "."
+
+        respostas = iter([("e7", "e5"), ("b8", "c6")])
+        toques = []
+
+        def tocar(x, y):
+            toques.append(pos[(x, y)])
+            if len(toques) % 2 == 0:
+                mover(toques[-2], toques[-1])  # o app aplica o meu lance…
+
+                def robo():  # …e o robô responde um pouco depois
+                    time.sleep(0.15)
+                    a, b = next(respostas, (None, None))
+                    if a:
+                        mover(a, b)
+                threading.Thread(target=robo, daemon=True).start()
+
+        class MotorFalso:
+            lances = iter(["e2e4", "g1f3", "f1c4"])
+
+            def __init__(self, *a, **k):
+                pass
+
+            def lance(self, fen_, ms):
+                return next(self.lances)
+
+            def fechar(self):
+                pass
+        m.Motor = MotorFalso
+        f = {"aguardar": lambda c, ms: (time.sleep(0.02), c + 1)[1], "casas": casas, "tocar": tocar,
+             "contra_robo": lambda: True, "bloqueado": lambda app: False}
+        p = m.Piloto(f)
+        p.iniciar({"modo": "xadrez", "duracao": 10})
+        fim = time.time() + 4
+        while len(toques) < 6 and time.time() < fim:
+            time.sleep(0.02)
+        time.sleep(0.3)
+        p.encerrar()
+        self.assertEqual(toques, ["e2", "e4", "g1", "f3", "f1", "c4"])  # 3 lances, cada um na sua vez
+        self.assertTrue(all(r["ok"] for r in p.rodadas))
+        # contra pessoas (não é partida contra robô): o piloto não joga
+        p2 = m.Piloto(dict(f, contra_robo=lambda: False))
+        p2.iniciar({"modo": "xadrez", "duracao": 10})
+        time.sleep(0.2)
+        self.assertIn("não é partida contra robô", p2.estado()["estado"])
+        p2.encerrar()
+
+    def test_sobreposicao_do_sistema_nao_trava_o_piloto(self):
+        url = self._servidor_sse(["2"])
+        barra = [{"texto": "12:00", "pacote": "com.android.systemui", "x": 50, "y": 20, "l": 80, "a": 40}]
+        tela = barra + [dict(e, pacote="com.android.chrome") for e in self.tela()]
+        tocados = []
+        f = {"aguardar": lambda c, ms: (time.sleep(0.01), c + 1)[1], "elementos": lambda: tela,
+             "tocar": lambda x, y: tocados.append((x, y)), "bloqueado": lambda app: app.startswith("com.c6bank")}
+        p = self.m.Piloto(f)
+        p.iniciar({"cerebros": ["local"], "local_url": url, "duracao": 10, "app": "com.android.chrome"})
+        fim = time.time() + 3
+        while not tocados and time.time() < fim:
+            time.sleep(0.02)
+        p.encerrar()
+        self.assertEqual(tocados[:1], [(640, 1420)])  # a barra do sistema na frente não impede de jogar
+        banco = [{"texto": "Saldo", "pacote": "com.c6bank.app", "x": 1, "y": 1, "l": 9, "a": 9}] + tela
+        p = self.m.Piloto(dict(f, elementos=lambda: banco))
+        p.iniciar({"cerebros": ["local"], "local_url": url, "duracao": 10, "app": "com.android.chrome"})
+        time.sleep(0.3)
+        self.assertIn("bloqueado", p.estado()["estado"])  # app de banco na tela: o piloto para
+        p.encerrar()
+
+    def test_leitura_rasgada_espera_as_opcoes_novas(self):
+        url = self._servidor_sse(["2"])
+        q1 = self.tela()
+        rasgada = self.tela(pergunta="Quantos lados tem um hexágono?")  # pergunta nova, botões ainda da anterior
+        q2 = self.tela(pergunta="Quantos lados tem um hexágono?", ops=("5", "6", "7", "8"))
+        seq = [q1] * 3 + [rasgada] * 3 + [q2] * 80
+        tocados, escolhas = [], []
+
+        def elementos():
+            return seq.pop(0) if len(seq) > 1 else seq[0]
+        f = {"aguardar": lambda c, ms: (time.sleep(0.01), c + 1)[1], "elementos": elementos,
+             "tocar": lambda x, y: tocados.append((x, y)), "bloqueado": lambda app: False}
+        p = self.m.Piloto(f)
+        p.iniciar({"cerebros": ["local"], "local_url": url, "duracao": 10, "conferir": False})
+        fim = time.time() + 4
+        while len(tocados) < 2 and time.time() < fim:
+            time.sleep(0.02)
+        p.encerrar()
+        escolhas = [r["escolha"] for r in p.estado(20)["ultimas"] if r.get("total_ms") is not None]
+        self.assertEqual(escolhas, ["Canberra", "6"])  # nada respondido com as opções velhas
 
 if __name__ == "__main__":
     unittest.main()

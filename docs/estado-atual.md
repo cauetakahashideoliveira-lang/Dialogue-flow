@@ -41,6 +41,14 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **20/11 — Piloto no xadrez contra robôs (1.0.61):** modo `xadrez` (Stockfish 19 residente do `pkg`, `ms_lance`
+  200–300): lê o tabuleiro pela acessibilidade, percebe a vez pela peça que se mexeu, confirma o lance. Trava:
+  só com a atividade de partida contra robô em primeiro plano (`partida_contra_robo`; para sozinho ao sair).
+  Resultados: blitz 3+2 contra o Intermediário 1200 — vitória por mate, 20 lances, mediana 0,63 s/lance,
+  precisão 99,7%; **bullet 1 min contra Rey Enigma 2500 — vitória por xeque-mate**, 32 lances, mediana 0,50 s
+  (p95 0,82 s), avaliação do app: 13 "Melhor", 3 "Brilhante", 1 "Excelente". Caminho no app: Início → Jogar →
+  "Jogar com Bots" (NUNCA "Começar Partida": é contra pessoas). A lista de acessibilidade do seletor de tempo
+  atrasa: conferir pela imagem.
 - **20/11 madrugada — Piloto com inteligência alta (1.0.56→1.0.60):**
   * Chave da API no celular (`~/.controle-ir/anthropic.key`, 600, criada pelo dono no Termux; permanente; conta
     Team com teto mensal de US$ 100). Latência medida da API daqui: Haiku e Sonnet ~1,3 s por resposta.

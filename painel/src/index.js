@@ -659,8 +659,11 @@ const painelApp = {
 // ---------------------------------------------------------------- OAuth: o Claude entra pelo painel (Etapa 1b)
 const DONO = 'dono';
 const ESCOPO = 'controle';
-function destinoPermitido(uri) {  // tokens só vão para o Claude (claude.ai/claude.com) ou um app no próprio computador
+function destinoPermitido(uri) {
   try {
+    // O ChatGPT usa um retorno estável ou um caminho com o identificador do conector.
+    if (typeof uri !== 'string') return false;
+    if (/^https:\/\/chatgpt\.com\/(?:connector_platform_oauth_redirect|connector\/oauth\/[A-Za-z0-9_-]+)$/.test(uri.trim()) && uri === uri.trim()) return true;
     const x = new URL(uri);
     if (x.protocol === 'https:' && ['claude.ai', 'claude.com'].includes(x.hostname)) return true;
     return x.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(x.hostname);
@@ -696,7 +699,7 @@ async function autorizar(req, env, u) {
     const a = await oauth.approveConsent(req, handle, { scope: [ESCOPO] });
     if (!destinoPermitido(a.request.redirectUri)) {
       await registrar(env, 'painel', 'autorizacao_recusada', { destino: escapar(a.request.redirectUri).slice(0, 120) });
-      return erro('destino não permitido: o acesso só pode ir para o Claude (claude.ai) ou um app neste computador', 403);
+      return erro('destino não permitido: o acesso só pode ir para o Claude, o ChatGPT ou um app neste computador', 403);
     }
     const cli = await oauth.lookupClient(a.request.clientId).catch(() => null);
     const cliente = String(cli?.clientName || a.request.clientId).slice(0, 60);
@@ -735,7 +738,7 @@ button.sec{background:transparent;color:var(--texto);border:1px solid var(--linh
 <h2>Autorizar <strong>${escapar(d.clientName)}</strong> a usar o Controle master?</h2>
 <p>${verificado} O acesso vai para <strong>${escapar(d.redirectHost)}</strong>.</p>${local}
 <p class="suave">O que ele poderá fazer continua limitado pelo painel: desarmado, só infravermelho e consulta; armado (com a sua digital), o resto. Você revoga este acesso no painel quando quiser.</p>
-${ok ? '<button id="btAutorizar">Autorizar com a digital</button>' : '<p class="perigo"><strong>Destino não permitido.</strong> O acesso só pode ir para o Claude (claude.ai) ou um app neste computador.</p>'}
+${ok ? '<button id="btAutorizar">Autorizar com a digital</button>' : '<p class="perigo"><strong>Destino não permitido.</strong> O acesso só pode ir para o Claude, o ChatGPT ou um app neste computador.</p>'}
 <button id="btNegar" class="sec">Negar</button><p id="msg" class="suave" role="status"></p></section></main>
 <script src="/webauthn.js"></script><script src="/autorizar.js"></script></body></html>`;
 }
@@ -865,7 +868,7 @@ function criarProvedor(origem) {
     clientRegistrationCallback: ({ clientMetadata }) => {
       const uris = Array.isArray(clientMetadata.redirect_uris) ? clientMetadata.redirect_uris : [];
       if (!uris.length || !uris.every(destinoPermitido))
-        return { code: 'invalid_redirect_uri', description: 'só o Claude (claude.ai/claude.com) ou um app local podem se registrar', status: 400 };
+        return { code: 'invalid_redirect_uri', description: 'só o Claude, o ChatGPT ou um app local podem se registrar', status: 400 };
     },
   });
 }

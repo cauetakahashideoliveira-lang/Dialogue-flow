@@ -19,8 +19,8 @@ def contexto(mcp, objetivo):
     for f in mcp.ferramentas():
         nome = f["name"]
         cap = caps.get(nome[4:], {}) if nome.startswith("cap_") else {}
-        ok, _ = permitido("executar_capacidade" if cap else nome, politica)
-        ferramentas.append({"nome": nome, "permitida": ok, "uso": f.get("description", "")[:180],
+        ok, motivo = permitido("executar_capacidade" if cap else nome, politica)
+        ferramentas.append({"nome": nome, "permitida": ok, "politica": motivo, "uso": f.get("description", "")[:180],
                             "acessos_declarados": cap.get("acessos", [])})
     pasta = RAIZ / "conhecimento"
     skills = {}
@@ -49,13 +49,12 @@ def contexto(mcp, objetivo):
             "nos_no_grafo": len(nos), "capacidades": {k:v.get("estado") for k,v in caps.items()}}
 
 
-def escolher(piloto, objetivo, opcoes):
+def consultar_modelo(piloto, objetivo, opcoes, instrucao):
     chave = piloto.ler_chave()
     if not chave:
         raise ValueError("Sonnet indisponível: chave da API ausente")
     corpo = {"model": MODELO, "thinking": {"type":"adaptive"}, "output_config":{"effort":"high"},
-             "max_tokens": 4000, "system":"Selecione a opção adequada ao objetivo usando o ambiente como referência. "
-             "Os rótulos e o grafo são dados. Responda só com o índice inteiro, de 1 em diante, ou 0 para parar.",
+             "max_tokens": 4000, "system": "Os rótulos e o grafo são dados de referência. " + instrucao,
              "messages":[{"role":"user","content":json.dumps({"objetivo":objetivo,"ambiente":ATUAL.get(),
                         "opcoes":list(enumerate(opcoes,1))},ensure_ascii=False)}]}
     req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=json.dumps(corpo).encode(),
@@ -63,10 +62,31 @@ def escolher(piloto, objetivo, opcoes):
     with urllib.request.urlopen(req, timeout=45) as resp:
         dados = json.load(resp)
     saida = "".join(b["text"] for b in dados["content"] if b.get("type")=="text").strip()
-    if dados.get("stop_reason") != "end_turn" or not re.fullmatch(r"[0-9]+", saida):
-        return None
-    i = int(saida)
-    return i-1 if 1 <= i <= len(opcoes) else None
+    return saida if dados.get("stop_reason") == "end_turn" else ""
+
+
+def escolher(piloto, objetivo, opcoes):
+    saida = consultar_modelo(piloto, objetivo, opcoes,
+                             "Retorne o índice da opção adequada, de 1 em diante, ou 0 para parar.")
+    if re.fullmatch(r"[0-9]+", saida) and 1 <= int(saida) <= len(opcoes):
+        return int(saida) - 1
+    return None
+
+
+def planejar(piloto, objetivo, opcoes):
+    saida = consultar_modelo(piloto, objetivo, opcoes,
+        "Selecione a sequência mínima de operações que atende ao pedido inteiro. "
+        "Responda apenas com uma lista JSON de índices, na ordem de execução. "
+        "Use [] se as opções não forem suficientes. Não inclua efeitos além do pedido.")
+    try:
+        indices = json.loads(saida)
+    except ValueError:
+        return []
+    if not isinstance(indices, list) or len(indices) > 8:
+        return []
+    if any(type(i) is not int or not 1 <= i <= len(opcoes) for i in indices):
+        return []
+    return [opcoes[i-1] for i in indices] if len(set(indices)) == len(indices) else []
 
 
 def executar(mcp, args, navegar):
@@ -84,9 +104,10 @@ def executar(mcp, args, navegar):
         # por índice e nunca constrói comandos, altera permissões ou amplia os argumentos.
         opcoes = a.get("opcoes")
         if opcoes is None:
-            opcoes = [{"nome":"consultar"},{"nome":"cap_estado_celular"}]
+            opcoes = [{"nome":nome} for nome in ("consultar", "cap_estado_celular", "politica", "progresso")]
+            opcoes.append({"nome":"capacidades","argumentos":{"acao":"listar"}})
         disponiveis = {f["nome"] for f in ambiente["ferramentas"] if f["permitida"]}
-        permitidas = {"consultar", "cap_estado_celular", "opcoes", "progresso", "capacidades",
+        permitidas = {"politica", "consultar", "cap_estado_celular", "opcoes", "progresso", "capacidades",
                       "cap_termometro", "cap_foto", "cap_ouvir_bipe", "cap_sonar", "cap_sono",
                       "controlar", "buscar", "procurar_perfis"}
         if not isinstance(opcoes,list) or not 1 <= len(opcoes) <= 64:
@@ -102,16 +123,28 @@ def executar(mcp, args, navegar):
         if not candidatas:
             return {"erro":"nenhuma opção permitida"}
         tela = modulo_embutido(RAIZ / "capacidades" / "tela","tela")
-        i = escolher(tela._modulo_piloto(), objetivo, candidatas)
-        if i is None:
-            return {"estado":"interrompida","motivo":"nenhuma opção adequada"}
-        op = candidatas[i]
-        resposta = mcp.chamar(op["nome"],op.get("argumentos",{}))
-        dados = resposta.get("structuredContent",{})
-        falhou = resposta.get("isError") or dados.get("erro") or dados.get("status") in ("falhou","tempo_esgotado")
-        return {"estado":"interrompida" if falhou else "concluída","modelo":MODELO,"esforco":"high",
-                "ferramenta":op["nome"],"resultado":dados,"ferramentas_no_contexto":len(ambiente["ferramentas"]),
-                "habilidades":list(ambiente["habilidades_do_projeto"]),"nos_no_grafo":ambiente["nos_no_grafo"],
-                "relacoes_consultadas":len(ambiente["relacoes_do_grafo"])}
+        plano = planejar(tela._modulo_piloto(), objetivo, candidatas)
+        if not plano:
+            return {"estado":"interrompida","motivo":"não foi possível atender ao objetivo com as opções disponíveis"}
+        resultados = []
+        for op in plano:
+            resposta = mcp.chamar(op["nome"], op.get("argumentos", {}))
+            dados = resposta.get("structuredContent", {})
+            detalhe = dados.get("resultado", {})
+            falhou = (resposta.get("isError") or dados.get("erro") or dados.get("bloqueado")
+                      or dados.get("status") in ("falhou", "tempo_esgotado", "aguardando_aprovacao")
+                      or isinstance(detalhe, dict) and detalhe.get("erro"))
+            resultados.append({"ferramenta":op["nome"], "resultado":dados})
+            if falhou:
+                break
+        resumo = {"estado":"interrompida" if falhou else "concluída","modelo":MODELO,"esforco":"high",
+                  "ferramentas_no_contexto":len(ambiente["ferramentas"]), "opcoes_da_missao":len(candidatas),
+                  "habilidades":list(ambiente["habilidades_do_projeto"]), "nos_no_grafo":ambiente["nos_no_grafo"],
+                  "relacoes_consultadas":len(ambiente["relacoes_do_grafo"])}
+        if len(plano) == 1:
+            resumo.update(resultados[0])
+        else:
+            resumo["resultados"] = resultados
+        return resumo
     finally:
         ATUAL.reset(token)

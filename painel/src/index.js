@@ -305,7 +305,7 @@ async function empurrar(env, aparelho, msg = { t: 'sync' }) {
 }
 async function estadoCanal(env, aparelho) {
   try { return await (await canalDe(env, aparelho).fetch('https://canal/estado')).json(); }
-  catch { return { conectado: false }; }
+  catch { return { conectado: null }; }
 }
 async function abrirCanal(req, env) {
   if ((req.headers.get('upgrade') || '').toLowerCase() !== 'websocket') return erro('use WebSocket', 426);

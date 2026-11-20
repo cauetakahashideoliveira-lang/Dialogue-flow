@@ -25,6 +25,11 @@
   .suave { color:var(--suave); font-size:.9rem; } code { background:var(--fundo); padding:2px 6px; border-radius:6px; word-break:break-all; }
   ul { list-style:none; padding:0; margin:0; } li { padding:8px 0; border-bottom:1px solid var(--linha); }
   li:last-child { border:0; } .chip { display:inline-block; font-size:.78rem; padding:2px 8px; margin:2px 4px 2px 0; border-radius:999px; border:1px solid var(--linha); } .chip.vivo { border-color:var(--alerta); color:var(--alerta); font-weight:700; } .chip.ok { color:var(--ok); } .chip.mal { color:var(--perigo); } #telaImg { width:100%; border-radius:12px; border:1px solid var(--linha); background:#000; min-height:120px; } .det { color:var(--suave); font-size:.85rem; word-break:break-word; } .linha-check { display:flex; gap:10px; align-items:flex-start; } .linha-check input { width:auto; margin-top:4px; } #msg { min-height:1.4em; } .escondido { display:none; }
+  .saude { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:8px; margin:12px 0; }
+  .saude li { border:1px solid var(--linha); border-radius:10px; padding:10px; }
+  .saude span,.saude strong { display:block; }
+  .saude span { color:var(--suave); font-size:.85rem; }
+  .saude strong::before { content:"● "; }
 </style>
 </head>
 <body>
@@ -50,7 +55,7 @@
 
   <div id="logado" class="escondido">
     <section>
-      <h2>Celular</h2>
+      <h2>Estado do sistema</h2>
       <div id="celulares"></div>
       <div class="linha"><button id="btArmarDia">Armar até a meia-noite</button><button id="btArmar2">Armar 2 h</button></div>
       <button id="btDesarmar" class="sec">Desarmar</button>

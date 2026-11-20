@@ -55,11 +55,26 @@ function render() {
     const st = el('div', travado ? 'TRAVADO (emergência)' : armado ? `ARMADO até ${hora(e.armado_ate)}` : 'Desarmado',
       `estado ${travado ? 'perigo-t' : armado ? 'alerta' : 'ok'}`);
     const ap = el('div', a.aplicado ? '✓ aplicado no celular' : '… pendente: o celular ainda não confirmou', a.aplicado ? 'ok' : 'alerta');
-    const canal = a.canal && a.canal.conectado
-      ? el('p', `⚡ Conexão direta (canal) ativa desde ${a.canal.desde ? hora(Math.floor(a.canal.desde / 1000)) : '?'}: chamadas sem túnel e avisos na hora`, 'ok')
-      : el('p', 'Conexão pelo túnel (ngrok): o canal direto liga sozinho com a versão 1.0.46+ do celular', 'suave');
-    cel.append(el('strong', a.nome), st, ap, canal,
-      el('p', `Último contato ${ha(a.ultimo_contato)} · versão ${a.versao || '?'} · desarmado permite: ${e.desarmado_permite === 'ir' ? 'infravermelho' : 'só consulta'}`, 'suave'));
+    const contatoRecente = a.ultimo_contato > 0 && agora - a.ultimo_contato <= 90;
+    const relato = a.em_uso_em > 0 && agora - a.em_uso_em <= 90 ? a.em_uso : null;
+    const lista = el('ul', null, 'saude');
+    function indicador(nome, valor, sim, nao) {
+      const medido = typeof valor === 'boolean';
+      const linha = el('li');
+      linha.append(el('span', nome));
+      linha.append(el('strong', medido ? (valor ? sim : nao) : 'Sem confirmação recente',
+        medido ? (valor ? 'ok' : 'perigo-t') : 'suave'));
+      lista.append(linha);
+    }
+    indicador('Sessão do painel', true, 'Autenticada');
+    indicador('Serviço Controle IR', contatoRecente ? true : null, 'Respondendo');
+    indicador('Canal direto', a.canal?.conectado, 'Conectado', 'Desconectado');
+    indicador('Emissor IR', relato?.emissor_ir, 'Disponível', 'Indisponível');
+    indicador('Shizuku', relato?.shizuku, 'Respondendo', 'Falhou na consulta');
+    indicador('Controle armado no celular', contatoRecente && a.aplicado ? Boolean(armado) : null,
+      'Armado', travado ? 'Travado' : 'Desarmado');
+    cel.append(el('strong', a.nome), st, ap, lista,
+      el('p', `Último contato ${ha(a.ultimo_contato)} · versão ${a.versao || '?'} · túnel de reserva: ${e.tem_mcp ? 'endereço cadastrado' : 'sem endereço'}`, 'suave'));
     $('permite').value = e.desarmado_permite;
     const rv = el('button', `Revogar ${a.nome}`, 'sec');
     rv.onclick = () => acao(() => comDigital(() => api('revogar', { tipo: 'aparelho', id: a.id })), 'Celular revogado');

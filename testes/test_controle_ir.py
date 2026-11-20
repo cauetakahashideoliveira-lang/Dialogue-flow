@@ -1450,7 +1450,9 @@ class TestSegundoPlano(unittest.TestCase):
         self.assertTrue(ligar.read_text().rstrip().endswith(" ligar"))
         self.assertIn("termux-wake-lock", ligar.read_text())
         self.assertTrue(desligar.read_text().rstrip().endswith(" desligar"))
-        for f in (ligar, desligar, tarefas, tarefas.parent):
+        reiniciar = tarefas / "Reiniciar Controle IR"
+        self.assertTrue(reiniciar.read_text().rstrip().endswith(" reiniciar"))
+        for f in (ligar, desligar, reiniciar, tarefas, tarefas.parent):
             self.assertEqual(f.stat().st_mode & 0o777, 0o700)
         self.assertTrue((tarefas / "Modo autonomo Controle IR").read_text().rstrip().endswith("exec modo autonomo"))
         self.assertTrue((tarefas / "Travar Controle IR").read_text().rstrip().endswith("exec travar"))
@@ -1471,6 +1473,32 @@ class TestSegundoPlano(unittest.TestCase):
         finally:
             if p.poll() is None:
                 p.kill()
+
+    def test_reiniciar_servico_em_execucao(self):
+        def processo(cmd):
+            return subprocess.Popen([sys.executable, "-m", "controle_ir", cmd], env=self.env,
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, start_new_session=True)
+        processos = []
+        try:
+            primeiro = processo("ligar")
+            processos.append(primeiro)
+            self.assertTrue(self.esperar(lambda: (self.pasta / "servidor.json").is_file() and self.saude()))
+            segundo = processo("reiniciar")
+            processos.append(segundo)
+            self.assertEqual(primeiro.wait(timeout=20), 0)
+            def reiniciado():
+                try:
+                    return json.loads((self.pasta / "servidor.json").read_text())["pid"] == segundo.pid and self.saude()
+                except (OSError, ValueError):
+                    return False
+            self.assertTrue(self.esperar(reiniciado))
+        finally:
+            self.cli("desligar")
+            for p in processos:
+                if p.poll() is None:
+                    p.kill()
+                p.wait()
 
     def test_console_abre_em_segundo_plano_e_sair_nao_derruba(self):
         import pty
@@ -1517,6 +1545,20 @@ class TestTunel(unittest.TestCase):
     def _tunel(self, modo):
         from controle_ir.tunel import Tunel
         return Tunel(8765, {"modo": modo, "dominio": "x.ngrok-free.app"})
+
+    def test_falha_ao_criar_processo_tenta_novamente(self):
+        from unittest import mock
+        t = self._tunel("ngrok")
+        def tentativa(*args, **kwargs):
+            if iniciar.call_count == 2:
+                t.parar_evento.set()
+            raise OSError("falha temporária")
+        with mock.patch.object(t, "limpar_orfaos"), mock.patch("shutil.which", return_value="/bin/ngrok"), \
+                mock.patch.object(t.parar_evento, "wait") as espera, \
+                mock.patch("subprocess.Popen", side_effect=tentativa) as iniciar:
+            t._laco()
+        self.assertEqual(iniciar.call_count, 2)
+        self.assertEqual(espera.call_args_list[0], mock.call(3))
 
     def test_limpa_orfao_so_no_modo_ngrok(self):
         from unittest import mock

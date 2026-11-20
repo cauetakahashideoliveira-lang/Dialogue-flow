@@ -2624,6 +2624,27 @@ class TestPiloto(unittest.TestCase):
         self.assertEqual(len(tocados), 1)  # mesma pergunta não é respondida duas vezes
         self.assertTrue((self.tmp / "rodadas.jsonl").exists())
 
+    def test_sobreposicao_do_sistema_nao_trava_o_piloto(self):
+        url = self._servidor_sse(["2"])
+        barra = [{"texto": "12:00", "pacote": "com.android.systemui", "x": 50, "y": 20, "l": 80, "a": 40}]
+        tela = barra + [dict(e, pacote="com.android.chrome") for e in self.tela()]
+        tocados = []
+        f = {"aguardar": lambda c, ms: (time.sleep(0.01), c + 1)[1], "elementos": lambda: tela,
+             "tocar": lambda x, y: tocados.append((x, y)), "bloqueado": lambda app: app.startswith("com.c6bank")}
+        p = self.m.Piloto(f)
+        p.iniciar({"cerebros": ["local"], "local_url": url, "duracao": 10, "app": "com.android.chrome"})
+        fim = time.time() + 3
+        while not tocados and time.time() < fim:
+            time.sleep(0.02)
+        p.encerrar()
+        self.assertEqual(tocados[:1], [(640, 1420)])  # a barra do sistema na frente não impede de jogar
+        banco = [{"texto": "Saldo", "pacote": "com.c6bank.app", "x": 1, "y": 1, "l": 9, "a": 9}] + tela
+        p = self.m.Piloto(dict(f, elementos=lambda: banco))
+        p.iniciar({"cerebros": ["local"], "local_url": url, "duracao": 10, "app": "com.android.chrome"})
+        time.sleep(0.3)
+        self.assertIn("bloqueado", p.estado()["estado"])  # app de banco na tela: o piloto para
+        p.encerrar()
+
     def test_leitura_rasgada_espera_as_opcoes_novas(self):
         url = self._servidor_sse(["2"])
         q1 = self.tela()

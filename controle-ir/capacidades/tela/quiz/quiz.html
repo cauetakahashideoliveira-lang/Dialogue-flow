@@ -98,7 +98,10 @@ function terminar() {
   f.textContent = `Acertos: ${acertos} de ${ordem.length}. Estouros do prazo: ${estouros}. ` +
     `Tempo mediano: ${pct(0.5)} ms. Pior 5%: ${pct(0.95)} ms. Mais rápido: ${s[0] ?? "-"} ms.`;
 }
-$("iniciar").onclick = () => { ordem = embaralhar(BANCO.slice()); i = 0; acertos = 0; tempos = []; estouros = 0; mostrar(); };
+async function manterAcesa() { try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch (e) {} }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") manterAcesa(); });
+manterAcesa();
+$("iniciar").onclick = () => { manterAcesa(); ordem = embaralhar(BANCO.slice()); i = 0; acertos = 0; tempos = []; estouros = 0; mostrar(); };
 </script>
 </body>
 </html>

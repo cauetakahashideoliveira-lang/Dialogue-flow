@@ -470,13 +470,16 @@ class Piloto:
                 contador = f["aguardar"](contador, 350)  # dorme até a tela mudar (ou 350 ms)
                 t_mud = time.time()
                 els = f["elementos"]()
-                app = next((e.get("pacote") for e in els if e.get("pacote")), "")
-                if cfg.get("app") and app != cfg["app"]:
-                    self.estado_txt = f"esperando o app {cfg['app']}"
-                    continue
-                if f["bloqueado"](app):
-                    self.estado_txt = "app bloqueado: parado"
+                pacotes = collections.Counter(e.get("pacote") for e in els if e.get("pacote"))
+                if any(f["bloqueado"](p) for p in pacotes):
+                    self.estado_txt = "app bloqueado na tela: parado"
                     break
+                if cfg.get("app"):
+                    if cfg["app"] not in pacotes:
+                        self.estado_txt = f"esperando o app {cfg['app']}"
+                        continue
+                    els = [e for e in els if e.get("pacote") in (cfg["app"], None, "")]  # sem sobreposições
+                self.estado_txt = "jogando"
                 q = quiz_da_tela(els, ignorar)
                 if not q:
                     continue
@@ -499,7 +502,10 @@ class Piloto:
                     if (p_ant == p_agora) != (o_ant == o_agora):
                         continue
                 rasgada_desde = None
-                q2 = quiz_da_tela(f["elementos"](), ignorar)  # confirmação: duas leituras iguais seguidas
+                els2 = f["elementos"]()
+                if cfg.get("app"):
+                    els2 = [e for e in els2 if e.get("pacote") in (cfg["app"], None, "")]
+                q2 = quiz_da_tela(els2, ignorar)  # confirmação: duas leituras iguais seguidas
                 if not q2 or chave_quiz(*q2) != chave:
                     continue
                 t_lido = time.time()
@@ -511,7 +517,10 @@ class Piloto:
                 if idx is not None:
                     alvo = opcoes[idx]
                     if cfg.get("conferir", True):  # alvo semântico: relocaliza o texto escolhido na tela de agora
-                        agora = quiz_da_tela(f["elementos"](), ignorar)
+                        agora_els = f["elementos"]()
+                        if cfg.get("app"):
+                            agora_els = [e for e in agora_els if e.get("pacote") in (cfg["app"], None, "")]
+                        agora = quiz_da_tela(agora_els, ignorar)
                         if not agora or norm(agora[0]) != norm(pergunta):
                             self._registrar(pergunta, opcoes, idx, fonte, "descartado: a pergunta mudou", t_mud,
                                             t_lido, t_dec, None, erros)
@@ -531,7 +540,8 @@ class Piloto:
                 self.estado_txt = f"erro: {str(e)[:120]}"
                 time.sleep(0.3)
         gravar_memoria(self.cerebros.memoria)
-        self.estado_txt = "parado"
+        if "bloqueado" not in self.estado_txt:
+            self.estado_txt = "parado"
 
     def _registrar(self, pergunta, opcoes, idx, fonte, motivo, t_mud, t_lido, t_dec, t_toque, erros):
         r = {"t": round(t_mud, 3), "pergunta": pergunta[:160], "opcoes": [o["texto"][:60] for o in opcoes],

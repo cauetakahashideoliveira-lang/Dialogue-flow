@@ -244,37 +244,55 @@ class Cerebros:
             m = re.match(r"^http://([\w.]+):(\d+)", cfg.get("local_url", "http://127.0.0.1:8080"))
             self.local = Conexao(m.group(1), int(m.group(2)), seguro=False) if m else None
         self.memoria = carregar_memoria()
-        # aprendizado durante a partida: o forte confere o local em segundo plano e a exigência de certeza sobe
+        # aprendizado durante a partida: em TODA pergunta em que os dois respondem, o forte serve de gabarito para o
+        # local; a precisão medida do local (com certeza alta) decide se ele pode agir sozinho
         self.limiar = float(cfg.get("confianca", 0.95))
+        self.alvo = float(cfg.get("precisao_alvo", 0.9))
         self.trava = threading.Lock()
-        self.acordos, self.erros_local, self.correcoes = 0, [], collections.deque(maxlen=20)
+        self.acordos, self.discordancias, self.correcoes = 0, 0, collections.deque(maxlen=20)
+
+    def precisao_local(self):
+        """Acerto medido do local quando ele tem certeza alta, com um ponto de partida otimista (9 em 10)."""
+        return (self.acordos + 9) / (self.acordos + self.discordancias + 10)
+
+    def local_pode_sozinho(self, conf):
+        return conf is not None and conf >= self.limiar and self.precisao_local() >= self.alvo
 
     def aprendizado(self):
-        return {"limiar": round(self.limiar, 3), "acordos": self.acordos, "erros_local": list(self.erros_local),
-                "correcoes": list(self.correcoes)[-5:]}
+        return {"limiar": self.limiar, "precisao_local": round(self.precisao_local(), 3), "alvo": self.alvo,
+                "acordos": self.acordos, "discordancias": self.discordancias,
+                "local_sozinho": self.precisao_local() >= self.alvo, "correcoes": list(self.correcoes)[-5:]}
 
-    def _verificar(self, fila, restantes, chave, pergunta, opcoes, idx_local, conf, forca, mais_forte):
-        """O local já tocou sozinho; o mais forte continua e confere. Discordou → o local errou com essa certeza:
-        o limiar sobe acima dela (o rápido só age sozinho quando provou ser confiável) e a memória guarda o certo."""
+    def _julgar(self, chave, pergunta, opcoes, local, forte):
+        """local=(idx, conf) | None; forte=idx | None. Atualiza a memória e a precisão medida do local."""
+        with self.trava:
+            if forte is not None:
+                self.memoria[chave] = opcoes[forte]["texto"]
+            if forte is None or not local or local[1] is None or local[1] < self.limiar:
+                return
+            if local[0] == forte:
+                self.acordos += 1
+            else:
+                self.discordancias += 1
+                self.correcoes.append({"pergunta": pergunta[:100], "local": opcoes[local[0]]["texto"][:40],
+                                       "forte": opcoes[forte]["texto"][:40], "certeza_local": round(local[1], 3)})
+
+    def _completar(self, fila, restantes, chave, pergunta, opcoes, local, forte, forca, mais_forte):
+        """Em segundo plano: espera a peça que falta (o local ou o forte) e julga."""
         fim = time.time() + 8
-        while restantes and time.time() < fim:
+        while restantes and time.time() < fim and (local is None or forte is None):
             try:
                 nome, idx, erro, seg, c = fila.get(timeout=max(0.01, fim - time.time()))
             except queue.Empty:
-                return
+                break
             restantes -= 1
-            if idx is None or forca.get(nome, 0) != mais_forte:
+            if idx is None:
                 continue
-            with self.trava:
-                self.memoria[chave] = opcoes[idx]["texto"]
-                if idx == idx_local:
-                    self.acordos += 1
-                else:
-                    self.erros_local.append(round(conf, 3))
-                    self.limiar = min(1.01, max(self.limiar, conf + 0.005))
-                    self.correcoes.append({"pergunta": pergunta[:100], "local": opcoes[idx_local]["texto"][:40],
-                                           "forte": opcoes[idx]["texto"][:40], "certeza_local": round(conf, 3)})
-            return
+            if nome == "local":
+                local = (idx, c)
+            elif forca.get(nome, 0) == mais_forte:
+                forte = idx
+        self._julgar(chave, pergunta, opcoes, local, forte)
 
     @property
     def api(self):
@@ -347,10 +365,19 @@ class Cerebros:
         if self.local:
             threading.Thread(target=self._local, args=(pergunta, opcoes, fila, t0), daemon=True).start()
             corredores += 1
-        limiar = self.limiar
         forca = {"local": 0, **{m: k + 1 for k, m in enumerate(self.modelos)}}
         mais_forte = max(forca.values()) if self.modelos else 0
-        melhor, erros = None, []  # (força, índice, fonte, segundos)
+        chave = chave_quiz(pergunta, opcoes)
+        melhor, erros, local = None, [], None  # melhor = (força, índice, fonte, segundos)
+
+        def julgar_depois(local_, forte_):
+            if self.modelos and corredores:
+                threading.Thread(target=self._completar, daemon=True,
+                                 args=(fila, corredores, chave, pergunta, opcoes, local_, forte_, forca,
+                                       mais_forte)).start()
+            else:
+                self._julgar(chave, pergunta, opcoes, local_, forte_)
+
         while corredores:
             resto = prazo - (time.time() - t0)
             if resto <= 0:
@@ -364,14 +391,14 @@ class Cerebros:
                 erros.append(f"{nome}: {erro}")
                 continue
             fonte = nome if conf is None else f"{nome} {conf:.0%}"
-            if nome == "local" and (not self.modelos or conf is None or conf >= limiar):
-                if self.modelos and conf is not None and corredores:  # o forte segue conferindo em segundo plano
-                    threading.Thread(target=self._verificar, daemon=True,
-                                     args=(fila, corredores, chave_quiz(pergunta, opcoes), pergunta, opcoes, idx,
-                                           conf, forca, mais_forte)).start()
-                return idx, fonte, seg, erros  # o rápido tem certeza (ou é o único): vai já
+            if nome == "local":
+                local = (idx, conf)
+                if not self.modelos or self.local_pode_sozinho(conf):
+                    julgar_depois(local, None)  # o forte segue e serve de gabarito
+                    return idx, fonte, seg, erros
             if forca[nome] == mais_forte:
-                return idx, fonte, seg, erros  # o mais forte chegou: vai
+                julgar_depois(local, idx)  # o local (se ainda não chegou) é julgado quando chegar
+                return idx, fonte, seg, erros
             if not melhor or forca[nome] > melhor[0]:
                 melhor = (forca[nome], idx, fonte, seg)
         if melhor:

@@ -2568,7 +2568,8 @@ class TestPiloto(unittest.TestCase):
         c = self.m.Cerebros(dict(base, local_url=local("2", 0.40)))
         idx, fonte, seg, _ = c.decidir("p?", ops, 0.15)
         self.assertEqual((idx, fonte), (1, "local 40%"))
-        # aprende durante a partida: o local tocou sozinho (99%), o forte discorda depois → limiar sobe, memória corrige
+        # aprende durante a partida: o local tocou sozinho (99%), o forte discorda depois → a precisão medida cai,
+        # o local deixa de agir sozinho e a memória corrige
         c = self.m.Cerebros(dict(base, local_url=local("1", 0.99)))
         idx, fonte, *_ = c.decidir("Moeda do Japão?", ops, 3)
         self.assertEqual(idx, 0)
@@ -2576,11 +2577,24 @@ class TestPiloto(unittest.TestCase):
         while not c.correcoes and time.time() < fim:
             time.sleep(0.02)
         ap = c.aprendizado()
-        self.assertEqual(ap["erros_local"], [0.99])
-        self.assertGreater(ap["limiar"], 0.99)
+        self.assertEqual(ap["discordancias"], 1)
+        self.assertFalse(ap["local_sozinho"])
         self.assertEqual(c.memoria[self.m.chave_quiz("Moeda do Japão?", ops)], "c")
         idx, fonte, *_ = c.decidir("Moeda do Japão?", ops, 3)
         self.assertEqual((idx, fonte), (2, "memoria"))  # na próxima vez: certo e instantâneo
+        idx, fonte, *_ = c.decidir("Outra?", ops, 3)
+        self.assertEqual(fonte, "forte")  # sem confiança, espera o forte
+        # o forte passa a CONFIRMAR o local (mesmo dígito): a precisão medida volta e o local é liberado de novo
+        c.local = self.m.Cerebros(dict(base, local_url=local("3", 0.99))).local
+        for k in range(18):  # 2 discordâncias: (18+9)/(18+2+10) = 0,90
+            c.decidir(f"Pergunta {k}?", ops, 3)
+        fim = time.time() + 3
+        while not c.aprendizado()["local_sozinho"] and time.time() < fim:
+            time.sleep(0.02)
+        self.assertTrue(c.aprendizado()["local_sozinho"], c.aprendizado())
+        idx, fonte, seg, _ = c.decidir("Mais uma?", ops, 3)
+        self.assertEqual(fonte, "local 99%")
+        self.assertLess(seg, 0.25)
         self.assertEqual(self.m.corpo_api("claude-haiku-5-5", "s", "u")["thinking"], {"type": "disabled"})
         self.assertEqual(self.m.corpo_api("claude-sonnet-5-5", "s", "u")["thinking"], {"type": "between_tools"})
         self.assertNotIn("thinking", self.m.corpo_api("claude-opus-5-5", "s", "u"))

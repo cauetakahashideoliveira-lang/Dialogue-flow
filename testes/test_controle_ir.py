@@ -2568,6 +2568,19 @@ class TestPiloto(unittest.TestCase):
         c = self.m.Cerebros(dict(base, local_url=local("2", 0.40)))
         idx, fonte, seg, _ = c.decidir("p?", ops, 0.15)
         self.assertEqual((idx, fonte), (1, "local 40%"))
+        # aprende durante a partida: o local tocou sozinho (99%), o forte discorda depois → limiar sobe, memória corrige
+        c = self.m.Cerebros(dict(base, local_url=local("1", 0.99)))
+        idx, fonte, *_ = c.decidir("Moeda do Japão?", ops, 3)
+        self.assertEqual(idx, 0)
+        fim = time.time() + 3
+        while not c.correcoes and time.time() < fim:
+            time.sleep(0.02)
+        ap = c.aprendizado()
+        self.assertEqual(ap["erros_local"], [0.99])
+        self.assertGreater(ap["limiar"], 0.99)
+        self.assertEqual(c.memoria[self.m.chave_quiz("Moeda do Japão?", ops)], "c")
+        idx, fonte, *_ = c.decidir("Moeda do Japão?", ops, 3)
+        self.assertEqual((idx, fonte), (2, "memoria"))  # na próxima vez: certo e instantâneo
         self.assertEqual(self.m.corpo_api("claude-haiku-5-5", "s", "u")["thinking"], {"type": "disabled"})
         self.assertEqual(self.m.corpo_api("claude-sonnet-5-5", "s", "u")["thinking"], {"type": "between_tools"})
         self.assertNotIn("thinking", self.m.corpo_api("claude-opus-5-5", "s", "u"))

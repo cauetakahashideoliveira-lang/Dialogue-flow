@@ -244,6 +244,37 @@ class Cerebros:
             m = re.match(r"^http://([\w.]+):(\d+)", cfg.get("local_url", "http://127.0.0.1:8080"))
             self.local = Conexao(m.group(1), int(m.group(2)), seguro=False) if m else None
         self.memoria = carregar_memoria()
+        # aprendizado durante a partida: o forte confere o local em segundo plano e a exigência de certeza sobe
+        self.limiar = float(cfg.get("confianca", 0.95))
+        self.trava = threading.Lock()
+        self.acordos, self.erros_local, self.correcoes = 0, [], collections.deque(maxlen=20)
+
+    def aprendizado(self):
+        return {"limiar": round(self.limiar, 3), "acordos": self.acordos, "erros_local": list(self.erros_local),
+                "correcoes": list(self.correcoes)[-5:]}
+
+    def _verificar(self, fila, restantes, chave, pergunta, opcoes, idx_local, conf, forca, mais_forte):
+        """O local já tocou sozinho; o mais forte continua e confere. Discordou → o local errou com essa certeza:
+        o limiar sobe acima dela (o rápido só age sozinho quando provou ser confiável) e a memória guarda o certo."""
+        fim = time.time() + 8
+        while restantes and time.time() < fim:
+            try:
+                nome, idx, erro, seg, c = fila.get(timeout=max(0.01, fim - time.time()))
+            except queue.Empty:
+                return
+            restantes -= 1
+            if idx is None or forca.get(nome, 0) != mais_forte:
+                continue
+            with self.trava:
+                self.memoria[chave] = opcoes[idx]["texto"]
+                if idx == idx_local:
+                    self.acordos += 1
+                else:
+                    self.erros_local.append(round(conf, 3))
+                    self.limiar = min(1.01, max(self.limiar, conf + 0.005))
+                    self.correcoes.append({"pergunta": pergunta[:100], "local": opcoes[idx_local]["texto"][:40],
+                                           "forte": opcoes[idx]["texto"][:40], "certeza_local": round(conf, 3)})
+            return
 
     @property
     def api(self):
@@ -316,7 +347,7 @@ class Cerebros:
         if self.local:
             threading.Thread(target=self._local, args=(pergunta, opcoes, fila, t0), daemon=True).start()
             corredores += 1
-        limiar = float(self.cfg.get("confianca", 0.95))
+        limiar = self.limiar
         forca = {"local": 0, **{m: k + 1 for k, m in enumerate(self.modelos)}}
         mais_forte = max(forca.values()) if self.modelos else 0
         melhor, erros = None, []  # (força, índice, fonte, segundos)
@@ -334,6 +365,10 @@ class Cerebros:
                 continue
             fonte = nome if conf is None else f"{nome} {conf:.0%}"
             if nome == "local" and (not self.modelos or conf is None or conf >= limiar):
+                if self.modelos and conf is not None and corredores:  # o forte segue conferindo em segundo plano
+                    threading.Thread(target=self._verificar, daemon=True,
+                                     args=(fila, corredores, chave_quiz(pergunta, opcoes), pergunta, opcoes, idx,
+                                           conf, forca, mais_forte)).start()
                 return idx, fonte, seg, erros  # o rápido tem certeza (ou é o único): vai já
             if forca[nome] == mais_forte:
                 return idx, fonte, seg, erros  # o mais forte chegou: vai
@@ -459,8 +494,8 @@ class Piloto:
                         alvo = mesmo[0] if mesmo else alvo
                     f["tocar"](alvo["x"], alvo["y"])
                     toque = time.time()
-                    if fonte not in ("memoria", "chute"):
-                        self.cerebros.memoria[chave] = alvo["texto"]
+                    if fonte and not fonte.startswith(("memoria", "chute", "local")):
+                        self.cerebros.memoria[chave] = alvo["texto"]  # memória só guarda resposta de cérebro forte
                 self._registrar(pergunta, opcoes, idx, fonte, None, t_mud, t_lido, t_dec, toque, erros)
                 ultima = chave
                 if len(self.rodadas) % 5 == 0:
@@ -498,5 +533,6 @@ class Piloto:
         return {"rodando": self.rodando, "estado": self.estado_txt, "desde": int(self.desde) if self.desde else None,
                 "rodadas": len(self.rodadas), "total_ms_p50": pct(0.5), "total_ms_p95": pct(0.95),
                 "fontes": dict(fontes), "chave_api": bool(ler_chave()),
+                "aprendizado": self.cerebros.aprendizado() if self.cerebros else None,
                 "cfg": {k: v for k, v in self.cfg.items() if k != "politica"},
                 "ultimas": list(self.rodadas)[-ultimas:]}

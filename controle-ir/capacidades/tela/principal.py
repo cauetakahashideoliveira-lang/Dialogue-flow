@@ -2176,6 +2176,160 @@ def executar(a):
         _CORTE[0] = 80
 
 
+def navegar(app, objetivo, marcador, controles):
+    from pathlib import Path
+    import hashlib
+    import tempfile
+    if not all(isinstance(x, str) and x.strip() for x in (app, objetivo, marcador)):
+        return {"erro":"informe pacote, objetivo e marcador"}
+    if not isinstance(controles,list) or not 1 <= len(controles) <= 32 or not all(isinstance(c,str) and c for c in controles):
+        return {"erro":"controles inválidos"}
+    if bloqueado(app, bloqueados()):
+        return {"erro":"app bloqueado"}
+    pasta = Path.home() / "agente-dialogue" / "rotas"
+    pasta.mkdir(exist_ok=True, parents=True)
+    chave = hashlib.sha256(json.dumps([app, objetivo, marcador, controles]).encode()).hexdigest()
+    arquivo = pasta / chave
+    memoria = json.loads(arquivo.read_text()) if arquivo.exists() else {}
+    novos = {}
+    consultas = 0
+    feitos = 0
+    inicio = time.monotonic()
+    def resultado(estado):
+        return dict(estado=estado, gestos=feitos, consultas=consultas, ms=round(1000*(time.monotonic()-inicio)))
+    if len(controles) == 1 and _ajudante():
+        campos = " ".join(v.encode().hex() for v in (app, controles[0], marcador))
+        retorno = _ajudante().pedir("navegar " + campos, 4)
+        if retorno in ("feito", "presente"):
+            feitos = int(retorno == "feito")
+            return resultado("objetivo confirmado")
+        if retorno != "indisponivel":
+            return resultado("transição sem confirmação")
+    prazo = 0
+    while feitos <= 8:
+        if foco() != app:
+            return resultado("app indisponível")
+        ev = eventos()
+        els = elementos(dump_ui(), limite=300)
+        nomes = {e[k] for e in els if e.get("pacote")==app for k in ("texto","desc") if e.get(k)}
+        if marcador in nomes:
+            if novos:
+                with tempfile.NamedTemporaryFile(mode="w", dir=pasta, delete=False) as f:
+                    json.dump({**memoria, **novos}, f)
+                os.replace(f.name, arquivo)
+            return resultado("objetivo confirmado")
+        visiveis = sorted(nomes.intersection(controles))
+        estado = json.dumps([visiveis, sorted({e["id"] for e in els if e.get("pacote")==app and e.get("id")}), sorted(e["texto"] or e["desc"] for e in els if e.get("selecionado") and e.get("pacote")==app)], ensure_ascii=False)
+        assinatura = hashlib.sha256(estado.encode()).hexdigest()
+        if (not visiveis or assinatura in novos) and time.monotonic() < prazo:
+            if ev and _ajudante():
+                _ajudante().pedir(f"aguardar {ev[1]} 100", 2)
+            else:
+                time.sleep(0.05)
+            continue
+        if not visiveis or assinatura in novos or feitos == 8:
+            return resultado("sem avanço confirmado")
+        alvo = memoria.get(assinatura)
+        if alvo not in visiveis:
+            if len(visiveis)==1:
+                alvo = visiveis[0]
+            else:
+                opcoes = visiveis + ["Parar"]
+                m = _modulo_piloto()
+                brain = m.Cerebros({"cerebros":["api"], "modelos":[m.MODELO], "pensar":False})
+                idx, _, _, _ = brain.decidir(objetivo, [{"texto":v} for v in opcoes], 5)
+                consultas += 1
+                if idx is None or idx >= len(visiveis):
+                    return resultado("decisão inconclusiva")
+                alvo = visiveis[idx]
+                els = elementos(dump_ui(), limite=300)
+        if foco() != app:
+            return resultado("janela mudou")
+        candidatos = [e for e in els if e.get("pacote")==app and alvo in (e["texto"],e["desc"]) and not e.get("desativado")]
+        clicaveis = [e for e in candidatos if e.get("clicavel")]
+        pontos = {(e["x"],e["y"]) for e in clicaveis or candidatos}
+        if len(pontos) != 1:
+            return resultado("controle ausente ou ambíguo")
+        x,y = pontos.pop()
+        if not _injetar(f"toques 0:30 {x} {y}"):
+            return resultado("controle indisponível")
+        novos[assinatura] = alvo
+        feitos += 1
+        prazo = time.monotonic() + 1.5
+
+
+def navegar_etapas(a):
+    from pathlib import Path
+    import tempfile
+    pacote, nome = a.get("pacote"), a.get("nome")
+    if not isinstance(pacote, str) or not pacote or bloqueado(pacote, bloqueados()):
+        return {"erro": "app indisponível"}
+    cfg = a.get("iniciar") or {}
+    if not isinstance(cfg, dict):
+        return {"erro": "iniciar deve ser um objeto"}
+    pasta = os.path.join(BASE, "rotas_confirmadas")
+    passos = a.get("passos")
+    if nome is None and not cfg.get("marcador"):
+        nome = a.get("texto")
+    def catalogo():
+        rotas = []
+        for arq in sorted(Path(pasta).glob("*.json")):
+            try:
+                dado = json.loads(arq.read_text())
+                if isinstance(dado, dict) and dado.get("pacote") == pacote:
+                    rotas.append(dado["nome"])
+            except (OSError, ValueError, KeyError):
+                continue
+        return sorted(rotas)
+    if a.get("mostrar"):
+        return {"rotas": catalogo()}
+    arquivo = None
+    aprendendo = passos is not None and nome is not None
+    if nome is not None:
+        if not isinstance(nome, str) or not nome.strip() or len(nome) > 160:
+            return {"erro": "nome de rota inválido"}
+        chave = hashlib.sha256(json.dumps([pacote, nome.casefold().strip()]).encode()).hexdigest()
+        arquivo = os.path.join(pasta, chave + ".json")
+        if passos is None:
+            try:
+                with open(arquivo) as f:
+                    registro = json.load(f)
+                    passos = registro.get("passos") if isinstance(registro, dict) else registro
+            except (OSError, ValueError):
+                return {"erro": "rota ainda não aprendida", "rotas": catalogo()}
+    if passos is None:
+        passos = [dict(cfg, texto=a.get("texto"))] if isinstance(cfg, dict) else []
+    if not isinstance(passos, list) or not 1 <= len(passos) <= 8:
+        return {"erro": "informe de uma a oito etapas"}
+    for passo in passos:
+        if not isinstance(passo, dict) or not all(isinstance(passo.get(k), str) and passo[k].strip()
+                for k in ("texto", "marcador")):
+            return {"erro": "etapa sem objetivo ou marcador"}
+        controles = passo.get("controles")
+        if not isinstance(controles, list) or not 1 <= len(controles) <= 32 or not all(
+                isinstance(c, str) and c.strip() for c in controles):
+            return {"erro": "etapa com controles inválidos"}
+    if cfg.get("abrir") is True and foco() != pacote:
+        abriu = agir({"acao":"abrir", "pacote":pacote, "ver_depois":"nada"})
+        limite = time.monotonic() + 2
+        while abriu.get("feito") and foco() != pacote and time.monotonic() < limite:
+            time.sleep(0.05)
+        if foco() != pacote:
+            return {"erro": "app não assumiu o primeiro plano"}
+    medidas = []
+    for passo in passos:
+        r = navegar(a.get("pacote"), passo["texto"], passo["marcador"], passo["controles"])
+        medidas.append(r)
+        if r.get("estado") != "objetivo confirmado":
+            break
+    if aprendendo and len(medidas) == len(passos) and all(r.get("estado") == "objetivo confirmado" for r in medidas):
+        os.makedirs(pasta, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", dir=pasta, delete=False) as f:
+            json.dump({"pacote": pacote, "nome": nome, "passos": passos}, f, ensure_ascii=False)
+        os.replace(f.name, arquivo)
+    return medidas[0] if len(passos) == 1 else {"etapas": medidas}
+
+
 def _executar(a):
     acao = a.get("acao")
     try:
@@ -2190,6 +2344,8 @@ def _executar(a):
                     so_mudancas=bool(a.get("so_mudancas")), formato=a.get("formato", "curto"))
         elif acao == "grade":
             r = grade(a)
+        elif acao == "navegar":
+            r = navegar_etapas(a)
         elif acao == "rotina":
             r = rotina(a)
         elif acao == "fechar_anuncio":

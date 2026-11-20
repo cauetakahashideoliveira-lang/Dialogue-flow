@@ -116,6 +116,7 @@ public class Tela {
         if (c.equals("ping") || c.equals("sair")) return "ok";
         if (c.equals("shell")) return shell(deHex(p.length > 2 ? p[2] : ""), p.length > 3 ? i(p[3]) : 30000);
         UiAutomation u = conectar();
+        if (c.equals("navegar")) return navegar(u, deHex(p[2]), deHex(p[3]), deHex(p[4]));
         if (c.equals("dump")) return dump(u);
         if (c.equals("foco")) return foco(u);
         if (c.equals("estado")) return foco(u) + "\n" + acesa();
@@ -332,6 +333,59 @@ public class Tela {
     }
 
     // ------------------------------------------------------------------ leitura (mesmo XML do uiautomator dump)
+    static boolean corresponde(AccessibilityNodeInfo n, String pacote, String rotulo) {
+        return n != null && pacote.equals(String.valueOf(n.getPackageName())) && n.isVisibleToUser()
+            && (rotulo.equals(String.valueOf(n.getText())) || rotulo.equals(String.valueOf(n.getContentDescription())));
+    }
+
+    static boolean selecionado(AccessibilityNodeInfo root, String pacote, String rotulo) {
+        for (AccessibilityNodeInfo n : root.findAccessibilityNodeInfosByText(rotulo)) {
+            if (corresponde(n, pacote, rotulo) && (n.isSelected() || (n.isCheckable() && n.isChecked()))) return true;
+        }
+        return false;
+    }
+
+    static String navegar(UiAutomation u, String pacote, String alvo, String marcador) {
+        boolean tocou = false;
+        long desde = 0, selecaoDesde = 0;
+        long fim = SystemClock.uptimeMillis() + 2200;
+        do {
+            AccessibilityNodeInfo root = u.getRootInActiveWindow();
+            if (root == null || !pacote.equals(String.valueOf(root.getPackageName()))) return tocou ? "interrompido" : "indisponivel";
+            boolean presente = false;
+            for (AccessibilityNodeInfo n : root.findAccessibilityNodeInfosByText(marcador)) {
+                if (corresponde(n, pacote, marcador)) { presente = true; break; }
+            }
+            if (presente) {
+                long agora = SystemClock.uptimeMillis();
+                if (desde == 0) desde = agora;
+                // Dois sinais independentes: conteúdo do destino e controle ativo.
+                boolean ativo = selecionado(root, pacote, alvo);
+                if (!ativo) selecaoDesde = 0;
+                else if (selecaoDesde == 0) selecaoDesde = agora;
+                if ((ativo && agora - selecaoDesde >= 24) || agora - desde >= 180) return tocou ? "feito" : "presente";
+                SystemClock.sleep(ativo ? 24 : 30);
+                continue;
+            }
+            desde = selecaoDesde = 0;
+            if (!tocou) {
+                AccessibilityNodeInfo botao = null;
+                for (AccessibilityNodeInfo n : root.findAccessibilityNodeInfosByText(alvo)) {
+                    if (!corresponde(n, pacote, alvo)) continue;
+                    while (n != null && !n.isClickable()) n = n.getParent();
+                    if (n == null || !n.isEnabled() || !pacote.equals(String.valueOf(n.getPackageName()))) continue;
+                    if (botao != null && !botao.equals(n)) return "indisponivel";
+                    botao = n;
+                }
+                if (botao == null) return "indisponivel";
+                if (!botao.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return "indisponivel";
+                tocou = true;
+            }
+            SystemClock.sleep(16);
+        } while (SystemClock.uptimeMillis() < fim);
+        return "interrompido";
+    }
+
     static String dump(UiAutomation u) {
         StringBuilder sb = new StringBuilder("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation=\"0\">");
         AccessibilityNodeInfo raiz = null;

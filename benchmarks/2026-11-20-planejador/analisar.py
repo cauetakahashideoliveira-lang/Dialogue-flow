@@ -62,8 +62,20 @@ def analisar(linhas):
                         pedidos_com_resultado_variavel=sum(len(set(xs))>1 for xs in grupos_pedido.values()),
                         erros_transporte=sum(bool(r["erro"] and not r["estado"]) for r in grupo))
     pares = collections.Counter((a["acerto"],b["acerto"]) for a,b in zip(grupos[BASE],grupos[CANDIDATA]))
+    sucessos_pareados = [(a,b) for a,b in zip(grupos[BASE],grupos[CANDIDATA])
+                         if a["acerto"] and b["acerto"] and a["esperado"]]
+    tempos_pareados = {
+        "n": len(sucessos_pareados),
+        "mediana_diferenca_ms": statistics.median(b["ms"]-a["ms"] for a,b in sucessos_pareados)
+                                if sucessos_pareados else None,
+    }
+    por_tamanho = {
+        ver: {str(n):sum(r["acerto"] for r in grupo if len(r["esperado"])==n) for n in range(4)}
+        for ver,grupo in grupos.items()
+    }
     s=stats[CANDIDATA]
-    return {"versoes":stats,"pares":{"ambas_passam":pares[True,True],"melhorou":pares[False,True],
+    return {"versoes":stats,"tempos_pareados_viaveis":tempos_pareados,
+            "acertos_por_tamanho_do_pedido":por_tamanho,"pares":{"ambas_passam":pares[True,True],"melhorou":pares[False,True],
                                     "regrediu":pares[True,False],"ambas_falham":pares[False,False]},
             "aprovada_na_bateria":s["viaveis"]>=54 and s["inviaveis"]==20 and s["extras"]==0}
 

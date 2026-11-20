@@ -64,6 +64,29 @@ class PlanoTest(unittest.TestCase):
                 self.assertEqual(mcp.chamar.call_count,n)
                 self.assertIsNone(agente.ATUAL.get())
 
+    def test_bloqueio_entre_etapas_conserva_o_primeiro_recibo(self):
+        from types import SimpleNamespace
+        from controle_ir.mcp import ServidorMCP
+        opcoes = [{"nome":"progresso"}, {"nome":"capacidades","argumentos":{"acao":"listar"}},
+                  {"nome":"consultar"}]
+        ctx = {"ferramentas":[{"nome":o["nome"],"permitida":True} for o in opcoes],
+               "habilidades_do_projeto":{}, "nos_no_grafo":0, "relacoes_do_grafo":[]}
+        servico = Mock()
+        servico.progresso.return_value = {"estado":"parada"}
+        servico.exec.politica.efetiva.side_effect = [
+            {"travado":False, "armado_ate":9999999999}, {"travado":True}]
+        mcp = ServidorMCP(servico)
+        with patch.object(agente,"contexto",return_value=ctx), patch.object(agente,"planejar",return_value=opcoes), \
+                patch("controle_ir.capacidades.modulo_embutido",return_value=SimpleNamespace(_modulo_piloto=lambda:None)):
+            r = agente.executar(mcp,{"argumentos":{"texto":"teste","opcoes":opcoes}},None)
+        self.assertEqual(r["codigo"],"execucao_falhou")
+        self.assertEqual([x["ferramenta"] for x in r["resultados"]],["progresso","capacidades"])
+        self.assertEqual(r["resultados"][0]["resultado"],{"estado":"parada"})
+        self.assertTrue(r["resultados"][1]["resultado"]["bloqueado"])
+        servico.progresso.assert_called_once()
+        servico.capacidades.assert_not_called()
+        servico.consultar.assert_not_called()
+
     def test_permissao_antes_de_consultar_modelo(self):
         ctx = {"ferramentas":[{"nome":o["nome"],"permitida":False} for o in OPCOES]}
         with patch.object(agente,"contexto",return_value=ctx), patch.object(agente,"planejar") as decidir:

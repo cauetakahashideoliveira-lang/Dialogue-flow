@@ -2241,8 +2241,12 @@ def navegar(app, objetivo, marcador, controles, descobrir=False):
             else:
                 opcoes = visiveis + ["Parar"]
                 m = _modulo_piloto()
-                brain = m.Cerebros({"cerebros":["api"], "modelos":[m.MODELO], "pensar":False})
-                idx, _, _, _ = brain.decidir(objetivo, [{"texto":v} for v in opcoes], 5)
+                from controle_ir import ambiente_missao
+                if ambiente_missao.ATUAL.get() is not None:
+                    idx = ambiente_missao.escolher(m, objetivo, opcoes)
+                else:
+                    brain = m.Cerebros({"cerebros":["api"], "modelos":[m.MODELO], "pensar":False})
+                    idx, _, _, _ = brain.decidir(objetivo, [{"texto":v} for v in opcoes], 5)
                 consultas += 1
                 if idx is None or idx >= len(visiveis):
                     return resultado("decisão inconclusiva")
@@ -2356,9 +2360,9 @@ def _executar(a):
             from controle_ir import missao
             def escolher(objetivo, pedido, rotas):
                 m = _modulo_piloto()
-                agente = m.Cerebros({"cerebros": ["api"], "modelos": [m.MODELO], "pensar": False})
-                opcoes = [{"texto": nome} for nome in rotas] + [{"texto": "Nenhuma rota compatível"}]
-                i, _, _, _ = agente.decidir(f"Missão: {objetivo}. Escolha a rota que cumpre exatamente a etapa: {pedido}. Se nenhuma cumprir, escolha a última opção.", opcoes, 6)
+                from controle_ir import ambiente_missao
+                opcoes = rotas + ["Nenhuma rota compatível"]
+                i = ambiente_missao.escolher(m, f"Missão: {objetivo}. Etapa: {pedido}", opcoes)
                 return rotas[i] if i is not None and 0 <= i < len(rotas) else None
             r = missao.executar(a, navegar_etapas, escolher)
         elif acao == "navegar":
@@ -2386,3 +2390,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

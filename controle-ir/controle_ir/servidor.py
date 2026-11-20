@@ -261,7 +261,17 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
             return False
         return bool(t) and hmac.compare_digest(str(t).encode(), local.encode())
 
+    def rota_local(dados):
+        args = {"acao": "navegar", "pacote": dados["pacote"]}
+        if dados.get("nome"):
+            args.update(nome=dados["nome"], iniciar={"abrir": True})
+        else:
+            args["mostrar"] = True
+        envelope = mcp.chamar("cap_tela", args)["structuredContent"]
+        return envelope.get("resultado", envelope)
+
     acoes = {
+        "rota": rota_local,
         "pausar": lambda d: servico.pausar(origem=d.get("origem", "painel")),
         "retomar": lambda d: servico.retomar(d.get("intervalo"), d.get("a_partir_de")),
         "retestar": lambda d: servico.retestar([int(d["numero"])], d.get("intervalo")),

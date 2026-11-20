@@ -2726,6 +2726,12 @@ class TestPiloto(unittest.TestCase):
             def lance(self, fen_, ms):
                 return next(self.lances)
 
+            def tab_apos(self, fen_, movimento):
+                tab = list(estado["tab"])
+                origem, destino = idx[movimento[:2]], idx[movimento[2:]]
+                tab[destino], tab[origem] = tab[origem], "."
+                return "".join(tab)
+
             def fechar(self):
                 pass
         m.Motor = MotorFalso

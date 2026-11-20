@@ -1077,6 +1077,9 @@ def main(argv=None):
     sub.add_parser("reiniciar", help="reinicia o serviço e suas conexões, preservando a configuração")
     sub.add_parser("ligar", help="liga em segundo plano e avisa na tela (atalho do Termux:Widget)")
     sub.add_parser("desligar", help="encerra o serviço e avisa na tela (libera a bateria)")
+    pr = sub.add_parser("rota", help="lista ou executa uma rota no celular pelo MCP local")
+    pr.add_argument("pacote")
+    pr.add_argument("nome", nargs="?")
     pk = sub.add_parser("capacidade", help="capacidades plugáveis: listar, ver, aprovar, recusar, remover, executar")
     pk.add_argument("acao", choices=["listar", "ver", "aprovar", "recusar", "remover", "executar"])
     pk.add_argument("nome", nargs="?")
@@ -1136,6 +1139,14 @@ def main(argv=None):
         return inicio_automatico(a.acao, a.silencioso)
     if cmd == "atalhos":
         return criar_atalhos(a.silencioso)
+    if cmd == "rota":
+        from .rotas import executar
+        resultado = executar(a.pacote, a.nome)
+        print(json.dumps(resultado, ensure_ascii=False))
+        if not a.nome:
+            return 0 if "rotas" in resultado else 1
+        etapas = resultado.get("etapas", [resultado])
+        return 0 if etapas and all(e.get("estado") == "objetivo confirmado" for e in etapas) else 1
     if cmd == "capacidade":
         return capacidade_cli(a)
     if cmd == "exec":

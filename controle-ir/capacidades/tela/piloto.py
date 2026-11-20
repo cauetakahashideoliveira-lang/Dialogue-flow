@@ -499,6 +499,24 @@ class Motor:
         r = self._ate("bestmove").split()
         return r[1] if len(r) > 1 and r[1] != "(none)" else None
 
+    def tab_apos(self, posicao, movimentos):
+        self._mandar(f"position fen {posicao} moves {movimentos}")
+        self._mandar("d")
+        linhas = self._ate("Fen:").split()[1].replace("/", "")
+        return "".join("." * int(c) if c.isdigit() else c for c in linhas)
+
+    def respostas(self):
+        self._mandar("go perft 1")
+        while True:
+            linha = self.p.stdout.readline()
+            if not linha:
+                raise RuntimeError("o motor fechou")
+            if linha.startswith("Nodes searched:"):
+                return
+            lance, separador, total = linha.strip().partition(": ")
+            if separador and total == "1":
+                yield lance
+
     def fechar(self):
         try:
             self._mandar("quit")
@@ -589,11 +607,14 @@ class Piloto:
                 t_lido = time.time()
                 n = len(self.rodadas)  # relógio: pensa menos conforme a partida se alonga (bullet não perde no tempo)
                 ms_agora = ms if n < 30 else (max(100, ms // 2) if n < 50 else 100)
-                lance = motor.lance(fen(tab, cor), ms_agora)
+                posicao = fen(tab, cor)
+                lance = motor.lance(posicao, ms_agora)
                 t_dec = time.time()
                 if not lance:
                     self.estado_txt = "fim de jogo (sem lance)"
                     break
+                esperado = motor.tab_apos(posicao, lance)
+                respostas = None
                 a, b = casas[lance[:2]], casas[lance[2:4]]
                 f["tocar"](a[0], a[1])
                 time.sleep(0.06)
@@ -611,8 +632,17 @@ class Piloto:
                     c2 = f["casas"]()
                     if c2:
                         t2 = tabuleiro_txt(c2)
-                        if t2 != tab and quem_mexeu(tab, t2) == cor:
-                            visto, ok = t2, True
+                        if t2 == esperado:
+                            visto, ok = esperado, True
+                            break
+                        if t2 != tab and quem_mexeu(esperado, t2) not in (None, cor):
+                            if respostas is None:
+                                legais = list(motor.respostas())
+                                respostas = {motor.tab_apos(posicao, f"{lance} {r}") for r in legais}
+                            if t2 not in respostas:
+                                continue
+                            # A próxima leitura compara a resposta do robô com nosso lance.
+                            visto, ok = esperado, True
                             break
                 if not ok:
                     meu_ultimo = "refazer"

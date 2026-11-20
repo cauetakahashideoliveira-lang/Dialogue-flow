@@ -41,6 +41,10 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **20/11 — Passagem de bastão (1.0.63):** guia `docs/HANDOFF.md` (arquitetura, publicação, credenciais sem valores,
+  o que existe só no celular e como recriar, migração para outro repositório). Repositório das atualizações
+  configurável no celular (`~/.controle-ir/repositorio` ou `CONTROLE_IR_REPO`; padrão: este repositório).
+  Varredura de segredos em arquivos e em todo o histórico: nada encontrado. Branch de trabalho juntada à principal.
 - **20/11 — Teste final: vitória contra o "Máximo" (3200) no bullet 1 min (1.0.62):** motor com 7 threads, hash
   256 MB, 0,4 s/lance até o 30º, 0,2 s até o 50º, 0,1 s depois. **Vitória por xeque-mate em 65 lances**, mediana
   0,62 s/lance (p95 0,76 s); avaliação do app: 39 "Melhor", 14 "Ótimo", 1 "Excelente". Para chegar ao Máximo:

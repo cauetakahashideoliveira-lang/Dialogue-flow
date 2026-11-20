@@ -2439,6 +2439,27 @@ class TestSonar(unittest.TestCase):
         self.assertEqual((nomes.get("sono"), nomes.get("sonar")), ("ativa", "ativa"))
 
 
+
+class TestRepositorio(unittest.TestCase):
+    """De onde o celular baixa as atualizações (para continuar o projeto em outro repositório)."""
+
+    def test_padrao_arquivo_ambiente_e_invalido(self):
+        from controle_ir import cli
+        pasta = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, pasta, True)
+        antes = cli.PASTA
+        cli.PASTA = pasta
+        self.addCleanup(setattr, cli, "PASTA", antes)
+        os.environ.pop("CONTROLE_IR_REPO", None)
+        self.assertEqual(cli.repositorio(), cli.REPO_PADRAO)
+        (pasta / "repositorio").write_text("https://github.com/outro-dev/novo-repo/\n")
+        self.assertEqual(cli.repositorio(), "https://github.com/outro-dev/novo-repo")
+        (pasta / "repositorio").write_text("https://exemplo.com/malicioso; rm -rf ~")
+        self.assertEqual(cli.repositorio(), cli.REPO_PADRAO)  # só aceita uma URL do GitHub limpa
+        os.environ["CONTROLE_IR_REPO"] = "https://github.com/a/b"
+        self.addCleanup(os.environ.pop, "CONTROLE_IR_REPO", None)
+        self.assertEqual(cli.repositorio(), "https://github.com/a/b")
+
 class TestPiloto(unittest.TestCase):
     """Piloto: o laço rápido no celular (percepção do quiz, memória, corrida de cérebros com streaming)."""
 

@@ -1,5 +1,6 @@
 # Contexto para o Claude Code
 
+- **Passagem de bastão / outro repositório:** `docs/HANDOFF.md` (visão geral, publicação, credenciais, migração).
 - Leia primeiro `graphify-out/GRAPH_REPORT.md` (grafo do código) e `docs/estado-atual.md` (instalação real do usuário).
 - **Para operar aparelhos**, use `docs/aparelhos/README.md`: mapa cômodo → aparelho → controle, com uma ficha por
   aparelho (nome exato no conector, perfil, comandos testados, sinais extras `.ir`, ressalvas). Ao cadastrar ou

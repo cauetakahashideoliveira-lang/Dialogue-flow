@@ -1,5 +1,7 @@
 # Controle IR do POCO + Claude
 
+> **Vai continuar o projeto (outro dev/outro repositório)?** Comece por [`docs/HANDOFF.md`](docs/HANDOFF.md) — arquitetura, como publicar, o que existe só no celular, credenciais e como migrar.
+
 Controle remoto infravermelho universal para o **POCO X8 Pro Max** (ou qualquer Android com emissor IR),
 comandado pelo **Claude** numa conversa normal, inclusive pelo app do celular, por meio de um conector **MCP**.
 

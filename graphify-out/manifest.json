@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795136580.4814909,
-    "seen": 1795136582.4284515,
-    "ast_hash": "f6e041616a2ee026cc51107ae4653175",
+    "mtime": 1795140074.9691358,
+    "seen": 1795140077.9727538,
+    "ast_hash": "044a07e9cfd8d22d1316f08024064623",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -24,9 +24,9 @@
     "semantic_hash": "f663f17f7f72ef3d2bf1b48b8afa022b"
   },
   "controle-ir/controle_ir/cli.py": {
-    "mtime": 1795115676.2695968,
-    "seen": 1795115786.1352057,
-    "ast_hash": "04bf32eb8ef836384ae5903b8db63c68",
+    "mtime": 1795139941.306823,
+    "seen": 1795140077.972836,
+    "ast_hash": "d57d40c6ba037e09fdf0cbdfaa3ad482",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/controle.py": {
@@ -126,15 +126,15 @@
     "semantic_hash": "7412aa1ac0ae2377aea28c4b62ac429f"
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1795136012.5585725,
-    "seen": 1795136086.4796026,
-    "ast_hash": "026fe9964208ce5699838a4cb29ec89d",
+    "mtime": 1795139933.9022784,
+    "seen": 1795140077.973211,
+    "ast_hash": "8ab2746f89ead76f1b05e362f1055099",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795047157.7275045,
-    "seen": 1795056158.8514278,
-    "ast_hash": "dcee1866bea5b5cee09ef94bfa9a77d9",
+    "mtime": 1795140019.9346974,
+    "seen": 1795140077.9732285,
+    "ast_hash": "3911efefbc2ffd77204a5f885c1f0a09",
     "semantic_hash": ""
   },
   "controle-ir/LICENCAS/Flipper-IRDB-CC0.txt": {
@@ -162,15 +162,15 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795130725.277246,
-    "seen": 1795130728.5737307,
-    "ast_hash": "925cbf037fbb3bf0ff0e8f5469b8535f",
+    "mtime": 1795140019.935416,
+    "seen": 1795140077.973227,
+    "ast_hash": "ae252673993f90493a06b29699efc459",
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795136448.299546,
-    "seen": 1795136582.4291253,
-    "ast_hash": "6f0adcd85cdb34fc3ac10c3f5e7312fa",
+    "mtime": 1795140074.9651964,
+    "seen": 1795140077.9735203,
+    "ast_hash": "56d9b7ff482231b0b614b950fd7eee8f",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -453,6 +453,12 @@
     "mtime": 1795135382.4147935,
     "seen": 1795135509.9288611,
     "ast_hash": "fd9bbe01bc5db742c71062804b15bd1f",
+    "semantic_hash": ""
+  },
+  "docs/HANDOFF.md": {
+    "mtime": 1795140074.9458132,
+    "seen": 1795140077.9733453,
+    "ast_hash": "98ee711bbcf65ac77070d7c713e03c0b",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

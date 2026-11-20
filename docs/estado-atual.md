@@ -41,6 +41,10 @@
 7. Ideias registradas em `docs/modo-deus.md` → "Novas frentes (pesquisa de 19/11)", para quando o usuário quiser.
 
 ## Histórico de 19/11 (mais recente primeiro)
+- **20/11 — Teste final: vitória contra o "Máximo" (3200) no bullet 1 min (1.0.62):** motor com 7 threads, hash
+  256 MB, 0,4 s/lance até o 30º, 0,2 s até o 50º, 0,1 s depois. **Vitória por xeque-mate em 65 lances**, mediana
+  0,62 s/lance (p95 0,76 s); avaliação do app: 39 "Melhor", 14 "Ótimo", 1 "Excelente". Para chegar ao Máximo:
+  "Jogar com Bots" → fim da lista → bloco "Engine" → arrastar o controle do topo até o fim ("Máximo 3200").
 - **20/11 — Piloto no xadrez contra robôs (1.0.61):** modo `xadrez` (Stockfish 19 residente do `pkg`, `ms_lance`
   200–300): lê o tabuleiro pela acessibilidade, percebe a vez pela peça que se mexeu, confirma o lance. Trava:
   só com a atividade de partida contra robô em primeiro plano (`partida_contra_robo`; para sozinho ao sair).

@@ -1,5 +1,7 @@
 # Segurança do controle-ir: administração externa, armação e auditoria
 
+Este documento reúne decisões e propostas datadas. Para configurar a Central, o cliente ChatGPT ou Claude e um aparelho em outra conta, siga o [guia de contribuição](../CONTRIBUTING.md). A [passagem de bastão](HANDOFF.md) identifica os fluxos incluídos nas versões publicadas.
+
 Princípio: **capacidade ≠ permissão**. O celular implementa tudo o que é possível fazer; o que pode ser usado em
 cada momento é concedido de fora do agente, por prazo, e pode ser reduzido ou revogado a qualquer hora.
 

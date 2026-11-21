@@ -1,4 +1,6 @@
-# Estado atual da instalação (19/11/2026)
+# Diário da instalação de referência
+
+A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
 ## Resumo (fim do dia 19/11)
 - **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.28**, pareado com a
@@ -27,7 +29,7 @@
   está na branch `ccr-045ba202-fbl2x4` (bem à frente da padrão). 113 testes (com os 18 da god-mode). PR #5 (hook que instala o
   graphify e o numpy nas sessões na nuvem) aberto contra a padrão.
 
-## Pendências (próxima conversa)
+## Pendências anotadas em 19/11
 1. **Agente de tela:** usar pelo Gênio; ideia: `abrir` aceitar intent (ex.: `android.intent.action.POWER_USAGE_SUMMARY`
    abre a Bateria direto) e uma ação de sequência que confere o app em primeiro plano antes de cada toque.
 2. **Testar sono e sonar** (instalados na 1.0.20): o sonar parado e mexendo o braço; uma noite do laboratório do sono.

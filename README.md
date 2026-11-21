@@ -1,9 +1,10 @@
-# Controle IR do POCO + Claude
+# Dialogue-flow · Controle do Android pelo ChatGPT e pelo Claude
 
-> **Vai continuar o projeto (outro dev/outro repositório)?** Comece por [`docs/HANDOFF.md`](docs/HANDOFF.md) — arquitetura, como publicar, o que existe só no celular, credenciais e como migrar.
+O Dialogue-flow transforma um Android com Termux em servidor MCP. O ChatGPT ou o Claude pode enviar um objetivo e receber o resultado do aparelho. O POCO executa o infravermelho, os gestos e os motores locais. Nas missões com Sonnet, a decisão usa a API Anthropic e o celular executa e confere as etapas.
 
-Controle remoto infravermelho universal para o **POCO X8 Pro Max** (ou qualquer Android com emissor IR),
-comandado pelo **Claude** numa conversa normal, inclusive pelo app do celular, por meio de um conector **MCP**.
+**Para começar como desenvolvedor**, rode o teste do SDK com o emissor simulado. Ele funciona no computador ou em um ambiente de desenvolvimento na nuvem. [Instalação, testes e primeiro PR](CONTRIBUTING.md)
+
+**Para continuar o projeto**, consulte a arquitetura, o histórico dos PRs, as medições de velocidade e autonomia e as próximas verificações. [Passagem de bastão](docs/HANDOFF.md)
 
 > “Ligue o ar do quarto em 23 °C, modo frio, ventilação baixa.”  
 > “Descubra qual controle funciona nesse ventilador. Não sei a marca.”  
@@ -11,13 +12,14 @@ comandado pelo **Claude** numa conversa normal, inclusive pelo app do celular, p
 
 ## Como funciona
 
-```
-Claude (app/web) ──HTTPS──▶ túnel Cloudflare ──▶ Termux no POCO (127.0.0.1:8765)
-                                                   ├─ servidor MCP  (/mcp/<segredo>)
-                                                   ├─ painel local  (/painel)
-                                                   ├─ catálogo SQLite (≈640 perfis base; ≈9 mil com o ampliado)
-                                                   └─ termux-infrared-transmit ─▶ emissor IR do Android
-```
+A Central de Controle recebe o cliente em HTTPS no caminho `/mcp`, autentica por OAuth e encaminha a chamada ao Termux. O Android abre um WebSocket para a Central. Se o canal estiver indisponível, a Central pode usar o túnel configurado. Em instalações independentes, o serviço também oferece acesso direto pela URL privada do túnel.
+
+| Onde roda | Responsabilidade |
+|---|---|
+| ChatGPT ou Claude | Solicitar a operação e apresentar o resultado. |
+| Worker Cloudflare | Passkeys, OAuth, estado do aparelho, auditoria e transporte. As mensagens MCP de manutenção podem terminar aqui. |
+| Android com Termux | Política do aparelho, catálogo IR, capacidades e execução das missões. O leitor de tela usa Shizuku. |
+| Motores | Stockfish roda no telefone. O piloto pode usar memória, modelo local ou API. O planejador usa Sonnet com o contexto da missão. |
 
 | Peça | O que faz |
 |---|---|
@@ -102,18 +104,11 @@ Com o início automático ativado, digitar `controle-ir` também abre o serviço
 fecham só o console, e o conector continua no ar. `parar` (no console) ou `controle-ir parar` encerra o serviço.
 Para desligar: `controle-ir inicio-automatico nao`. Conferir: `controle-ir status`.
 
-## Conectar ao Claude
+## Conectar ao ChatGPT ou ao Claude
 
-* **Pro/Max (individual):** em claude.ai, *Personalizar → Conectores* → **+ Adicionar** →
-  **Adicionar conector personalizado** → nome `Controle do POCO` → cole a URL → *Continuar* →
-  autenticação **Sem login** (*No sign in*) → **Adicionar**. No plano gratuito cabe um conector personalizado.
-* **Team/Enterprise:** um proprietário cadastra em *Configurações da organização → Conectores* → **Adicionar** →
-  *Personalizado* → *Web* (mesmos campos); depois cada pessoa abre *Personalizar → Conectores* e clica
-  **Conectar**.
-* Numa conversa, ative o conector pelo botão **+** → *Conectores*. Conectores remotos funcionam também nos apps
-  do celular.
+Para uma instalação pareada, cadastre a URL HTTPS da sua Central terminada em `/mcp` e conclua o OAuth com a passkey. A primeira chamada recomendada é `consultar`. Confira a versão, o canal e o catálogo retornados pelo seu aparelho. O guia traz o procedimento para criar uma Central e conectar outra conta. [Configurar o cliente e o aparelho](CONTRIBUTING.md#usar-uma-conta-e-um-aparelho-próprios)
 
-Primeiro teste: peça “use a ferramenta consultar”. A resposta traz as marcas reais do catálogo do POCO.
+Em uma instalação independente que usa o túnel direto, o Termux fornece uma URL privada com segredo e o cliente usa o transporte HTTP sem o fluxo OAuth da Central. Se o dono ativou **Só pelo painel**, use o endereço da Central.
 
 ## Uso no dia a dia
 
@@ -221,7 +216,7 @@ O servidor relê as pastas a cada chamada: não precisa reiniciar.
 * `controle-ir origens` mostra de onde vêm as chamadas ao conector; `controle-ir origens exigir` aceita só
   a rede da Anthropic (`160.79.104.0/21`). Confirme primeiro no modo observar (padrão).
 
-## O que foi verificado e o que depende do seu POCO
+## Cobertura dos testes
 
 | Verificado por software (neste repositório) | Depende do POCO e de um aparelho físico |
 |---|---|
@@ -230,17 +225,19 @@ O servidor relê as pastas a cada chamada: não precisa reiniciar.
 | 161.666 sinais do catálogo base convertem para transmissão válida (≤ 2 s) | Tempo de resposta do Termux:API em cada envio |
 | Planejador: ar-condicionado SmartIR (pedido composto, só temperatura, oscilação ausente, desligar), ventilador Flipper (alternância, saturação, falha no meio), projetor (HDMI 2 direto), fita LED (cor) | Notificação e botões no HyperOS |
 | Descoberta: pausa < 3 s, suspeitos, reteste, confirmação, distinção até 1 perfil, lote, retomada após reinício | Túnel `cloudflared` na rede do celular |
-| MCP: 58 testes automatizados (incluindo resumo dos aparelhos e serviço em segundo plano) + cliente oficial do SDK MCP (protocolo 2026-07-28 negociado para 2025-11-25) | Cadastro do conector na sua conta do Claude |
+| Transporte e ferramentas MCP, com testes do serviço e um roteiro de ponta a ponta usando o SDK oficial e o emissor simulado | Cadastro do conector na sua própria conta do ChatGPT ou do Claude |
 | Instalação completa num Termux simulado (pacotes, emissor, catálogo, túnel, `copiar`, `pausar` pela notificação) | Termux:Boot abrindo o serviço quando o HyperOS liga |
 | Segundo plano: registro sem segredo (600), instância única, console por pty, `parar` sem matar pid reaproveitado | |
 
 ## Desenvolvimento
 
+As dependências Python, o teste do painel, a verificação do pacote e o fluxo de contribuição estão no [guia do desenvolvedor](CONTRIBUTING.md).
+
 ```
 python3 -m unittest discover -s testes -v              # testes
 python3 ferramentas/construir_catalogo.py --smartir ... --flipper ...   # regenera dados/base.jsonl.gz
 ferramentas/empacotar.sh                                # gera dist/controle-ir.zip
-python3 -m venv /tmp/v && /tmp/v/bin/pip install mcp && /tmp/v/bin/python ferramentas/verificar_cliente_mcp.py
+python3 ferramentas/verificar_cliente_mcp.py             # com as dependências de testes instaladas
 PYTHONPATH=controle-ir python3 -m controle_ir iniciar --simulado --sem-tunel   # servidor sem celular
 ```
 

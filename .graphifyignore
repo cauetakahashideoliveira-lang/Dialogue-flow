@@ -2,3 +2,5 @@
 .claude/skills/godmode/
 .claude/skills/best-tool/
 .claude/skills/god-mode/
+# Copie ao pacote depois de gerar o grafo. Esse espelho não faz parte dos fontes a analisar.
+controle-ir/conhecimento/

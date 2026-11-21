@@ -110,6 +110,20 @@ preferências. A configuração pessoal conferida ao final foi nível 20 e tempo
     estado_celular num lote 6,4 s (−52%). T10/T11: o cliente do Claude executa as chamadas de um lote **em série**
     (B começou 0,74 s depois de A): paralelismo real só dentro do celular; cada chamada extra num lote ~0,7 s.
   - Queda do conector ("Not Found") por ~1–2 min durante o ciclo, voltou sozinha.
+- **Otimização, ciclo 3 (1.0.85–1.0.95): cérebros fortes no celular.** O dono pediu inteligência acima de
+  economia. Escada `cerebro` no objetivo: rapido (Haiku) | padrao (Haiku+Sonnet) | **forte (Sonnet+Opus, padrão)** |
+  maximo (Opus pensando); sobe um degrau sozinho em tela que já falhou/repetiu; o modelo recebe a tela inteira e o
+  histórico. Medido no POCO (1 decisão cada, mesma tarefa, todos acertaram): Haiku 1.460 ms, Sonnet 1.552 ms, Opus
+  1.675 ms, Opus pensando 1.885 ms — o Opus custa ~0,2 s a mais por decisão (conexões abertas, resposta no 1º
+  dígito). Teste difícil (informações do WhatsApp nas Configurações, sem pistas): revelou e corrigiu — Configurações
+  → "Apps" abre OUTRO pacote (com.miui.securitycenter: app aberto por toque nosso faz parte do caminho, inclusive se
+  abrir devagar); o cliente do Claude **corta chamadas aos 60 s** (o objetivo terminou em 72 s no celular e o
+  resultado se perdeu → prazo ≤ 50 s, `acao=objetivo_resultado` recupera o último); rolar lista longa custa ~3–5 s
+  por tela e o modelo era consultado a cada uma (rolagem contínua sem consulta); digitou 8× (uma vez por objetivo);
+  pista "Apps" casou com "Atualização de apps…" (pista só exato/início); "Pesquisar apps" é botão que abre o campo;
+  pista casava com o próprio campo digitado. Forçar parada/limpar/desativar/desligar entram nos proibidos. Final:
+  com `pistas` + `digitar:{texto, depois_de}` o caminho completo sai em **7,5 s, 0 consultas** (antes: 72 s e
+  falha); sem pistas, o Opus resolveu sozinho um impasse escolhendo o tamanho do app na mesma linha.
 - **Achados sem correção pelo conector:** Termux:Boot não instalado (o início automático fica desligado: instale-o do
   F-Droid, abra uma vez e rode `controle-ir inicio-automatico sim` no Termux); no celular só há os modelos Qwen2.5
   1.5B (o 3B do guia de passagem não está lá); `controle-ir painel …` é recusado pelo conector por ser administrativo

@@ -52,6 +52,8 @@ class TestLeitorJava(unittest.TestCase):
         out, err = self.rodar("ligado")
         self.assertIn("criado como com.android.shell uid 2000", err)  # identidade do shell (permissões)
         self.assertIn("stopScan", err)
+        self.assertIn("busca como null", err)  # sem pacote: o HyperOS recusa calado o com.android.shell
+        self.assertEqual(out["identidade_busca"], "sem_pacote")
         self.assertEqual(out["busca"], "ok")
         self.assertTrue(out["bluetooth_ligado"])
         prox = {d["endereco"]: d for d in out["proximos"]}
@@ -75,6 +77,13 @@ class TestLeitorJava(unittest.TestCase):
         self.assertEqual(out["busca"], "bluetooth_desligado")
         self.assertNotIn("proximos", out)
         self.assertEqual(len(out["pareados"]), 2)
+
+    def test_sem_pacote_recusado_volta_ao_shell(self):
+        out, err = self.rodar("recusa_sem_pacote")
+        self.assertIn("busca como com.android.shell", err)
+        self.assertEqual((out["busca"], out["identidade_busca"]), ("ok", "shell"))
+        self.assertEqual(len(out["proximos"]), 3)
+        self.assertTrue(any("busca sem pacote recusada" in a for a in out["avisos"]))
 
     def test_falha_da_busca_vem_com_codigo(self):
         out, _ = self.rodar("falha")
@@ -189,6 +198,34 @@ class TestBuscarNoCelular(unittest.TestCase):
         with mock.patch.object(sys, "stdin", io.StringIO('{"acao":"conectar"}')), mock.patch("sys.stdout", saida):
             self.m.main()
         self.assertIn("erro", json.loads(saida.getvalue()))
+
+
+class TestCompilar(unittest.TestCase):
+    """Com ecj e dx imitados: compila, troca o jar antigo pelo novo e não apaga o que acabou de compilar."""
+
+    def test_compila_e_substitui_o_antigo(self):
+        m = _carregar()
+        with tempfile.TemporaryDirectory() as tmp:
+            m.TMP = os.path.join(tmp, "bt")
+            os.makedirs(m.TMP)
+            Path(m.TMP, "controle-bt-velho000000.jar").write_bytes(b"velho")
+
+            def rodar(cmd, **kw):
+                if cmd[0] == "ecj":
+                    pasta = Path(cmd[2]) / "controleir"
+                    pasta.mkdir(parents=True)
+                    (pasta / "Bluetooth.class").write_bytes(b"cls")
+                elif cmd[0] == "dx":
+                    Path(cmd[2].split("=", 1)[1]).write_bytes(b"dex")
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+
+            with mock.patch.object(m.shutil, "which", return_value="/bin/x"), \
+                    mock.patch.object(m.subprocess, "run", side_effect=rodar):
+                jar, erro = m.compilar()
+                self.assertIsNone(erro)
+                self.assertEqual(Path(jar).read_bytes(), b"dex")
+                self.assertEqual(os.listdir(m.TMP), [os.path.basename(jar)])
+                self.assertEqual(m.compilar(), (jar, None))  # 2ª vez: reaproveita
 
 
 class TestManifesto(unittest.TestCase):

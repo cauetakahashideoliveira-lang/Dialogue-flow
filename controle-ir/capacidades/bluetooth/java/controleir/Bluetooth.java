@@ -42,7 +42,8 @@ public class Bluetooth {
         boolean tentarBle = args.length > 1 && "ble".equals(args[1]);
         if (Looper.getMainLooper() == null) Looper.prepareMainLooper();
         Map<String, Object> saida = new LinkedHashMap<String, Object>();
-        BluetoothAdapter adaptador = adaptador();
+        iniciarModulos();
+        BluetoothAdapter adaptador = adaptador("com.android.shell");
         if (adaptador == null) {
             saida.put("erro", "este aparelho não tem Bluetooth (ou o shell não o alcança)");
             fim(saida);
@@ -59,7 +60,22 @@ public class Bluetooth {
         }
         saida.put("modo_so_ble", ligueiBle || (!ligado && leAntes));
         saida.put("pareados", pareados(adaptador));
-        final BluetoothLeScanner scanner = (ligado || leLigado(adaptador)) ? scanner(adaptador) : null;
+        // A busca vai SEM nome de pacote: o HyperOS (ScanController.checkAllowedToScan) recusa calado os pacotes do
+        // sistema fora do primeiro plano, como o com.android.shell, mas libera quando o pacote vem vazio (lido no
+        // Bluetooth.apk do POCO, 21/11). Se o Android recusar assim, volta para o pacote do shell.
+        BluetoothAdapter semPacote = adaptador(null);
+        BluetoothLeScanner sc = null;
+        boolean pronto = ligado || leLigado(adaptador);
+        if (pronto && semPacote != null) {
+            sc = scanner(semPacote);
+            saida.put("identidade_busca", "sem_pacote");
+        }
+        if (pronto && sc == null) {
+            sc = scanner(adaptador);
+            saida.put("identidade_busca", "shell");
+        }
+        final BluetoothLeScanner scanner = sc;
+        final BluetoothLeScanner[] emUso = new BluetoothLeScanner[] {sc};
         if (scanner == null) {
             saida.put("busca", ligado ? "sem_scanner" : "bluetooth_desligado");
             if (ligueiBle) invocar(adaptador, "disableBLE");
@@ -90,7 +106,17 @@ public class Bluetooth {
             } catch (Throwable t) {
                 // Android antigo
             }
-            scanner.startScan(new ArrayList<ScanFilter>(), b.build(), ouvinte);
+            try {
+                scanner.startScan(new ArrayList<ScanFilter>(), b.build(), ouvinte);
+            } catch (SecurityException se) {
+                if (!"sem_pacote".equals(saida.get("identidade_busca"))) throw se;
+                aviso("busca sem pacote recusada: " + causa(se));
+                BluetoothLeScanner outro = scanner(adaptador);
+                if (outro == null) throw se;
+                outro.startScan(new ArrayList<ScanFilter>(), b.build(), ouvinte);
+                saida.put("identidade_busca", "shell");
+                emUso[0] = outro;
+            }
         } catch (Throwable t) {
             saida.put("busca", "recusada");
             saida.put("detalhe", String.valueOf(t));
@@ -105,7 +131,7 @@ public class Bluetooth {
             @Override
             public void run() {
                 try {
-                    scanner.stopScan(ouvinte);
+                    emUso[0].stopScan(ouvinte);
                 } catch (Throwable t) {
                     aviso("parar: " + t);
                 }
@@ -120,24 +146,46 @@ public class Bluetooth {
     }
 
     // ------------------------------------------------------------------ adaptador
-    static BluetoothAdapter adaptador() {
+    static void iniciarModulos() {
         // No app_process não há Context: a identidade do pedido (AttributionSource) precisa dizer que é o shell,
         // senão a checagem de permissão do Android 12+ recusa. Sem a API escondida, cai no getDefaultAdapter.
+        // Num app quem registra o serviço do Bluetooth é o ActivityThread (initializeMainlineModules); no
+        // app_process ninguém faz isso e o createAdapter devolve null calado (visto no POCO, Android 16, 21/11).
+        try {
+            Class.forName("android.app.ActivityThread").getMethod("initializeMainlineModules").invoke(null);
+        } catch (Throwable t) {
+            aviso("módulos: " + causa(t));
+            try {
+                Class<?> gerente = Class.forName("android.os.BluetoothServiceManager");
+                Class.forName("android.bluetooth.BluetoothFrameworkInitializer")
+                        .getMethod("setBluetoothServiceManager", gerente).invoke(null, gerente.newInstance());
+            } catch (Throwable t2) {
+                aviso("serviço do Bluetooth: " + causa(t2));
+            }
+        }
+    }
+
+    /** pacote null = identidade só pelo uid (sem nome de pacote). */
+    static BluetoothAdapter adaptador(String pacote) {
         try {
             Class<?> fonte = Class.forName("android.content.AttributionSource$Builder");
             Object construtor = fonte.getConstructor(int.class).newInstance(android.os.Process.myUid());
-            fonte.getMethod("setPackageName", String.class).invoke(construtor, "com.android.shell");
+            if (pacote != null) fonte.getMethod("setPackageName", String.class).invoke(construtor, pacote);
             Object atrib = fonte.getMethod("build").invoke(construtor);
             Method criar = BluetoothAdapter.class.getDeclaredMethod("createAdapter",
                     Class.forName("android.content.AttributionSource"));
             criar.setAccessible(true);
             Object a = criar.invoke(null, atrib);
             if (a != null) return (BluetoothAdapter) a;
+            aviso("createAdapter devolveu null (" + pacote + ")");
         } catch (Throwable t) {
-            aviso("identidade do shell: " + causa(t));
+            aviso("identidade " + pacote + ": " + causa(t));
         }
+        if (pacote == null) return null;
         try {
-            return BluetoothAdapter.getDefaultAdapter();
+            BluetoothAdapter a = BluetoothAdapter.getDefaultAdapter();
+            if (a == null) aviso("getDefaultAdapter devolveu null");
+            return a;
         } catch (Throwable t) {
             aviso("adaptador: " + causa(t));
             return null;

@@ -7,8 +7,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 public final class BluetoothLeScanner {
+    final String pacote;
+    public BluetoothLeScanner(String pacote) { this.pacote = pacote; }
     public void startScan(List<ScanFilter> filtros, ScanSettings s, ScanCallback cb) {
-        if (System.getProperty("stub.modo", "ligado").equals("falha")) { cb.onScanFailed(2); return; }
+        String modo = System.getProperty("stub.modo", "ligado");
+        if (modo.equals("falha")) { cb.onScanFailed(2); return; }
+        if (modo.equals("recusa_sem_pacote") && pacote == null) throw new SecurityException("Package null does not belong to 2000");
+        System.err.println("busca como " + pacote);
         SparseArray<byte[]> apple = new SparseArray<byte[]>();
         apple.put(0x004C, new byte[] {0x07, 0x19, 0x01});
         BluetoothDevice airpods = new BluetoothDevice("BB:00:00:00:00:01", null, 2, null);

@@ -2415,6 +2415,10 @@ def objetivo(a):
         def aplicar_regras(app, els):
             return aplicar_regras(app, els)
 
+        @staticmethod
+        def recolher():
+            rish("cmd statusbar collapse", timeout=10)
+
     def decidir(objetivo_, resumo, opcoes):
         m = _modulo_piloto()
         pergunta = (f"Objetivo no celular: {objetivo_}\nO que a tela mostra: {resumo or '(só botões)'}\n"

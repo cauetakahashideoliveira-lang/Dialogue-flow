@@ -185,6 +185,33 @@ class TestExecutorObjetivo(unittest.TestCase):
         # sem tocar em nada da notificação, e segue com a pista
         self.assertFalse(any("Ana" in str(p) for p in r["passos"]))
 
+    def test_5b_cortina_do_sistema_que_ignora_voltar_e_recolhida_sem_vazar_mensagens(self):
+        cel = Celular(TELAS, "inicio")
+        cel.sobreposto = ("com.android.systemui", 1)
+        cel.injetar_original = cel.injetar
+
+        def injetar(cmd):  # no HyperOS o "voltar" injetado não fecha a cortina
+            if cmd == "tecla 4" and cel.sobreposto and cel.sobreposto[1] > 0:
+                cel.injetados.append(cmd)
+                return True
+            return cel.injetar_original(cmd)
+        cel.injetar = injetar
+        cel.recolher = lambda: setattr(cel, "sobreposto", None)
+        r = self.executor(cel).executar({"objetivo": "Bluetooth", "app": APP, "concluido": {"texto": "AirPods"},
+                                         "pistas": ["Bluetooth"]})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertIn("recolher_paineis", [p["acao"] for p in r["passos"]])
+        # se travar com a cortina aberta, o texto das notificações NÃO volta para a nuvem
+        cel = Celular(TELAS, "inicio")
+        cel.sobreposto = ("com.android.systemui", 99)
+        orig = cel.injetar
+        cel.injetar = lambda cmd: True if cmd == "tecla 4" else orig(cmd)  # nada fecha a cortina
+        cel.recolher = lambda: None
+        r = self.executor(cel).executar({"objetivo": "Bluetooth", "app": APP, "concluido": {"texto": "AirPods"}})
+        self.assertEqual(r["estado"], "parado")
+        self.assertEqual(r["tela"]["textos"], [])
+        self.assertNotIn("Ana", str(r))
+
     def test_6_interface_mudou_alvo_abaixo_rola_e_acha(self):
         cel = Celular(TELAS, "inicio")
         r = self.executor(cel).executar({"objetivo": "ver o modelo", "app": APP, "concluido": {"texto": "Modelo:"},

@@ -146,7 +146,11 @@ class Executor:
                  "consultas_modelo": consultas, "recuperacoes": recuperacoes,
                  "ms": round((self.relogio() - inicio) * 1000)}
             if a.get("ler", True) and els is not None:
-                r["tela"] = {"app": app_atual, "textos": textos_da_tela(els, app_atual, int(a.get("ler_max", 60)))}
+                if (app and app_atual != app) or sistema(app_atual):
+                    # outra janela na frente (notificações, outro app): o conteúdo dela não sai do celular
+                    r["tela"] = {"app": app_atual, "textos": [], "nota": "outra janela por cima: conteúdo não enviado"}
+                else:
+                    r["tela"] = {"app": app_atual, "textos": textos_da_tela(els, app_atual, int(a.get("ler_max", 60)))}
             return r
 
         def falhou(sig_, r):  # 1 falha = transitória (tenta de novo); 2 = desiste dessa ação nesta tela
@@ -184,8 +188,12 @@ class Executor:
                 recuperacoes += 1
                 if recuperacoes > 4:
                     return fim("parado", f"não consegui voltar para {app} (está em {app_atual})", els, app_atual)
-                regra = t.aplicar_regras(app_atual, els)
-                if regra:
+                regra = None if sistema(app_atual) else t.aplicar_regras(app_atual, els)
+                if sistema(app_atual) and recuperacoes <= 2 and hasattr(t, "recolher"):
+                    t.recolher()  # cortina/painel do sistema: no HyperOS o "voltar" injetado não fecha (21/11)
+                    t.calma(150, 1500)
+                    anotar("recolher_paineis", app_atual, "recuperacao", t0)
+                elif regra:
                     anotar("reflexo", regra, "recuperacao", t0)
                 elif t.em_anuncio():
                     t.fechar_anuncio(app_atual)
@@ -296,6 +304,12 @@ class Executor:
                 if acao == "tocar" and via != "dispensar":
                     novos[sig] = rotulo_acao
                 anotar(acao, rotulo_acao, via, t0)
+
+
+def sistema(pacote):
+    """Janelas do sistema por cima do app (cortina de notificações, painel rápido)."""
+    return bool(pacote) and (pacote == "com.android.systemui" or pacote.endswith(".systemui")
+                             or pacote.startswith("miui.systemui"))
 
 
 def melhor(els, texto):

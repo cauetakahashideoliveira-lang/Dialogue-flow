@@ -411,6 +411,10 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertEqual(r["estado"], "concluido")
         self.assertEqual([p["acao"] for p in r["passos"]], ["abrir_busca", "digitar", "tocar"])
 
+    def test_pista_nao_casa_com_o_campo_de_busca(self):
+        els = [el("WhatsApp", 100, editavel=True), el("WhatsApp", 400)]
+        self.assertEqual(self.m.melhor(els, "WhatsApp", estrito=True)["y"], 400)
+
     def test_app_bloqueado_para_na_hora(self):
         cel = Celular(TELAS, "inicio", app="com.banco")
         r = self.executor(cel).executar({"objetivo": "x", "concluido": {"texto": "y"}})

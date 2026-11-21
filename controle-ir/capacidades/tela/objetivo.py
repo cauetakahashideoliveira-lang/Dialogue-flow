@@ -479,7 +479,8 @@ def melhor(els, texto, estrito=False):
     if not estrito:
         testes.append(lambda r: alvo in r)
     for teste in testes:
-        cands = [e for e in els if teste(norm(rotulo(e)))]
+        # campo de texto nunca é alvo de toque: depois de digitar "WhatsApp" a pista casava com o próprio campo
+        cands = [e for e in els if teste(norm(rotulo(e))) and not e.get("editavel")]
         if cands:
             clic = [e for e in cands if e.get("clicavel")]
             return (clic or cands)[0]

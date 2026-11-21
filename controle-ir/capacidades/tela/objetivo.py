@@ -155,7 +155,11 @@ class Executor:
         app, crit = a.get("app"), a["concluido"]
         pistas = list(a.get("pistas") or [])
         permitir = list(a.get("permitir") or [])
-        digitar = a.get("digitar") if isinstance(a.get("digitar"), str) else None
+        # digitar: "texto" ou {"texto", "depois_de": "pista"} (só depois de usar essa pista: nas Configurações há
+        # busca na tela inicial E na lista de apps — a certa é a segunda)
+        dg = a.get("digitar")
+        digitar = dg if isinstance(dg, str) else (dg.get("texto") if isinstance(dg, dict) else None)
+        digitar_depois = dg.get("depois_de") if isinstance(dg, dict) else None
         max_passos = max(1, min(int(a.get("max_passos", 12)), MAX_PASSOS))
         # padrão "forte": no POCO (21/11) Haiku decidiu em 1,46 s, Sonnet 1,55 s, Opus 1,68 s, Opus pensando 1,89 s
         # (todos acertaram): o mais inteligente custa ~0,2 s por decisão — vale sempre
@@ -289,7 +293,8 @@ class Executor:
                     escolha, via = e, "memoria"
             # 3. campo para digitar o texto autorizado (uma vez por tela)
             ja_escrito = any(e.get("editavel") and norm(digitar or "") in norm(e.get("texto")) for e in els)
-            if not escolha and digitar and not digitado and not ja_escrito:
+            if (not escolha and digitar and not digitado and not ja_escrito
+                    and (not digitar_depois or digitar_depois in usadas)):
                 # uma vez por objetivo: cada letra muda a tela e a "tela nova" fazia digitar de novo (8× no POCO)
                 campo = next((e for e in els if e.get("editavel") and not e.get("desativado")), None)
                 if campo:

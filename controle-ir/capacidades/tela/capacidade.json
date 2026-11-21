@@ -246,8 +246,7 @@
     "description": "objetivo: rótulos de efeito externo liberados (enviar, excluir…)"
    },
    "digitar": {
-    "type": "string",
-    "description": "objetivo: texto autorizado para campo de busca"
+    "description": "objetivo: texto autorizado para campo de busca, ou {texto, depois_de:'pista'} para só digitar depois de usar aquela pista"
    },
    "max_passos": {
     "type": "integer",

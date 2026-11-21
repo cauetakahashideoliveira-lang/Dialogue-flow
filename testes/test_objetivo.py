@@ -354,6 +354,18 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertEqual(cel.digitado, "WhatsApp")
         self.assertEqual(sum(p["acao"] == "digitar" for p in r["passos"]), 1)
 
+    def test_digitar_so_depois_da_pista_indicada(self):
+        telas = {"inicio": ([el("", 100, editavel=True), el("Apps", 300)], {"Apps": "apps"}),
+                 "apps": ([el("", 100, editavel=True), el("Lista", 800, clic=False, rolavel=True)], {"<enter>": "res"}),
+                 "res": ([el("WhatsApp", 300)], {"WhatsApp": "info"}),
+                 "info": ([el("Forçar parada", 900)], {})}
+        cel = Celular(telas, "inicio")
+        r = self.executor(cel).executar({"objetivo": "info do WhatsApp", "app": APP, "pistas": ["Apps", "WhatsApp"],
+                                         "digitar": {"texto": "WhatsApp", "depois_de": "Apps"},
+                                         "concluido": {"texto": "Forçar parada"}, "modelo": False})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertEqual([p["acao"] for p in r["passos"]], ["tocar", "digitar", "tocar"])
+
     def test_app_bloqueado_para_na_hora(self):
         cel = Celular(TELAS, "inicio", app="com.banco")
         r = self.executor(cel).executar({"objetivo": "x", "concluido": {"texto": "y"}})

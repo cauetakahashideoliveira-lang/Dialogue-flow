@@ -3,7 +3,7 @@
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
 ## 21/11 — atualização e correções (branch `ccr-201914aa-m2jj33`)
-- **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → 1.0.67 (`f55b4ef`) → 1.0.68 (`42ff118`) → **1.0.69** (`a17970f`) pelo `atualizar_sistema`. O canal
+- **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → 1.0.67 (`f55b4ef`) → 1.0.68 (`42ff118`) → 1.0.69 (`a17970f`) → **1.0.70** (`9af8695`) pelo `atualizar_sistema`. O canal
   direto voltou sozinho a cada reinício; aparelhos, catálogo e política ficaram preservados. Conferido com `consultar`
   e com uma missão de leitura (Sonnet, grafo de 1.858 nós). Pareado, armado até a meia-noite, modo autônomo.
 - **Android 16:** o Termux não lê `/proc/uptime` nem `/proc/loadavg` (`Permission denied`); o `CLOCK_BOOTTIME`
@@ -27,6 +27,12 @@ A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padr
     desce até a que funciona e lembra dela (`~/.controle-ir/medicoes/sonar.json`). O 1º segundo marcava movimento
     falso (gravação começa antes do tom) e a referência pela mediana sumia com movimento longo → percentil 10 dos
     quadros com tom.
+- **Teste de uso real (WhatsApp):** o agente de tela abriu o WhatsApp, entrou pela Nova conversa no contato
+  “(Você) · Mensagens para mim” e mandou uma mensagem para o próprio dono. A 1ª saiu “MensagemTeste do Claude…”: o
+  campo vazio do WhatsApp expõe a dica “Mensagem” como texto e o leitor (`Tela.java`) somava ao digitado. Na 1.0.70 a
+  dica é reconhecida também pela dica declarada e pela falta de cursor; a 2ª mensagem saiu exata (10:59), digitada
+  pelo leitor recompilado. A trava “coordenada só vale na tela lida” barrou dois toques depois de a tela mudar
+  (teclado abrindo), como deve.
 - **Achados sem correção pelo conector:** Termux:Boot não instalado (o início automático fica desligado: instale-o do
   F-Droid, abra uma vez e rode `controle-ir inicio-automatico sim` no Termux); no celular só há os modelos Qwen2.5
   1.5B (o 3B do guia de passagem não está lá); `controle-ir painel …` é recusado pelo conector por ser administrativo

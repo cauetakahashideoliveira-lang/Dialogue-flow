@@ -547,6 +547,22 @@ class TestCanal(unittest.TestCase):
         self.assertEqual((r["t"], r["id"], r["s"]), ("res", "r1", 200))
         self.assertIn("tools/call", json.loads(r["b"])["result"]["eco"])
         self.assertEqual(cn.atendidas, 1)
+        fim = time.time() + 3
+        while not cn.chamadas and time.time() < fim:
+            time.sleep(0.02)
+        d = cn.desempenho()  # telemetria: tempo dentro do celular, sem argumentos
+        self.assertEqual(d["celular_ms"]["n"], 1)
+        self.assertEqual(d["ultimas"][0]["ferramenta"], "tools/call")
+        self.assertEqual(d["ultimas"][0]["status"], 200)
+
+    def test_nome_da_chamada_sem_argumentos(self):
+        from controle_ir.canal import nome_da_chamada
+        corpo = json.dumps({"method": "tools/call", "params": {"name": "executar_capacidade", "arguments": {
+            "nome": "tela", "argumentos": {"acao": "ver", "texto": "segredo"}}}}).encode()
+        self.assertEqual(nome_da_chamada(corpo), ("cap:tela.ver", "tools/call"))
+        self.assertEqual(nome_da_chamada(b'{"method":"tools/call","params":{"name":"consultar"}}'),
+                         ("consultar", "tools/call"))
+        self.assertEqual(nome_da_chamada(b"lixo"), (None, None))
 
 
 class TestServidorMCP(unittest.TestCase):

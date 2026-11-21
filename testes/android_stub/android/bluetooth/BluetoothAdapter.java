@@ -10,7 +10,7 @@ public final class BluetoothAdapter {
     BluetoothAdapter(String pacote) { this.pacote = pacote; }
     static BluetoothAdapter createAdapter(AttributionSource a) { System.err.println("criado como " + a.pacote + " uid " + a.uid); return new BluetoothAdapter(a.pacote); }
     public static BluetoothAdapter getDefaultAdapter() { return new BluetoothAdapter(null); }
-    public boolean isEnabled() { return MODO.equals("ligado") || MODO.equals("falha"); }
+    public boolean isEnabled() { return MODO.equals("ligado") || MODO.equals("falha") || MODO.equals("recusa_sem_pacote"); }
     public boolean isLeEnabled() { return le; }
     public boolean enableBLE() { if (MODO.equals("desligado_ble")) { le = true; System.err.println("enableBLE"); return true; } return false; }
     public boolean disableBLE() { le = false; System.err.println("disableBLE"); return true; }
@@ -21,5 +21,5 @@ public final class BluetoothAdapter {
         s.add(new BluetoothDevice("AA:AA:AA:AA:AA:02", "Redmi Watch", 2, null));
         return s;
     }
-    public BluetoothLeScanner getBluetoothLeScanner() { return (isEnabled() || le) ? new BluetoothLeScanner() : null; }
+    public BluetoothLeScanner getBluetoothLeScanner() { return (isEnabled() || le) ? new BluetoothLeScanner(pacote) : null; }
 }

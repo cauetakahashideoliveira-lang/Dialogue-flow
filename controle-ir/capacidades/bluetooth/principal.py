@@ -221,7 +221,8 @@ def compilar():
         if not os.path.exists(parcial):
             return None, "dx falhou: " + (d.stderr or d.stdout)[-600:]
         for velho in os.listdir(TMP):
-            if velho.startswith("controle-bt-") and velho.endswith(".jar"):
+            # o recém-compilado (.parcial.jar) também termina em .jar: apagá-lo foi o 1º erro no POCO (21/11)
+            if velho.startswith("controle-bt-") and velho.endswith(".jar") and velho != os.path.basename(parcial):
                 os.remove(os.path.join(TMP, velho))
         os.replace(parcial, jar)
         return jar, None

@@ -464,6 +464,23 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertFalse(any(p["acao"] == "tocar" and p.get("alvo") == "Forçar parada" for p in r["passos"]))
         self.assertIn("Forçar parada", r["tela"]["textos"])
 
+    def test_rolagem_continua_sem_perguntar_ao_modelo_a_cada_tela(self):
+        lista = [f"App {chr(65 + i)}" for i in range(12)] + ["WhatsApp"]
+        telas = {}
+        for k in range(0, len(lista), 3):
+            nome = f"p{k}"
+            itens = [el(t, 200 + 100 * j) for j, t in enumerate(lista[k:k + 3])]
+            prox = {"<rolar>": f"p{k + 3}"} if k + 3 < len(lista) else {}
+            prox.update({t: "info" for t in lista[k:k + 3] if t == "WhatsApp"})
+            telas[nome] = (itens + [el("Lista", 800, clic=False, rolavel=True, a=1500)], prox)
+        telas["info"] = ([el("Forçar parada", 900)], {})
+        r = self.executor(Celular(telas, "p0"), lambda o: o.index("WhatsApp") if "WhatsApp" in o else o.index(
+            "↓ rolar para baixo")).executar({"objetivo": "abrir informações do WhatsApp", "app": APP,
+                                              "concluido": {"texto": "Forçar parada"}, "max_passos": 12})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertLessEqual(r["consultas_modelo"], 2)  # 1ª: rolar; depois rola sozinho até aparecer "WhatsApp"
+        self.assertIn("rolagem contínua", [p["via"] for p in r["passos"]])
+
     def test_validacao(self):
         ex = self.executor(Celular(TELAS, "inicio"))
         self.assertIn("erro", ex.executar({"objetivo": "x"}))  # sem critério de conclusão

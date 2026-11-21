@@ -299,6 +299,12 @@ class Executor:
             if (not escolha and any(p not in usadas for p in pistas) and not falhou(sig, ROLAR)
                     and any(e.get("rolavel") for e in els)):
                 escolha, via = ROLAR, "procurando pista"
+            # 3c. o modelo mandou rolar esta lista e nada visível lembra o objetivo: continua rolando sem perguntar
+            # de novo (no teste dos Apps, 7 consultas seguidas de ~1,5 s só para dizer "rolar" — 21/11)
+            if (not escolha and passos and passos[-1]["acao"] == "rolar" and passos[-1]["via"].startswith(("modelo",
+                    "rolagem contínua")) and not falhou(sig, ROLAR) and any(e.get("rolavel") for e in els)
+                    and not any(ranquear([rotulo(e)], objetivo, 0, pontos=True) for e in alvos if rotulo(e))):
+                escolha, via = ROLAR, "rolagem contínua"
             # 4. o cérebro do celular escolhe entre os controles visíveis
             if not escolha and usar_modelo:
                 opcoes = []
@@ -343,7 +349,7 @@ class Executor:
                 x = lista["x"] if lista else 540
                 y0 = (lista["y"] + lista.get("a", 1200) // 3) if lista else 1700
                 y1 = (lista["y"] - lista.get("a", 1200) // 3) if lista else 700
-                t.injetar(f"deslizar {x} {y0} {x} {y1} 300")
+                t.injetar(f"deslizar {x} {y0} {x} {y1} 700")  # gesto lento: sem "patinar" (a lista assenta logo)
                 rotulo_acao, acao = ROLAR, "rolar"
             elif escolha == VOLTAR:
                 t.injetar("tecla 4")
@@ -354,7 +360,7 @@ class Executor:
                     continue
                 t.injetar(f"tocar {escolha['x']} {escolha['y']}")
                 rotulo_acao, acao = rotulo(escolha), "tocar"
-            t.calma(150, 2500)
+            t.calma(150, 1200 if acao == "rolar" else 2500)
             # ---- conferir: a tela mudou?
             depois = t.elementos(t.dump_ui(), 300)
             app_depois = t.foco()
@@ -393,12 +399,19 @@ def tocavel(e, els):
                and abs(o.get("y", 0) - y) <= o.get("a", 0) / 2 for o in els)
 
 
-def ranquear(opcoes, objetivo, n):
-    """As `n` opções que mais lembram o objetivo (palavras em comum), na ordem da tela."""
+IGNORADAS = {"abrir", "ver", "tela", "dentro", "das", "dos", "sem", "nada", "alterar", "app", "aplicativo", "apps",
+             "configuracoes", "celular", "para", "com", "que", "uma", "um", "informacoes"}
+
+
+def ranquear(opcoes, objetivo, n, pontos=False):
+    """As `n` opções que mais lembram o objetivo (palavras em comum), na ordem da tela. pontos=True: só a pontuação
+    da primeira opção (0 = nada a ver com o objetivo)."""
+    alvo = set(re.findall(r"\w{3,}", norm(objetivo))) - IGNORADAS
+    pont = {o: len(alvo & set(re.findall(r"\w{3,}", norm(o)))) for o in opcoes}
+    if pontos:
+        return pont[opcoes[0]] if opcoes else 0
     if len(opcoes) <= n:
         return opcoes
-    alvo = set(re.findall(r"\w{3,}", norm(objetivo)))
-    pont = {o: len(alvo & set(re.findall(r"\w{3,}", norm(o)))) for o in opcoes}
     melhores = set(sorted(opcoes, key=lambda o: -pont[o])[:n])
     return [o for o in opcoes if o in melhores]
 

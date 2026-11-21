@@ -366,6 +366,38 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertEqual(r["estado"], "concluido")
         self.assertEqual([p["acao"] for p in r["passos"]], ["tocar", "digitar", "tocar"])
 
+    def test_pista_estrita_e_app_que_abre_devagar(self):
+        seg = "com.miui.securitycenter"
+        telas = {"inicio": ([el("Atualização de apps do sistema", 200), el("Apps", 600)], {"Apps": "lista"}),
+                 "lista": ([el("WhatsApp", 300, pacote=seg)], {"WhatsApp": "info"}),
+                 "info": ([el("Forçar parada", 900, pacote=seg)], {})}
+        cel = Celular(telas, "inicio")
+        orig_inj, orig_foco = cel.injetar, cel.foco
+        lento = {"n": 0}
+
+        def injetar(cmd):
+            r = orig_inj(cmd)
+            if cel.atual == "lista" and lento["n"] == 0:
+                lento["n"] = 3  # a Central de Segurança demora: as 3 primeiras olhadas ainda mostram Configurações
+            return r
+
+        def foco():
+            if lento["n"] > 0:
+                lento["n"] -= 1
+                return APP
+            return seg if cel.atual in ("lista", "info") else orig_foco()
+
+        def elementos(nome, limite=300):
+            if lento["n"] > 0:
+                return [dict(e) for e in telas["inicio"][0]]
+            return [dict(e) for e in cel.telas[nome][0]]
+        cel.injetar, cel.foco, cel.elementos = injetar, foco, elementos
+        r = self.executor(cel).executar({"objetivo": "info do WhatsApp", "app": APP, "pistas": ["Apps", "WhatsApp"],
+                                         "concluido": {"texto": "Forçar parada"}, "modelo": False})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertFalse(any(p.get("alvo") == "Atualização de apps do sistema" for p in r["passos"]))
+        self.assertEqual(r["recuperacoes"], 0)  # não "corrigiu" o app que abriu devagar
+
     def test_app_bloqueado_para_na_hora(self):
         cel = Celular(TELAS, "inicio", app="com.banco")
         r = self.executor(cel).executar({"objetivo": "x", "concluido": {"texto": "y"}})
@@ -446,7 +478,8 @@ class TestExecutorObjetivo(unittest.TestCase):
         r = self.executor(cel, escolher).executar(pedido)
         self.assertEqual(r["estado"], "concluido")
         import json as _j
-        memoria = list(_j.load(open(self.mem)).values())[0]
+        with open(self.mem) as f:
+            memoria = list(_j.load(f).values())[0]
         self.assertEqual(sorted(memoria.values()), ["Você"])  # o desvio por "Mae" não foi aprendido
 
     def test_escada_de_cerebros_sobe_quando_a_tela_ja_falhou(self):

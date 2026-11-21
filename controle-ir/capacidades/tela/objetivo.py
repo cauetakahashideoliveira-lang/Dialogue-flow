@@ -176,6 +176,7 @@ class Executor:
         # apps da tarefa: o pedido + os que um toque NOSSO abriu (no HyperOS, Configurações → Apps abre a Central de
         # Segurança, outro pacote: o executor reabria as Configurações e desfazia o caminho — 21/11)
         apps_ok = {app} if app else set()
+        ultimo_toque, passos_sig = [0.0], [None]
 
         def fim(estado, motivo=None, els=None, app_atual=None):
             if estado == "concluido":
@@ -226,6 +227,14 @@ class Executor:
             if len(passos) - rolagens >= max_passos or rolagens >= MAX_ROLAGENS:
                 return fim("parado", "limite de passos", els, app_atual)
 
+            # app que abriu logo depois de um toque nosso, mais devagar que a conferência (Central de Segurança, 21/11):
+            # é resultado do toque, não intruso
+            if (app and app_atual not in apps_ok and app_atual and not sistema(app_atual) and passos
+                    and passos[-1]["acao"] == "tocar" and self.relogio() - ultimo_toque[0] < 4):
+                apps_ok.add(app_atual)
+                if passos[-1]["via"].endswith(" (sem efeito)"):
+                    passos[-1]["via"] = passos[-1]["via"][:-len(" (sem efeito)")] + " (abriu devagar)"
+                    falhas.pop((passos_sig[0], passos[-1].get("alvo")), None)
             # ---- recuperação: outro app na frente (aviso, anúncio, painel de notificações, app errado)
             if app and app_atual not in apps_ok:
                 t0 = self.relogio()
@@ -281,7 +290,7 @@ class Executor:
                 for p in pistas:
                     if p in usadas:
                         continue
-                    e = melhor(alvos, p)
+                    e = melhor(alvos, p, estrito=True)  # "Apps" ≠ "Atualização de apps do sistema" (21/11)
                     if e and not falhou(sig, rotulo(e)) and seguro(e, els, permitir):
                         escolha, via = e, "pista"
                         escolhida_pista = p
@@ -371,6 +380,7 @@ class Executor:
                     falhas[(sig, rotulo(escolha))] = 2
                     continue
                 t.injetar(f"tocar {escolha['x']} {escolha['y']}")
+                ultimo_toque[0], passos_sig[0] = self.relogio(), sig
                 rotulo_acao, acao = rotulo(escolha), "tocar"
             t.calma(150, 1200 if acao == "rolar" else 2500)
             # ---- conferir: a tela mudou?
@@ -450,12 +460,15 @@ def sistema(pacote):
                              or pacote.startswith("miui.systemui"))
 
 
-def melhor(els, texto):
-    """Elemento cujo rótulo é o texto (igual > começa com > contém), preferindo clicável."""
+def melhor(els, texto, estrito=False):
+    """Elemento cujo rótulo é o texto (igual > começa com > contém), preferindo clicável. estrito: sem "contém"."""
     alvo = norm(texto)
     if not alvo:
         return None
-    for teste in (lambda r: r == alvo, lambda r: r.startswith(alvo), lambda r: alvo in r):
+    testes = [lambda r: r == alvo, lambda r: r.startswith(alvo + " ") or r == alvo]
+    if not estrito:
+        testes.append(lambda r: alvo in r)
+    for teste in testes:
         cands = [e for e in els if teste(norm(rotulo(e)))]
         if cands:
             clic = [e for e in cands if e.get("clicavel")]

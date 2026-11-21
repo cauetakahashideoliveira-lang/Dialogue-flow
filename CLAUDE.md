@@ -42,6 +42,12 @@
 - **`/god-mode`** (`.claude/skills/god-mode/`, adaptação AGPL do G0DM0D3): AutoTune, notas, STM, `perguntar` e
   `comparar` vários modelos (OpenRouter com `OPENROUTER_API_KEY` ou servidor local) com síntese pelo Claude. Sem
   os prompts de jailbreak nem o Parseltongue do original. Não confundir com `/godmode` (capacidade máxima).
+- **NUNCA, em teste ou automação de tela:** entrar em Opções do desenvolvedor, Depuração (USB/sem fio), Shizuku,
+  Termux, Contas/Segurança/Senhas ou Redefinir; nem tocar em interruptor (liga/desliga) ou ajuste do sistema sem
+  pedido explícito do dono. Em 21/11 um teste tocou o interruptor geral das Opções do desenvolvedor e derrubou o
+  Shizuku. Testes de desempenho só em telas de leitura (Sobre o telefone, Bluetooth sem alternar, Armazenamento)
+  e com `modelo:false` quando o caminho não for conhecido. O `acao=objetivo` (1.0.79+) já recusa interruptores
+  sem `permitir` e usa cada pista uma vez.
 - **Piloto** (1.0.51+, `capacidades/tela/piloto.py`, `acao=piloto`): laço rápido NO celular (o Claude fica fora do
   laço, como treinador): corrida memória/modelo local/Haiku, alvo semântico, gravador. Modelo local e quiz de teste:
   `docs/estado-atual.md` (19/11 noite). Para o estudo e o piloto do botão Stockfish no POCO, veja o README. Apps bloqueados (banco/senha) não

@@ -153,9 +153,11 @@ class Executor:
         chave_mem = f"{app or ''}|{norm(objetivo)}"
         memoria = self._memoria().get(chave_mem, {})
 
+        caminho = []  # [(tela, rótulo)] do caminho que deu certo; desvios (voltar a uma tela) são cortados
+
         def fim(estado, motivo=None, els=None, app_atual=None):
             if estado == "concluido":
-                self._lembrar(chave_mem, novos)
+                self._lembrar(chave_mem, dict(caminho))
             r = {"estado": estado, **({"motivo": motivo} if motivo else {}), "passos": passos,
                  "consultas_modelo": consultas, "recuperacoes": recuperacoes,
                  "ms": round((self.relogio() - inicio) * 1000)}
@@ -228,6 +230,10 @@ class Executor:
                 continue
 
             sig = assinatura(els, app_atual)
+            for k, (s_, _) in enumerate(caminho):
+                if s_ == sig:  # voltamos a uma tela do caminho: o trecho depois dela foi desvio
+                    del caminho[k:]
+                    break
             vistos[sig] = vistos.get(sig, 0) + 1
             if vistos[sig] > 4:
                 return fim("parado", "sem progresso (a mesma tela voltou várias vezes)", els, app_atual)
@@ -336,8 +342,10 @@ class Executor:
                     falhas[(sig, ROLAR)] = 2  # fim da lista
                 if acao != "rolar":
                     feitas.add((sig, rotulo_acao))  # voltar a esta tela e repetir = ciclo (chat ↔ info, 21/11)
-                if acao == "tocar" and via != "dispensar":
-                    novos[sig] = rotulo_acao
+                if acao in ("tocar", "rolar") and via != "dispensar":
+                    caminho.append((sig, rotulo_acao))
+                elif acao == "voltar" and caminho:
+                    caminho.pop()  # voltar desfaz o último passo: ele foi desvio
                 if escolhida_pista:
                     usadas.add(escolhida_pista)
                 anotar(acao, rotulo_acao, via, t0)

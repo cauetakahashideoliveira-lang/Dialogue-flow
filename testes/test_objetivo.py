@@ -391,6 +391,31 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertEqual([p["via"] for p in r["passos"]], ["procurando pista", "pista"])
         self.assertEqual(r["consultas_modelo"], 0)
 
+    def test_memoria_guarda_so_o_caminho_certo_sem_desvios(self):
+        telas = {"lista": ([el("Mae", 200), el("Você", 300)], {"Mae": "chat_mae", "Você": "chat_voce"}),
+                 "chat_mae": ([el("Mae", 50, clic=False), el("Olá filho", 300, clic=False)], {}),
+                 "chat_voce": ([el("Você", 50, clic=False), el("Anexar", 900)], {})}
+        escolhas = iter(["Mae", "← voltar"])
+
+        def escolher(opcoes):
+            alvo = next(escolhas, None)
+            return opcoes.index(alvo) if alvo in opcoes else None
+        pedido = {"objetivo": "abrir Você", "app": APP, "concluido": {"texto": "Anexar"}, "pistas": ["Você"]}
+        cel = Celular(dict(telas), "lista")
+        cel.telas["lista"] = ([el("Mae", 200)], {"Mae": "chat_mae"})  # "Você" ainda não aparece
+
+        def depois_de_voltar(cmd, orig=cel.injetar):
+            r = orig(cmd)
+            if cmd == "tecla 4":
+                cel.telas["lista"] = telas["lista"]  # agora aparece
+            return r
+        cel.injetar = depois_de_voltar
+        r = self.executor(cel, escolher).executar(pedido)
+        self.assertEqual(r["estado"], "concluido")
+        import json as _j
+        memoria = list(_j.load(open(self.mem)).values())[0]
+        self.assertEqual(sorted(memoria.values()), ["Você"])  # o desvio por "Mae" não foi aprendido
+
     def test_validacao(self):
         ex = self.executor(Celular(TELAS, "inicio"))
         self.assertIn("erro", ex.executar({"objetivo": "x"}))  # sem critério de conclusão

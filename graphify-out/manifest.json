@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795289160.6284897,
-    "seen": 1795289162.1878045,
-    "ast_hash": "cde33146b272934afca35233d7d07ef1",
+    "mtime": 1795289408.2069697,
+    "seen": 1795289409.911572,
+    "ast_hash": "3478ac78a4c054125625b992689ff67c",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -726,15 +726,15 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/objetivo.py": {
-    "mtime": 1795289102.555005,
-    "seen": 1795289162.187799,
-    "ast_hash": "d8101fe0a4bacaf0d51540f08f1c8ad2",
+    "mtime": 1795289349.2808688,
+    "seen": 1795289409.9115658,
+    "ast_hash": "2024a728bd1c9e89b9a13ef2b0b60b58",
     "semantic_hash": ""
   },
   "testes/test_objetivo.py": {
-    "mtime": 1795289102.5553002,
-    "seen": 1795289162.1878698,
-    "ast_hash": "24e85dd73f088f678c8da9718c11ec7d",
+    "mtime": 1795289286.314775,
+    "seen": 1795289409.9116466,
+    "ast_hash": "83ec1d7c093edabe0a40a47bb2d8e040",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

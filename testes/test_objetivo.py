@@ -437,6 +437,12 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertEqual(self.niveis[-1], "maximo")  # pedido explícito: Opus pensando
         self.assertEqual(set(self.m.NIVEIS), {"rapido", "padrao", "forte", "maximo"})
 
+    def test_botoes_de_info_do_app_sao_proibidos(self):
+        for r in ("Forçar parada", "Limpar dados", "Desinstalar", "Desativar", "Desligar"):
+            self.assertTrue(self.m.proibido(r), r)
+        for r in ("Armazenamento", "Notificações", "Sobre o telefone", "Apps"):
+            self.assertFalse(self.m.proibido(r), r)
+
     def test_validacao(self):
         ex = self.executor(Celular(TELAS, "inicio"))
         self.assertIn("erro", ex.executar({"objetivo": "x"}))  # sem critério de conclusão

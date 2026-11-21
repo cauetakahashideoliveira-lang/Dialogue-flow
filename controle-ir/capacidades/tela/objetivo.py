@@ -25,7 +25,9 @@ import unicodedata
 PROIBIDOS = ("enviar", "excluir", "apagar", "deletar", "comprar", "pagar", "pagamento", "assinar", "confirmar compra",
              "desinstalar", "transferir", "pix", "sair da conta", "desconectar", "ligar para", "chamada de voz",
              "chamada de video", "videochamada", "bloquear", "denunciar", "publicar", "postar", "compartilhar",
-             "responder", "encaminhar", "redefinir", "restaurar", "formatar", "remover", "esquecer")
+             "responder", "encaminhar", "redefinir", "restaurar", "formatar", "remover", "esquecer",
+             "forcar parada", "forcar interrupcao", "limpar", "desativar", "desligar", "parar", "arquivar",
+             "sair", "cancelar assinatura", "apagar dados", "resetar")
 DISPENSAR = ("agora nao", "mais tarde", "pular", "fechar", "dispensar", "nao, obrigado", "nao obrigado", "entendi",
              "ignorar", "x")  # janelas que só atrapalham (nunca "OK", "Permitir", "Aceitar")
 ROLAR, VOLTAR = "↓ rolar para baixo", "← voltar"

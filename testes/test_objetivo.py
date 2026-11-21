@@ -365,6 +365,25 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertEqual(self.m.ranquear([f"Item {i}" for i in range(12)] + ["Versão do sistema"],
                                          "ver a versão do sistema", 3)[-1], "Versão do sistema")
 
+    def test_ciclo_chat_info_e_cortado_e_busca_fora_das_opcoes(self):
+        # 21/11, WhatsApp: chat → tocar no título → informações → voltar → chat → tocar no título de novo…
+        telas = {"lista": ([el("Pergunte à Meta AI ou pesquise", 100), el("Você", 300)], {"Você": "chat"}),
+                 "chat": ([el("Você", 50), el("Última: oi", 600, clic=False)], {"Você": "info"}),
+                 "info": ([el("Grupo · 1 membro", 100, clic=False), el("Membros", 300, clic=False)], {})}
+        cel = Celular(telas, "lista")
+
+        def escolher(opcoes):
+            for o in ("Você", "← voltar"):
+                if o in opcoes:
+                    return opcoes.index(o)
+            return None
+        r = self.executor(cel, escolher).executar(
+            {"objetivo": "ler a conversa Você", "app": APP, "concluido": {"texto": "Anexar"}, "max_passos": 20})
+        self.assertEqual(r["estado"], "parado")
+        self.assertLessEqual(len(r["passos"]), 6)  # não fica indo e voltando até o limite (20)
+        self.assertEqual(sum(p.get("alvo") == "Você" for p in r["passos"]), 2)  # uma vez na lista, uma no chat
+        self.assertTrue(all("Pergunte à Meta AI ou pesquise" not in o for o in self.perguntas))
+
     def test_validacao(self):
         ex = self.executor(Celular(TELAS, "inicio"))
         self.assertIn("erro", ex.executar({"objetivo": "x"}))  # sem critério de conclusão

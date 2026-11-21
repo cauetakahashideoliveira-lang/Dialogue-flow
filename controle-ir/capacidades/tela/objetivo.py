@@ -167,8 +167,10 @@ class Executor:
                     r["tela"] = {"app": app_atual, "textos": textos_da_tela(els, app_atual, int(a.get("ler_max", 60)))}
             return r
 
+        feitas = set()  # (tela, ação) que já mudou a tela: se voltamos aqui, ela não leva ao objetivo
+
         def falhou(sig_, r):  # 1 falha = transitória (tenta de novo); 2 = desiste dessa ação nesta tela
-            return falhas.get((sig_, r), 0) >= 2
+            return falhas.get((sig_, r), 0) >= 2 or (sig_, r) in feitas
 
         def anotar(acao, alvo, via, t0):
             passos.append({"n": len(passos) + 1, "acao": acao, **({"alvo": alvo} if alvo else {}), "via": via,
@@ -278,7 +280,7 @@ class Executor:
                     # tocável: o próprio elemento ou a linha clicável que o contém (nas Configurações o título
                     # "Sobre o telefone" não é clicável, a linha sem texto é — 21/11, o modelo só via rolar/voltar)
                     if (r and r not in opcoes and tocavel(e, els) and not falhou(sig, r)
-                            and seguro(e, els, permitir)):
+                            and seguro(e, els, permitir) and (digitar or not busca(e))):
                         opcoes.append(r)
                 opcoes = ranquear(opcoes, objetivo, 7)  # o cérebro responde 1 dígito: até 7 + rolar + voltar
                 extras = [x for x in (ROLAR, VOLTAR) if not falhou(sig, x)]
@@ -327,11 +329,19 @@ class Executor:
             else:
                 if acao == "rolar" and assinatura(depois, app_depois) == sig:
                     falhas[(sig, ROLAR)] = 2  # fim da lista
+                if acao != "rolar":
+                    feitas.add((sig, rotulo_acao))  # voltar a esta tela e repetir = ciclo (chat ↔ info, 21/11)
                 if acao == "tocar" and via != "dispensar":
                     novos[sig] = rotulo_acao
                 if escolhida_pista:
                     usadas.add(escolhida_pista)
                 anotar(acao, rotulo_acao, via, t0)
+
+
+def busca(e):
+    """Campo/atalho de busca ou assistente (ex.: "Pergunte à Meta AI ou pesquise"): sem texto para digitar não leva
+    a lugar nenhum — o modelo do celular escolheu isso no teste do WhatsApp (21/11)."""
+    return bool(e.get("editavel")) or bool(re.search(r"pesquis|buscar|search|meta ai|pergunte", norm(rotulo(e))))
 
 
 def tocavel(e, els):

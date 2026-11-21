@@ -272,6 +272,11 @@ class Executor:
                     t.calma(150, 2500)
                     anotar("digitar", f"{len(digitar)} caracteres", "digitar", t0)
                     continue
+            # 3b. pista ainda não usada e fora da tela: rolar procurando ANTES de o modelo adivinhar (no WhatsApp o
+            # modelo abriu outra conversa enquanto a pista "Você" estava logo abaixo — 21/11)
+            if (not escolha and any(p not in usadas for p in pistas) and not falhou(sig, ROLAR)
+                    and any(e.get("rolavel") for e in els)):
+                escolha, via = ROLAR, "procurando pista"
             # 4. o cérebro do celular escolhe entre os controles visíveis
             if not escolha and usar_modelo:
                 opcoes = []

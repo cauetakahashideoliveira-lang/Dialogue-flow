@@ -1,17 +1,17 @@
 # Graph Report - Dialogue-flow  (2026-11-21)
 
 ## Corpus Check
-- 115 files · ~155,154 words
+- 115 files · ~155,250 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 15 file(s) not represented in the graph (top: (none) 3, .ir 3, .jsonl 2)
 
 ## Summary
-- 2268 nodes · 5121 edges · 130 communities (71 shown, 59 thin omitted)
+- 2269 nodes · 5124 edges · 140 communities (82 shown, 58 thin omitted)
 - Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 388 edges (avg confidence: 0.86)
 - Token cost: 157,587 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `7da74bcf`
+- Built from commit: `aa2f4001`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -21,7 +21,7 @@
 - TestPainel
 - Conexao
 - normalizar
-- Servico
+- EmissorSimulado
 - Controlador
 - .passo
 - Celular
@@ -30,15 +30,15 @@
 - steps
 - canal.py
 - TestTelaPorArquivo
-- servico.py
+- aparelhos.py
 - os
 - Descoberta
 - Sinal
 - Modo deus — arquitetura evolutiva e mapa de oportunidades
-- navegar
+- time
 - Instalador (instalar.sh)
 - Tela
-- grade
+- elementos
 - subprocess
 - objetivo.py
 - e2e.cjs
@@ -49,10 +49,10 @@
 - time
 - descobrir_rede/principal.py
 - gree_variante.py
-- TestBuscarNoCelular
+- Catalogo
 - exec_cli
 - schema.sql
-- Sincronizador
+- formatos.py
 - Dialogue-flow · Controle do Android pelo ChatGPT e pelo Claude
 - package.json
 - TestOuvirBipe
@@ -63,16 +63,16 @@
 - protocolos.py
 - webauthn.js
 - session-start.sh
-- catalogo_base
-- armado
+- main
+- ambiente_missao.py
 - TestExecucao
-- tv do quarto (TV Samsung)
+- .controlar
 - autorizar.js
 - app.js
 - Canal
-- _jar
+- Servico
 - HANDOFF.md
-- hashlib
+- ErroUso
 - TestPiloto
 - TestGreeVariante
 - .anotar
@@ -80,9 +80,9 @@
 - TestSono
 - TestCanal
 - Passagem de bastão do Dialogue-flow
-- .decidir
+- canal.py
 - criar_servidor
-- resolver_grade
+- modulo_embutido
 - local.cjs
 - TestEstadoCelularSemProc
 - ._api
@@ -93,13 +93,13 @@
 - Piloto
 - Motor
 - TestArmacao
-- TestAppAuxiliar
-- TestClassificacao
+- observador.py
+- termometro/principal.py
 - tela/principal.py
 - TestSegundoPlano
 - 4. Mapa de oportunidades
 - android.bluetooth.le.ScanResult
-- fechar_anuncio
+- Variante Gree a partir da captura real (troca só os bits)
 - PlanoTest
 - godmode-tracker.js
 - modulo_embutido
@@ -114,19 +114,19 @@
 - TestCapacidades
 - novo_servico
 - atualizar_conhecimento.sh
-- _carregar
+- Estado atual da instalação (17/11/2026)
 - shutil
 - TestParidadeDoBloqueio
 - cli.py
-- _linhas_do_passo
-- TestResumoSemRepeticao
+- _iniciar
+- test_consistencia.py
 - Contribuir com o Dialogue-flow
 - Bluetooth
 - TestProtocolos
 - TestTermometro
-- TestFerramentasDaMissao
-- TestAtualizacaoRecompila
-- abrir_console
+- tv do quarto (TV Samsung)
+- CLAUDE.md
+- Tunel
 - TestVocabulario
 - TestLeitorJava
 - TestImagemNoMcp
@@ -137,6 +137,15 @@
 - construir_app_bluetooth.sh script
 - TestRepositorio
 - Process
+- novo_servico
+- TestTunel
+- Reenvios
+- Notificador
+- ErroEmissor
+- TestServidorMCP
+- _modelos_do_teclado
+- reflexos
+- atualizar
 
 ## God Nodes (most connected - your core abstractions)
 1. `Servico` - 62 edges
@@ -146,8 +155,8 @@
 5. `Sinal` - 37 edges
 6. `TestTelaPorArquivo` - 36 edges
 7. `Catalogo` - 35 edges
-8. `f()` - 32 edges
-9. `Celular` - 31 edges
+8. `Celular` - 32 edges
+9. `f()` - 32 edges
 10. `criar_servidor()` - 31 edges
 
 ## Surprising Connections (you probably didn't know these)
@@ -155,12 +164,12 @@
   docs/estado-atual.md → controle-ir/controle_ir/catalogo.py
 - `3b. Gateway OAuth na borda (1.0.26, implementada)` --references--> `TestPainel`  [INFERRED]
   docs/seguranca.md → testes/test_controle_ir.py
-- `Arquivos .ir com os sinais adicionados pelo usuário (formato Flipper)` --conceptually_related_to--> `ler_flipper()`  [INFERRED]
-  docs/aparelhos/README.md → controle-ir/controle_ir/formatos.py
-- `variante()` --implements--> `Variante Gree a partir da captura real (troca só os bits)`  [INFERRED]
-  ferramentas/gree_variante.py → docs/aparelhos/quarto/ar-do-quarto.md
+- `Túnel ngrok com domínio fixo` --conceptually_related_to--> `Tunel`  [INFERRED]
+  docs/estado-atual.md → controle-ir/controle_ir/tunel.py
 - `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `ampliar_catalogo()`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/cli.py
+- `Arquivos .ir com os sinais adicionados pelo usuário (formato Flipper)` --conceptually_related_to--> `ler_flipper()`  [INFERRED]
+  docs/aparelhos/README.md → controle-ir/controle_ir/formatos.py
 
 ## Import Cycles
 - None detected.
@@ -170,7 +179,7 @@
 - **Criação de botão novo: gerar variante, testar com enviar_sinal, salvar com editar_aparelho** — docs_aparelhos_readme_criar_botao_novo, ferramentas_gree_variante, docs_aparelhos_quarto_ar_do_quarto_variante_gree_da_captura_real, controle_ir_controle_ir_servico_servico_enviar_sinal, controle_ir_controle_ir_servico_servico_editar_aparelho [INFERRED 0.85]
 - **Fluxo de descoberta com número falado (buscar, pausar, retestar, confirmar)** — docs_estado_atual_anuncio_por_voz, controle_ir_controle_ir_servico_servico_buscar, controle_ir_controle_ir_servico_servico_pausar, controle_ir_controle_ir_servico_servico_retestar, controle_ir_controle_ir_servico_servico_confirmar [INFERRED 0.85]
 
-## Communities (130 total, 59 thin omitted)
+## Communities (140 total, 58 thin omitted)
 
 ### Community 0 - "index.js"
 Cohesion: 0.08
@@ -178,39 +187,39 @@ Nodes (59): abrirCanal(), acaoDono(), ackCelular(), agora(), aleatorio(), aparel
 
 ### Community 1 - "test_controle_ir.py"
 Cohesion: 0.07
-Nodes (4): main(), preparar(), TestApkAtualizado, TestManifesto
+Nodes (5): resumo_instrucoes(), main(), preparar(), TestApkAtualizado, TestManifesto
 
 ### Community 2 - "TestPainel"
-Cohesion: 0.09
+Cohesion: 0.10
 Nodes (15): 1. Diagnóstico (código da 1.0.22, auditoria de 19/11), 3. Etapa 1 — painel externo com passkey, 3a. Central de Controle (1.0.24, implementada) — `painel/`, 3b. Gateway OAuth na borda (1.0.26, implementada), 3c. Transparência: atividade, tela ao vivo e “em uso agora” (1.0.29), 3d. Canal direto celular ↔ Central (1.0.46 + PR da Central), 4. Etapa 2 — endurecer a execução (depois da Etapa 1), 5. Decisões do dono (+7 more)
 
-### Community 4 - "normalizar"
-Cohesion: 0.23
-Nodes (12): comando(), chaves_de_teste(), interpretar(), normalizar(), _por_regex(), _registrar(), sem_acentos(), slug() (+4 more)
+### Community 3 - "Conexao"
+Cohesion: 0.24
+Nodes (3): carregar_memoria(), Conexao, _texto_do_evento()
 
-### Community 5 - "Servico"
+### Community 4 - "normalizar"
 Cohesion: 0.14
-Nodes (6): executar(), EmissorSimulado, ErroUso, Servico, Macros de sequência (editar_aparelho(macro=...), 0,45 s entre teclas), TestDescoberta
+Nodes (12): normalizar_marca(), categoria_canonica(), chaves_de_teste(), interpretar(), normalizar(), _por_regex(), _registrar(), sem_acentos() (+4 more)
 
 ### Community 6 - "Controlador"
-Cohesion: 0.17
-Nodes (6): Controlador, Etapa, Plano, normalizar_valor(), valores_equivalentes(), TestControle
+Cohesion: 0.11
+Nodes (10): hora_legivel(), Controlador, Etapa, executar(), Plano, normalizar_valor(), valores_equivalentes(), catalogo_base() (+2 more)
 
 ### Community 7 - ".passo"
-Cohesion: 0.11
-Nodes (8): achar(), eventos(), _Executor, els_fn(), relevantes(), _Falha, _Interrompido, normalizar()
+Cohesion: 0.08
+Nodes (16): achar(), achar_regra(), aplicar_regras(), els_fn(), calma(), compactos(), eventos(), _Executor (+8 more)
 
 ### Community 8 - "Celular"
 Cohesion: 0.10
 Nodes (6): _carregar(), Celular, el(), TestExecutorObjetivo, decidir(), escolher()
 
 ### Community 9 - "TestSonarFrequencia"
-Cohesion: 0.06
-Nodes (8): _carregar(), _Resposta, TestDescobrirRedeSemWifi, TestDiagnosticoRede, urlopen(), TestSonarFrequencia, testar(), TestTermometroSemResposta
+Cohesion: 0.07
+Nodes (7): _carregar(), _Resposta, TestDiagnosticoRede, urlopen(), TestSonarFrequencia, testar(), TestTermometroSemResposta
 
 ### Community 10 - "Politica"
-Cohesion: 0.26
-Nodes (3): painel_cli(), Politica, fim_do_dia()
+Cohesion: 0.20
+Nodes (6): armar_cli(), painel_cli(), Politica, estado_valido(), ler(), fim_do_dia()
 
 ### Community 11 - "steps"
 Cohesion: 0.11
@@ -218,31 +227,31 @@ Nodes (20): runs-on, steps, jobs, central, servico, name, on, pull_request (+12 
 
 ### Community 12 - "canal.py"
 Cohesion: 0.13
-Nodes (11): nome_da_chamada(), _b64(), estado_valido(), _eventos_novos(), gravar(), _http(), ler(), parear() (+3 more)
+Nodes (9): _b64(), _eventos_novos(), gravar(), _http(), parear(), Sincronizador, sincronizar(), verificar() (+1 more)
 
-### Community 14 - "servico.py"
-Cohesion: 0.10
-Nodes (9): Aparelhos, capacidades(), _curto(), ErroAparelho, _faixa_txt(), hora_legivel(), _linhas_aparelho(), resumo_aparelho() (+1 more)
+### Community 14 - "aparelhos.py"
+Cohesion: 0.23
+Nodes (7): capacidades(), _curto(), ErroAparelho, _faixa_txt(), _linhas_aparelho(), resumo_aparelho(), resumo_para_instrucoes()
 
 ### Community 15 - "os"
-Cohesion: 0.18
-Nodes (10): analisar(), comparar(), comparar_ruido(), decodificar(), detectar_bipes(), filtrar_janela(), gravar(), gravar_json() (+2 more)
+Cohesion: 0.13
+Nodes (12): analisar(), comparar(), comparar_ruido(), decodificar(), detectar_bipes(), filtrar_janela(), gravar(), gravar_json() (+4 more)
 
 ### Community 16 - "Descoberta"
-Cohesion: 0.06
-Nodes (15): agora(), Catalogo, estado_representativo(), exportar_jsonl(), importar_flipper(), importar_jsonl(), importar_smartir(), metadados_flipper() (+7 more)
+Cohesion: 0.14
+Nodes (3): agora(), Descoberta, ErroDescoberta
 
 ### Community 17 - "Sinal"
-Cohesion: 0.07
-Nodes (29): adicionar_comando(), ErroFormato, escrever_flipper(), exportar(), _hex_le(), importar_texto(), indice_comandos(), ler_flipper() (+21 more)
+Cohesion: 0.09
+Nodes (13): sinal(), broadlink_para_pulsos(), _classes(), ErroSinal, impressao_bruta(), impressao_protocolo(), limitar_duracao(), normalizar_pulsos() (+5 more)
 
 ### Community 18 - "Modo deus — arquitetura evolutiva e mapa de oportunidades"
 Cohesion: 0.17
 Nodes (12): 10. Hipóteses de produto (a investigar), 1. O que mais surpreende (com fundamento), 2. Gargalo principal e o primeiro avanço (implementado), 3. Arquitetura evolutiva, 5. Conexões que mais aumentam a capacidade de criar conexões, 6. Limites reais (onde está a barreira), 7. Autonomia com responsabilidade, 8. Próximos experimentos (ordem sugerida) (+4 more)
 
-### Community 19 - "navegar"
-Cohesion: 0.13
-Nodes (18): atividade_no_topo(), bloqueado(), bloqueados(), casas_xadrez(), escolher(), foto(), _ferramentas_piloto(), aguardar() (+10 more)
+### Community 19 - "time"
+Cohesion: 0.11
+Nodes (30): agir(), _ajudante(), bloqueado(), bloqueados(), dump_ui(), em_anuncio(), _executar(), escolher() (+22 more)
 
 ### Community 20 - "Instalador (instalar.sh)"
 Cohesion: 0.70
@@ -252,57 +261,65 @@ Nodes (4): etapa(), falha(), ok(), instalar.sh script
 Cohesion: 0.07
 Nodes (4): Tela, UiAutomation.OnAccessibilityEventListener, Thread, Thread
 
-### Community 22 - "grade"
-Cohesion: 0.08
-Nodes (17): achar_regra(), aplicar_regras(), els_fn(), calma(), elementos(), tocar(), grade(), _injetar() (+9 more)
+### Community 22 - "elementos"
+Cohesion: 0.09
+Nodes (15): atividade_no_topo(), casas_xadrez(), elementos(), escapar_input_text(), foto(), _ferramentas_piloto(), aguardar(), tabuleiro_local() (+7 more)
 
 ### Community 23 - "subprocess"
-Cohesion: 0.15
-Nodes (8): filtro(), ler_recortes(), main(), reduzir(), validar_recorte(), _jpeg(), arquivos_cc0(), main()
+Cohesion: 0.16
+Nodes (8): filtro(), ler_recortes(), main(), reduzir(), validar_recorte(), progresso_txt(), f(), TestDescobrirRedeSemWifi
 
 ### Community 24 - "objetivo.py"
-Cohesion: 0.11
-Nodes (16): assinatura(), busca(), concluido(), Executor, fim(), interruptor(), melhor(), norm() (+8 more)
+Cohesion: 0.08
+Nodes (22): assinatura(), busca(), concluido(), Executor, fim(), interruptor(), melhor(), norm() (+14 more)
 
 ### Community 25 - "e2e.cjs"
 Cohesion: 0.13
 Nodes (11): celular(), { chromium }, { execFileSync, spawn }, filhos, fs, nodeCrypto, os, PASTA (+3 more)
 
 ### Community 26 - "json"
-Cohesion: 0.12
-Nodes (24): guardar(), analisar_trecho(), comandar_ar(), gravar_json(), laco(), ler_json(), _linhas(), main() (+16 more)
+Cohesion: 0.23
+Nodes (12): analisar_trecho(), comandar_ar(), gravar_json(), laco(), ler_json(), _linhas(), main(), _quadros_db() (+4 more)
 
 ### Community 27 - "steps"
 Cohesion: 0.11
 Nodes (17): jobs, pacote, name, on, push, workflow_dispatch, runs-on, steps (+9 more)
 
 ### Community 28 - "time"
-Cohesion: 0.15
-Nodes (19): _abrir(), agir(), _ajudante(), _apagar(), _bloqueio_de_toque(), captura(), dump_ui(), estado_rapido() (+11 more)
+Cohesion: 0.13
+Nodes (14): _abrir(), Ajudante, _apagar(), captura(), estado_rapido(), foto_rapida(), _jar(), _jpeg() (+6 more)
 
 ### Community 29 - "Registro"
-Cohesion: 0.06
-Nodes (20): consultar_modelo(), contexto(), executar(), planejar(), RespostaDePlanoInvalida, ErroCapacidade, _hash(), _manifesto() (+12 more)
+Cohesion: 0.20
+Nodes (5): ErroCapacidade, _hash(), _manifesto(), Registro, capacidade_cli()
 
 ### Community 30 - "time"
-Cohesion: 0.28
-Nodes (9): analisar(), dns(), download(), gateway(), main(), ping(), rodar(), wifi() (+1 more)
+Cohesion: 0.40
+Nodes (8): analisar(), dns(), download(), gateway(), main(), ping(), rodar(), wifi()
 
 ### Community 31 - "descobrir_rede/principal.py"
 Cohesion: 0.16
 Nodes (11): classificar(), ficha_upnp(), ip_do_wifi(), ler_inventarios(), main(), sondar(), ssdp(), tcp() (+3 more)
 
 ### Community 32 - "gree_variante.py"
-Cohesion: 0.05
-Nodes (29): Pacote do celular dist/controle-ir.zip, Tunel, Anúncio dos testes (v1.0.1), Celular, Conector Controle master (MCP sem login, URL com segredo), Conector no Claude, Correção do curl CANNOT LINK EXECUTABLE (apt update && apt full-upgrade), Emissor IR do celular (30, 33, 36, 38, 40 e 56 kHz) (+21 more)
+Cohesion: 0.22
+Nodes (10): checksum(), ErroGree, flipper(), gerar(), _indice_espaco(), ler_bytes(), main(), perfil() (+2 more)
+
+### Community 33 - "Catalogo"
+Cohesion: 0.14
+Nodes (10): Catalogo, estado_representativo(), exportar_jsonl(), importar_flipper(), importar_jsonl(), importar_smartir(), metadados_flipper(), _unzip() (+2 more)
 
 ### Community 34 - "exec_cli"
-Cohesion: 0.23
-Nodes (3): exec_cli(), Autorizacao, gerar_segredo()
+Cohesion: 0.19
+Nodes (4): exec_cli(), Autorizacao, gerar_segredo(), totp()
 
 ### Community 35 - "schema.sql"
 Cohesion: 0.12
 Nodes (15): aparelhos, chamadas, config, convites, credenciais, desafios, estado, eventos (+7 more)
+
+### Community 36 - "formatos.py"
+Cohesion: 0.17
+Nodes (17): adicionar_comando(), comando(), ErroFormato, escrever_flipper(), exportar(), _hex_le(), importar_texto(), indice_comandos() (+9 more)
 
 ### Community 37 - "Dialogue-flow · Controle do Android pelo ChatGPT e pelo Claude"
 Cohesion: 0.12
@@ -317,7 +334,7 @@ Cohesion: 0.22
 Nodes (9): analisar_sonar(), escolher_e_testar(), frequencia_lembrada(), gerar_tom(), lembrar(), main(), sugestao_sem_tom(), testar() (+1 more)
 
 ### Community 42 - "analisar.py"
-Cohesion: 0.42
+Cohesion: 0.38
 Nodes (4): agenda(), analisar(), extras(), percentil95()
 
 ### Community 43 - "test_god_mode.py"
@@ -325,20 +342,24 @@ Cohesion: 0.11
 Nodes (5): _Base, _ComServidor, TestGodModeAprendizado, TestGodModeAutoTune, TestGodModeModelos
 
 ### Community 44 - "protocolos.py"
-Cohesion: 0.17
+Cohesion: 0.16
 Nodes (15): _bits_bytes_lsb(), _bits_lsb(), codificar(), decodificar(), ErroProtocolo, EspecPDWM, _int_lsb(), _juntar_niveis() (+7 more)
 
 ### Community 45 - "webauthn.js"
 Cohesion: 0.15
 Nodes (9): a(), f(), g(), n(), o(), p(), r(), s (+1 more)
 
-### Community 48 - "armado"
-Cohesion: 0.32
-Nodes (3): armado(), permitido(), 2. Etapa 0 — armação diária local (1.0.23, implementada)
+### Community 47 - "main"
+Cohesion: 0.14
+Nodes (12): ampliar_catalogo(), arquivo_boot(), boot_ativado(), criar_atalhos(), iniciar(), inicio_automatico(), main(), pasta_atalhos() (+4 more)
 
-### Community 50 - "tv do quarto (TV Samsung)"
-Cohesion: 0.10
-Nodes (25): ar do escritório (ar-condicionado Carrier), Perfil SmartIR Carrier Unknown (catálogo nº 94), ar condicionado laboratório (ar-condicionado Midea), Tecla de oscilação do perfil Ferroli/York (oscilacao_alternar), ar do quarto (ar-condicionado Gree GWH09KF), Extra modo_turbo: turbo + oscilação + visor apagado (quadro 49 00 10 50 01 20 00 50), Extra oscilacao_alternar do Gree (quadro 49 00 20 50 01 20 00 50), Extra x_luz: visor desligado (quadro 09 00 00 50 00 20 00 50) (+17 more)
+### Community 48 - "ambiente_missao.py"
+Cohesion: 0.18
+Nodes (7): consultar_modelo(), contexto(), executar(), planejar(), RespostaDePlanoInvalida, armado(), permitido()
+
+### Community 50 - ".controlar"
+Cohesion: 0.20
+Nodes (13): ar do escritório (ar-condicionado Carrier), Perfil SmartIR Carrier Unknown (catálogo nº 94), ar condicionado laboratório (ar-condicionado Midea), Tecla de oscilação do perfil Ferroli/York (oscilacao_alternar), ar do quarto (ar-condicionado Gree GWH09KF), Extra oscilacao_alternar do Gree (quadro 49 00 20 50 01 20 00 50), Extra x_luz: visor desligado (quadro 09 00 00 50 00 20 00 50), Ligar/desligar diretos (energia_ligar 0x99, energia_desligar 0x98) (+5 more)
 
 ### Community 51 - "autorizar.js"
 Cohesion: 0.73
@@ -348,17 +369,13 @@ Nodes (5): api(), decidir(), digital(), msg(), preparar()
 Cohesion: 0.26
 Nodes (15): acao(), api(), aviso(), carregar(), comDigital(), conviteNaUrl, digital(), el() (+7 more)
 
-### Community 53 - "Canal"
-Cohesion: 0.10
-Nodes (3): Canal, _mascarar(), WebSocket
-
 ### Community 55 - "HANDOFF.md"
-Cohesion: 0.26
-Nodes (3): Contexto para o Claude Code, Skill graphify (query, explain, path, update), Licenças dos dados de controle
+Cohesion: 0.25
+Nodes (3): Comparação do planejador de missões no POCO, Rodada, Licenças dos dados de controle
 
-### Community 56 - "hashlib"
-Cohesion: 0.19
-Nodes (7): _jar(), fontes(), impressao(), checksum(), empacotar(), fontes(), verificar()
+### Community 56 - "ErroUso"
+Cohesion: 0.23
+Nodes (4): Aparelhos, ErroUso, slug(), Arquivos .ir com os sinais adicionados pelo usuário (formato Flipper)
 
 ### Community 57 - "TestPiloto"
 Cohesion: 0.10
@@ -368,25 +385,17 @@ Nodes (7): TestPiloto, do_POST(), local(), elementos(), mover(), tocar(), robo()
 Cohesion: 0.10
 Nodes (5): BluetoothDevice, ScanRecord, ScanResult, ParcelUuid, SparseArray
 
-### Community 61 - "TestSono"
-Cohesion: 0.16
-Nodes (3): _carregar_cap(), TestSonar, TestSono
+### Community 62 - "TestCanal"
+Cohesion: 0.15
+Nodes (3): nome_da_chamada(), TestCanal, central()
 
 ### Community 63 - "Passagem de bastão do Dialogue-flow"
 Cohesion: 0.13
 Nodes (15): Arquitetura, Central de Controle no Cloudflare, Configuração por instalação, Continuar em OUTRO repositório, Desenvolver e testar, Mapa do repositório, Missões, rotas e piloto, O que aconteceu até aqui (+7 more)
 
-### Community 64 - ".decidir"
-Cohesion: 0.39
-Nodes (3): chave_quiz(), norm(), quiz_da_tela()
-
 ### Community 65 - "criar_servidor"
-Cohesion: 0.08
-Nodes (16): julgar_depois(), criar_servidor(), _corpo(), do_DELETE(), do_GET(), do_OPTIONS(), do_POST(), _json() (+8 more)
-
-### Community 66 - "resolver_grade"
-Cohesion: 0.25
-Nodes (5): _caixa(), _conflitos(), resolver_grade(), busca(), resolver_sudoku()
+Cohesion: 0.24
+Nodes (13): criar_servidor(), _corpo(), do_DELETE(), do_GET(), do_OPTIONS(), do_POST(), _json(), local_ok() (+5 more)
 
 ### Community 67 - "local.cjs"
 Cohesion: 0.13
@@ -397,24 +406,36 @@ Cohesion: 0.22
 Nodes (5): ao_texto(), _confianca(), corpo_api(), ler_chave(), prompt_quiz()
 
 ### Community 70 - "piloto.py"
-Cohesion: 0.15
-Nodes (5): fen(), minha_cor(), quem_mexeu(), tabuleiro_txt(), _texto_do_evento()
+Cohesion: 0.17
+Nodes (7): chave_quiz(), fen(), gravar_memoria(), minha_cor(), norm(), quiz_da_tela(), tabuleiro_txt()
 
 ### Community 71 - "Autonomia do planejador no POCO"
-Cohesion: 0.22
-Nodes (7): Comparação do planejador de missões no POCO, Rodada, Autonomia do planejador no POCO, Dados e reprodução, Próxima bateria, Revisões medidas, Robustez do componente
+Cohesion: 0.40
+Nodes (5): Autonomia do planejador no POCO, Dados e reprodução, Próxima bateria, Revisões medidas, Robustez do componente
+
+### Community 77 - "observador.py"
+Cohesion: 0.21
+Nodes (7): apps_usando(), _capacidades_rodando(), em_uso(), quadro(), recursos_do_comando(), _tarefas(), _tela()
+
+### Community 78 - "termometro/principal.py"
+Cohesion: 0.29
+Nodes (8): avaliar(), bateria(), gravar(), historico(), ler_conf(), main(), medir(), tendencia()
 
 ### Community 79 - "tela/principal.py"
-Cohesion: 0.07
-Nodes (28): app_em_foco(), botao_fechar(), _chave(), compactos(), _contar(), curto(), dentro(), diferenca() (+20 more)
+Cohesion: 0.06
+Nodes (27): app_em_foco(), _bloqueio_de_toque(), _caixa(), _chave(), classe_janela(), _conflitos(), _contar(), curto() (+19 more)
+
+### Community 80 - "TestSegundoPlano"
+Cohesion: 0.24
+Nodes (3): TestSegundoPlano, abrir_console(), reiniciado()
 
 ### Community 81 - "4. Mapa de oportunidades"
 Cohesion: 0.33
 Nodes (6): 4. Mapa de oportunidades, Casa e rede, Celular e Android, Computadores, nuvem e agentes, O próprio sistema, Observar o resultado (agir → medir → ajustar)
 
-### Community 83 - "fechar_anuncio"
-Cohesion: 0.20
-Nodes (8): classe_janela(), em_anuncio(), objetivo(), abrir(), aplicar_regras(), bloqueado(), elementos(), recolher()
+### Community 83 - "Variante Gree a partir da captura real (troca só os bits)"
+Cohesion: 0.19
+Nodes (6): Extra modo_turbo: turbo + oscilação + visor apagado (quadro 49 00 10 50 01 20 00 50), Perfil SmartIR climate/1184 Gree GWH09KF (catálogo nº 105), Perfil Gree Unknown (catálogo nº 102), descartado, Correção do curl CANNOT LINK EXECUTABLE (apt update && apt full-upgrade), Problemas já resolvidos (para não repetir), Versão do servidor (celular 1.0.4, repositório 1.0.5)
 
 ### Community 85 - "godmode-tracker.js"
 Cohesion: 0.22
@@ -424,21 +445,29 @@ Nodes (4): flagPath, fs, os, path
 Cohesion: 0.47
 Nodes (6): abrir(), configurar(), estudar(), ler_preferencias(), mostrar(), Preferencias
 
-### Community 88 - "ErroEmissor"
-Cohesion: 0.20
-Nodes (3): Emissor, EmissorTermux, ErroEmissor
-
 ### Community 90 - "bluetooth/principal.py"
-Cohesion: 0.11
-Nodes (18): buscar(), buscar_app(), buscar_shell(), classificar(), compilar(), distancia(), _ler_marca(), ler_pareados_dumpsys() (+10 more)
+Cohesion: 0.10
+Nodes (20): buscar(), buscar_app(), buscar_shell(), classificar(), compilar(), distancia(), guardar(), _ler_marca() (+12 more)
+
+### Community 99 - "Estado atual da instalação (17/11/2026)"
+Cohesion: 0.21
+Nodes (13): Anúncio dos testes (v1.0.1), Celular, Conector Controle master (MCP sem login, URL com segredo), Conector no Claude, Emissor IR do celular (30, 33, 36, 38, 40 e 56 kHz), Estado atual da instalação (17/11/2026), Frases, Início automático com Termux:Boot (pendente) (+5 more)
 
 ### Community 100 - "shutil"
-Cohesion: 0.36
+Cohesion: 0.24
 Nodes (6): carga_cpu_1min(), js(), ler(), ligado_ha_horas(), main(), rodar()
 
 ### Community 102 - "cli.py"
-Cohesion: 0.06
-Nodes (47): ampliar_catalogo(), _api(), armar_cli(), arquivo_boot(), atualizar(), _aviso(), boot_ativado(), caminho_log() (+39 more)
+Cohesion: 0.13
+Nodes (20): _api(), caminho_log(), carregar_config(), _cfg_caminho(), console(), url_quando_pronta(), estado_servidor(), iniciar_em_segundo_plano() (+12 more)
+
+### Community 103 - "_iniciar"
+Cohesion: 0.27
+Nodes (10): _aviso(), _carimbo_catalogo(), catalogo_atual(), _iniciar(), ao_mudar_url(), encerrar(), gravar_estado(), reduzir() (+2 more)
+
+### Community 104 - "test_consistencia.py"
+Cohesion: 0.15
+Nodes (3): TestAtualizacaoRecompila, TestFerramentasDaMissao, TestResumoSemRepeticao
 
 ### Community 105 - "Contribuir com o Dialogue-flow"
 Cohesion: 0.40
@@ -448,6 +477,18 @@ Nodes (5): Central de Controle em desenvolvimento, Contribuir com o Dialogue-flo
 Cohesion: 0.15
 Nodes (5): Runnable, Bluetooth, Runnable, ScanSettings, Builder
 
+### Community 109 - "tv do quarto (TV Samsung)"
+Cohesion: 0.27
+Nodes (8): Macro abrir Netflix (inicio_3 + ok), Macro abrir YouTube (pendente), Perfil Flipper-IRDB Samsung TV Full (catálogo nº 2331), Protocolo Samsung32, endereço 0x07, Smart Hub 0x79 (tecla inicio_3), tv do quarto (TV Samsung), Macros de sequência (editar_aparelho(macro=...), 0,45 s entre teclas), Catálogo instalado: base + ampliado (9.380 perfis)
+
+### Community 110 - "CLAUDE.md"
+Cohesion: 0.27
+Nodes (4): Contexto para o Claude Code, Skill graphify (query, explain, path, update), Pacote do celular dist/controle-ir.zip, empacotar.sh script
+
+### Community 115 - "TestLeitorJava"
+Cohesion: 0.05
+Nodes (7): _carregar(), TestAppAuxiliar, TestBuscarNoCelular, TestClassificacao, TestCompilar, TestLeitorJava, TestTelaDicaDoCampo
+
 ### Community 116 - "TestImagemNoMcp"
 Cohesion: 0.18
 Nodes (4): _extrair_imagens(), varrer(), TestImagemNoMcp, TestImagensAninhadas
@@ -456,16 +497,28 @@ Nodes (4): _extrair_imagens(), varrer(), TestImagemNoMcp, TestImagensAninhadas
 Cohesion: 0.40
 Nodes (5): scripts, build, deploy, dev, test:e2e
 
+### Community 134 - "ErroEmissor"
+Cohesion: 0.39
+Nodes (3): relatar_uso(), EmissorTermux, ErroEmissor
+
+### Community 136 - "_modelos_do_teclado"
+Cohesion: 0.40
+Nodes (3): _modelos_do_teclado(), teclado_da_grade(), _teclado_parado()
+
+### Community 137 - "reflexos"
+Cohesion: 0.40
+Nodes (3): reflexos(), _regex_bloqueados(), _regras()
+
 ## Knowledge Gaps
 - **1 isolated node(s):** `Versão do servidor (celular 1.0.4, repositório 1.0.5)`
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 733 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **59 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Servico` connect `Servico` to `criar_servidor`, `test_controle_ir.py`, `normalizar`, `cli.py`, `Controlador`, `ServidorMCP`, `TestTermometro`, `servico.py`, `Descoberta`, `Sinal`, `armado`, `ErroEmissor`, `Execucao`, `Registro`?**
-  _High betweenness centrality (0.044) - this node is a cross-community bridge._
+- **Why does `Servico` connect `Servico` to `test_controle_ir.py`, `EmissorSimulado`, `Controlador`, `ErroEmissor`, `.consultar`, `aparelhos.py`, `Descoberta`, `Sinal`, `Registro`, `Catalogo`, `formatos.py`, `ServidorMCP`, `.controlar`, `ErroUso`, `Execucao`, `criar_servidor`, `Variante Gree a partir da captura real (troca só os bits)`, `cli.py`, `_iniciar`, `tv do quarto (TV Samsung)`, `novo_servico`?**
+  _High betweenness centrality (0.031) - this node is a cross-community bridge._
 - **Are the 20 inferred relationships involving `Servico` (e.g. with `Aparelhos` and `ErroAparelho`) actually correct?**
   _`Servico` has 20 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Versão do servidor (celular 1.0.4, repositório 1.0.5)` to the rest of the system?**
@@ -473,8 +526,8 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `index.js` be split into smaller, more focused modules?**
   _Cohesion score 0.08208955223880597 - nodes in this community are weakly interconnected._
 - **Why does `TestPiloto` connect `TestPiloto` to `test_controle_ir.py`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+  _High betweenness centrality (0.031) - this node is a cross-community bridge._
 - **Should `test_controle_ir.py` be split into smaller, more focused modules?**
   _Cohesion score 0.07188778492109878 - nodes in this community are weakly interconnected._
-- **Why does `Cerebros` connect `Cerebros` to `.decidir`, `Piloto`, `._api`, `piloto.py`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
+- **Why does `Tunel` connect `Tunel` to `TestTunel`, `Estado atual da instalação (17/11/2026)`, `shutil`, `cli.py`, `_iniciar`, `TestArmacao`?**
+  _High betweenness centrality (0.030) - this node is a cross-community bridge._

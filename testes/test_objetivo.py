@@ -384,6 +384,13 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertEqual(sum(p.get("alvo") == "Você" for p in r["passos"]), 2)  # uma vez na lista, uma no chat
         self.assertTrue(all("Pergunte à Meta AI ou pesquise" not in o for o in self.perguntas))
 
+    def test_pista_fora_da_tela_rola_antes_de_perguntar_ao_modelo(self):
+        r = self.executor(Celular(TELAS, "inicio"), lambda o: 0).executar(
+            {"objetivo": "ver o modelo", "app": APP, "concluido": {"texto": "Modelo:"}, "pistas": ["Sobre o telefone"]})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertEqual([p["via"] for p in r["passos"]], ["procurando pista", "pista"])
+        self.assertEqual(r["consultas_modelo"], 0)
+
     def test_validacao(self):
         ex = self.executor(Celular(TELAS, "inicio"))
         self.assertIn("erro", ex.executar({"objetivo": "x"}))  # sem critério de conclusão

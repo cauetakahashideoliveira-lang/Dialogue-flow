@@ -2,6 +2,14 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 21/11 — nível e tempo do Stockfish no Termux
+
+O POCO recebeu a versão 1.0.72.1 pelo pacote `9e59cdb`. Com o Stockfish 19, o botão abriu no nível 0
+e sugeriu `c2c4` com 50 ms. Após `e2e4`, o comando `configurar` mudou o nível para 17 e o tempo para
+250 ms. O motor recebeu `setoption name Skill Level value 17` e `go movetime 250` e respondeu `e7e5`.
+Ao reabrir pelo terminal, o estudo recuperou os dois valores. O ensaio usou uma pasta temporária de
+preferências. A configuração pessoal conferida ao final foi nível 20 e tempo automático.
+
 ## 21/11 — atualização e correções (branch `ccr-201914aa-m2jj33`)
 - **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → 1.0.67 (`f55b4ef`) → 1.0.68 (`42ff118`) → 1.0.69 (`a17970f`) → 1.0.70 (`9af8695`) → 1.0.71 (`d8ed2bc`) → **1.0.72** pelo `atualizar_sistema`. O canal
   direto voltou sozinho a cada reinício; aparelhos, catálogo e política ficaram preservados. Conferido com `consultar`

@@ -485,6 +485,12 @@ class Motor:
         self.p.stdin.write(linha + "\n")
         self.p.stdin.flush()
 
+    def definir_nivel(self, nivel):
+        nivel = int(nivel)
+        if not 0 <= nivel <= 20:
+            raise ValueError("o nível do Stockfish deve estar entre 0 e 20")
+        self._mandar(f"setoption name Skill Level value {nivel}")
+
     def _ate(self, prefixo):
         while True:
             linha = self.p.stdout.readline()
@@ -553,6 +559,8 @@ class Piloto:
 
     def iniciar(self, cfg):
         self.encerrar()
+        if self.rodando:
+            return {"erro": "O piloto anterior ainda está encerrando."}
         self.cfg = dict(cfg)
         self.cfg.setdefault("cerebros", ["memoria", "api"])
         self.cerebros = Cerebros(self.cfg)
@@ -588,6 +596,8 @@ class Piloto:
         retomando = False
         self.estado_txt = "olhando o tabuleiro"
         try:
+            if cfg.get("nivel") is not None and not cfg.get("elo"):
+                motor.definir_nivel(cfg["nivel"])
             while not self.parar.is_set() and time.time() < fim:
                 if time.time() - conferido > 3:
                     conferido = time.time()
@@ -630,8 +640,10 @@ class Piloto:
                     self.estado_txt = "aguardando a vez no tabuleiro"
                     continue
                 t_lido = time.time()
-                n = len(self.rodadas)  # relógio: pensa menos conforme a partida se alonga (bullet não perde no tempo)
-                ms_agora = ms if n < 30 else (max(100, ms // 2) if n < 50 else 100)
+                n = len(self.rodadas)
+                ms_agora = ms
+                if not cfg.get("tempo_fixo") and n >= 30:
+                    ms_agora = max(100, ms // 2) if n < 50 else 100
                 posicao = fen(tab, cor)
                 lance = motor.lance(posicao, ms_agora)
                 t_dec = time.time()

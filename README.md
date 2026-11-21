@@ -82,6 +82,12 @@ lances como `e2e4 e7e5`. Pressione Enter para consultar a posição, use `voltar
 um lance ou `sair` para fechar. O estudo funciona offline, inclusive com o serviço Controle IR desligado.
 O comando equivalente no Termux é `controle-ir stockfish`.
 
+Digite `configurar` durante o estudo ou rode `controle-ir stockfish configurar` direto no Termux.
+Escolha um nível de **0 a 20** e o tempo por lance em segundos, de **0,05 a 30** (por exemplo, `1,5`).
+Enter mantém a escolha atual. O ajuste vale para a posição aberta, fica salvo no celular e é usado
+pelo próximo piloto iniciado pelo atalho. Para voltar aos tempos originais, digite `auto` no campo
+de tempo. O estudo usa 0,5 s por sugestão e o piloto começa com 0,2 s e passa a 0,1 s. O nível inicial é 20.
+
 Para jogar, digite `piloto` no atalho e abra o tabuleiro no Chess.com. O motor aguarda as 64 casas
 e consulta o histórico de lances para identificar a vez numa partida em andamento. Ao trocar de app,
 o piloto espera e retoma quando você volta. Se o histórico estiver oculto e já for sua vez ao ativar,

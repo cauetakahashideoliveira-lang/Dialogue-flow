@@ -398,6 +398,19 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertFalse(any(p.get("alvo") == "Atualização de apps do sistema" for p in r["passos"]))
         self.assertEqual(r["recuperacoes"], 0)  # não "corrigiu" o app que abriu devagar
 
+    def test_atalho_de_busca_que_abre_o_campo(self):
+        telas = {"lista": ([el("Pesquisar apps", 100), el("Lista", 800, clic=False, rolavel=True)],
+                           {"Pesquisar apps": "busca"}),
+                 "busca": ([el("", 100, editavel=True)], {"<enter>": "res"}),
+                 "res": ([el("WhatsApp", 300)], {"WhatsApp": "info"}),
+                 "info": ([el("Forçar parada", 900)], {})}
+        cel = Celular(telas, "lista")
+        r = self.executor(cel).executar({"objetivo": "info do WhatsApp", "app": APP, "pistas": ["WhatsApp"],
+                                         "digitar": "WhatsApp", "concluido": {"texto": "Forçar parada"},
+                                         "modelo": False})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertEqual([p["acao"] for p in r["passos"]], ["abrir_busca", "digitar", "tocar"])
+
     def test_app_bloqueado_para_na_hora(self):
         cel = Celular(TELAS, "inicio", app="com.banco")
         r = self.executor(cel).executar({"objetivo": "x", "concluido": {"texto": "y"}})

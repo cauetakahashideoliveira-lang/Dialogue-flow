@@ -306,6 +306,16 @@ class Executor:
                     and (not digitar_depois or digitar_depois in usadas)):
                 # uma vez por objetivo: cada letra muda a tela e a "tela nova" fazia digitar de novo (8× no POCO)
                 campo = next((e for e in els if e.get("editavel") and not e.get("desativado")), None)
+                atalho = None if campo else next((e for e in alvos if busca(e) and tocavel(e, els)
+                                                  and not proibido(rotulo(e), permitir)), None)
+                if atalho:  # "Pesquisar apps" da Central de Segurança é um botão que abre o campo (21/11)
+                    t.injetar(f"tocar {atalho['x']} {atalho['y']}")
+                    t.calma(150, 1500)
+                    novos_els = t.elementos(t.dump_ui(), 300)
+                    campo = next((e for e in novos_els if e.get("editavel") and not e.get("desativado")), None)
+                    if campo:
+                        anotar("abrir_busca", rotulo(atalho), "digitar", t0)
+                        t0 = self.relogio()
                 if campo:
                     digitado.add(sig)
                     t.injetar(f"tocar {campo['x']} {campo['y']}")

@@ -26,7 +26,8 @@ PALAVRAS = {
     "chamadas": ("termux-telephony", "termux-call-log"),
 }
 RECURSOS_CAP = {"sono": ["microfone"], "sonar": ["microfone", "alto-falante"], "ouvir_bipe": ["microfone"],
-                "foto": ["câmera"], "tela": ["tela"], "termometro": ["sensores"]}
+                "foto": ["câmera"], "tela": ["tela"], "termometro": ["sensores"],
+                "bluetooth": ["bluetooth"]}
 _tela_mod = None
 
 

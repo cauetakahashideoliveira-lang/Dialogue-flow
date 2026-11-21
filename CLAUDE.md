@@ -22,7 +22,7 @@
   conferir com `consultar`. Se o conector der "Not Found" após atualizar, peça `controle-ir desligar; pkill ngrok;
   controle-ir ligar` (a 1.0.15+ já limpa o ngrok órfão sozinha).
 - **Capacidades embutidas:** estado_celular, diagnostico_rede, descobrir_rede, ouvir_bipe, foto, termometro, tela,
-  sono, sonar (`controle-ir/capacidades/`, com testes em `testes/`).
+  sono, sonar, bluetooth (`controle-ir/capacidades/`, com testes em `testes/`).
 - **Central da Casa** (https://claude.ai/artifact/XSh6ivS8Cc6BsKakes2pCh, fonte `artefatos/central-da-casa.html`):
   app do claude.ai com o Gênio (controla, programa o celular, cria painéis). Republique com o mesmo arquivo;
   os dados (`widgets`, `memoria`, `eventos`) ficam no banco do artefato (ferramenta ArtifactData).

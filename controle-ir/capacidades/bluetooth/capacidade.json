@@ -1,0 +1,17 @@
+{
+ "nome": "bluetooth",
+ "titulo": "Aparelhos Bluetooth ao redor",
+ "descricao": "Lista os aparelhos Bluetooth por perto só escutando os anúncios BLE (nunca conecta nem pareia): fones, caixas de som, relógios, TVs, carros, celulares, rastreadores (AirTag, SmartTag, Tile), casa inteligente. Classifica pelo nome, fabricante e serviços, estima a distância pelo sinal e marca os pareados. Roda pelo Shizuku (usuário shell), como o agente de tela. acao=buscar (padrão) com segundos 3–30 (padrão 10); com o Bluetooth desligado tenta o modo só BLE sem ligá-lo e, com ligar=true, liga só durante a busca e desliga no fim. acao=pareados: os pareados pelo dumpsys (rápido). acao=ultima: a última busca guardada.",
+ "executar": "principal.py",
+ "efeito": "leitura",
+ "acessos": ["Shizuku/rish (shell do adb: app_process, dumpsys bluetooth_manager, cmd bluetooth_manager)",
+             "Bluetooth: busca BLE passiva", "ecj e dx (compila o leitor na 1ª vez)",
+             "grava ~/.controle-ir/medicoes/bluetooth.json"],
+ "tempo_limite": 120,
+ "entrada": {"type": "object", "properties": {
+   "acao": {"type": "string", "description": "buscar | pareados | ultima"},
+   "segundos": {"type": "integer", "description": "buscar: tempo escutando, 3–30 (padrão 10)"},
+   "ligar": {"type": "boolean", "description": "buscar: com o Bluetooth desligado, ligar só durante a busca (padrão false)"},
+   "limite": {"type": "integer", "description": "buscar: quantos aparelhos devolver, do mais forte ao mais fraco (padrão 40)"}
+ }, "additionalProperties": false}
+}

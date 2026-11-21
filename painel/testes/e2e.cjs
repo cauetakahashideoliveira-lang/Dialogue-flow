@@ -123,6 +123,12 @@ async function semSessao(rota, corpo = {}, cab = {}) {
     body: JSON.stringify({ client_name: 'Claude (teste)', redirect_uris: uris, token_endpoint_auth_method: 'none',
       grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] }) });
   ok((await registrar(['https://atacante.example/cb'])).status === 400, 'cliente com destino de terceiros não se registra');
+  for (const retorno of ['connector_platform_oauth_redirect', 'connector/oauth/conector-de-teste']) {
+    const url = 'https://chatgpt.com/' + retorno;
+    const registro = await registrar([url]);
+    const clienteChatGPT = await registro.json();
+    ok(registro.ok && clienteChatGPT.redirect_uris?.includes(url), 'retorno do ChatGPT registrado: ' + retorno);
+  }
   const cliente = await (await registrar(['https://claude.ai/api/mcp/auth_callback'])).json();
   const b64u = b => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const verificador = b64u(nodeCrypto.randomBytes(32));
@@ -142,6 +148,14 @@ async function semSessao(rota, corpo = {}, cab = {}) {
     body: new URLSearchParams({ grant_type: 'authorization_code', code: cb.searchParams.get('code'), redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
       client_id: cliente.client_id, code_verifier: verificador, resource: `${BASE}/mcp` }) })).json();
   ok(!!tok.access_token, 'token OAuth emitido (PKCE)');
+  const manutencao = corpo => fetch(`${BASE}/mcp`, {
+    method: 'POST', headers: { authorization: `Bearer ${tok.access_token}`, 'content-type': 'application/json',
+      accept: 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', ...corpo }),
+  });
+  const pong = await (await manutencao({ method: 'ping', id: 11 })).json();
+  const inicializado = await manutencao({ method: 'notifications/initialized' });
+  ok(pong.id === 11 && Object.keys(pong.result).length === 0 && inicializado.status === 202
+    && await chamadasNoCelular() === 0, 'manutenção MCP termina na Central sem acordar o celular');
   const chamar = (nome, token = tok.access_token) => fetch(`${BASE}/mcp`, { method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: nome, arguments: {} } }) });
@@ -176,7 +190,8 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   const ativ = await pagina.textContent('#chamadas');
   ok(/executar_comando/.test(ativ) && /barrado na Central/.test(ativ) && /controlar/.test(ativ) && /terminal/.test(ativ),
     'Atividade do Claude lista cada chamada (ok e barrada) com os recursos');
-  ok(/Conexão direta \(canal\) ativa/.test(await pagina.textContent('#celulares')), 'a Central mostra o canal direto ativo');
+  const indicadorCanal = pagina.locator('#celulares .saude li').filter({ hasText: 'Canal direto' });
+  ok(await indicadorCanal.locator('strong').textContent() === 'Conectado', 'a Central mostra o canal direto ativo');
   celular(`import os,time\nos.makedirs(os.path.join(P,'tarefas'),exist_ok=True)\nopen(os.path.join(P,'tarefas','9.json'),'w').write(json.dumps({'id':'9','status':'executando','comando':'termux-camera-photo -c 0 /tmp/x.jpg','inicio':time.time()}))\nfrom controle_ir import observador\nr=painel.sincronizar(P,'e2e',em_uso=lambda o,v: observador.em_uso(P,False,v))\nprint(json.dumps(r))`);
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/termux-camera-photo/.test(await pagina.textContent('#emUso')) && /câmera/.test(await pagina.textContent('#emUso')),

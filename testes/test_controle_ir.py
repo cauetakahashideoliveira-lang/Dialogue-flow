@@ -1179,9 +1179,10 @@ class TestExecucao(unittest.TestCase):
             self.assertEqual(classificar(cmd), c, cmd)
 
     def test_leitura_roda_direto_e_audita(self):
-        r = self.s.executar_comando("ls /", aguardar=10)
+        (Path(self.pasta) / "amostra.txt").touch()
+        r = self.s.executar_comando("ls", pasta=self.pasta, aguardar=10)
         self.assertEqual((r["status"], r["classe"]), ("concluida", "leitura"))
-        self.assertIn("tmp", r["saida"])
+        self.assertIn("amostra.txt", r["saida"].splitlines())
         aud = (Path(self.pasta) / "auditoria.jsonl").read_text()
         self.assertIn('"evento": "pedido"', aud)
         self.assertIn('"evento": "fim"', aud)

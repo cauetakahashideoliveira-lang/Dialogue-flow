@@ -1,0 +1,5 @@
+# Dependências usadas na revisão com Python 3.12. O instalador do Termux usa pkg.
+numpy==2.3.5
+cryptography==50.0.0
+mcp==1.29.0
+httpx==0.28.1

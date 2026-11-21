@@ -1,0 +1,37 @@
+name: Verificar contribuição
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  servico:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r testes/requirements.txt
+      - run: python -m unittest discover -s testes
+      - run: python benchmarks/2026-11-20-planejador/test_planejador.py
+      - run: python ferramentas/verificar_cliente_mcp.py
+      - run: bash ferramentas/empacotar.sh --verificar
+  central:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: python -m pip install cryptography==50.0.0
+      - run: npm ci
+        working-directory: painel
+      - run: npx playwright install --with-deps chromium
+        working-directory: painel
+      - run: npm run test:e2e
+        working-directory: painel
+        timeout-minutes: 5

@@ -1,6 +1,5 @@
 // Teste de ponta a ponta da Central de Controle contra o Worker local (wrangler dev) e o código real do celular.
-// Uso: (em painel/) npm run dev em outro terminal com --var CODIGO_INICIAL:codigo-de-teste-123; depois
-//      node testes/e2e.cjs http://localhost:8787
+// Em painel/, npm run test:e2e inicia o Worker e o banco local descartável.
 // A "digital" é o autenticador virtual do Chromium (CDP WebAuthn), com verificação do usuário.
 const { chromium } = require('playwright');
 const { execFileSync, spawn } = require('child_process');
@@ -8,9 +7,16 @@ const nodeCrypto = require('crypto');
 const fs = require('fs'), os = require('os'), path = require('path');
 
 const BASE = process.argv[2] || 'http://localhost:8787';
+const persistencia = process.env.E2E_ESTADO ? ['--persist-to', process.env.E2E_ESTADO] : [];
+const codigoInicial = process.env.E2E_CODIGO || 'codigo-de-teste-123';
 const RAIZ = path.resolve(__dirname, '..', '..');
 const PASTA = fs.mkdtempSync(path.join(os.tmpdir(), 'celular-'));
 let falhas = 0;
+const filhos = [];
+process.once('exit', () => {
+  for (const p of filhos) if (!p.killed) p.kill();
+  fs.rmSync(PASTA, { recursive: true, force: true });
+});
 const ok = (cond, txt) => { console.log(`${cond ? '✔' : '✘'} ${txt}`); if (!cond) falhas++; };
 
 function celular(codigoPy) {  // roda o código real do controle-ir (controle_ir.painel) numa pasta temporária
@@ -24,7 +30,7 @@ async function semSessao(rota, corpo = {}, cab = {}) {
 }
 
 (async () => {
-  const navegador = await chromium.launch();
+  const navegador = await chromium.launch({ executablePath: process.env.E2E_CHROMIUM });
   const pagina = await navegador.newPage();
   pagina.on('dialog', d => d.accept());
   const cdp = await pagina.context().newCDPSession(pagina);
@@ -47,12 +53,12 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   await pagina.click('summary');
   await pagina.fill('#codigoInicial', 'errado-errado-errado');
   ok(/incorreto/.test(await clicar('#btPrimeiro')), 'código inicial errado é recusado');
-  await pagina.fill('#codigoInicial', 'codigo-de-teste-123');
+  await pagina.fill('#codigoInicial', codigoInicial);
   await pagina.fill('#nomePasskey', 'POCO (teste)');
   ok(/cadastrada/.test(await clicar('#btPrimeiro')), 'primeira passkey cadastrada com a digital');
   await pagina.waitForSelector('#logado:not(.escondido)');
   ok(await pagina.isVisible('#btEmergencia'), 'painel aberto depois da digital');
-  ok(await semSessao('registro/opcoes', { codigo_inicial: 'codigo-de-teste-123' }) === 403,
+  ok(await semSessao('registro/opcoes', { codigo_inicial: codigoInicial }) === 403,
     'depois da 1ª passkey, o código inicial não cadastra mais ninguém');
 
   // 2b. Segundo aparelho (iPad) só entra com convite de uso único criado com a digital
@@ -97,11 +103,18 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   ok(/aplicado no celular/.test(await pagina.textContent('#celulares')), 'depois da confirmação: "aplicado"');
 
   // 4b. Etapa 1b: o Claude entra pelo painel (OAuth com a digital); o painel repassa ao celular, assinado
-  const FALSO = `import json,sys\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom controle_ir import painel\nP=sys.argv[1];n={'chamadas':0}\nclass H(BaseHTTPRequestHandler):\n  def log_message(s,*a):pass\n  def _r(s,st,d):\n    b=json.dumps(d).encode();s.send_response(st);s.send_header('Content-Type','application/json');s.send_header('Content-Length',str(len(b)));s.end_headers();s.wfile.write(b)\n  def do_GET(s):s._r(200,n)\n  def do_POST(s):\n    b=s.rfile.read(int(s.headers['Content-Length']))\n    if s.path!='/mcp/segredo-teste':return s._r(401,{'erro':'segredo'})\n    if not painel.verificar_requisicao(P,s.headers.get('X-Painel-Assinatura'),b):return s._r(401,{'erro':'assinatura'})\n    n['chamadas']+=1;m=json.loads(b)\n    s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'content':[{'type':'text','text':json.dumps({'via':'celular','ferramenta':(m.get('params') or {}).get('name')})}]}})\nThreadingHTTPServer(('127.0.0.1',8799),H).serve_forever()`;
-  const falso = spawn('python3', ['-c', FALSO, PASTA], { env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: 'ignore' });
-  await new Promise(r => setTimeout(r, 800));
-  const chamadasNoCelular = async () => (await (await fetch('http://127.0.0.1:8799/')).json()).chamadas;
-  celular(`r=painel.sincronizar(P,'e2e',url_mcp=lambda:'http://127.0.0.1:8799/mcp/segredo-teste')\nprint(json.dumps(r))`);
+  const FALSO = `import json,sys\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom controle_ir import painel\nP=sys.argv[1];n={'chamadas':0}\nclass H(BaseHTTPRequestHandler):\n  def log_message(s,*a):pass\n  def _r(s,st,d):\n    b=json.dumps(d).encode();s.send_response(st);s.send_header('Content-Type','application/json');s.send_header('Content-Length',str(len(b)));s.end_headers();s.wfile.write(b)\n  def do_GET(s):s._r(200,n)\n  def do_POST(s):\n    b=s.rfile.read(int(s.headers['Content-Length']))\n    if s.path!='/mcp/segredo-teste':return s._r(401,{'erro':'segredo'})\n    if not painel.verificar_requisicao(P,s.headers.get('X-Painel-Assinatura'),b):return s._r(401,{'erro':'assinatura'})\n    n['chamadas']+=1;m=json.loads(b)\n    s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'content':[{'type':'text','text':json.dumps({'via':'celular','ferramenta':(m.get('params') or {}).get('name')})}]}})\nsrv=ThreadingHTTPServer(('127.0.0.1',0),H)\nprint(srv.server_port,flush=True)\nsrv.serve_forever()`;
+  const falso = spawn('python3', ['-c', FALSO, PASTA], {
+    env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  filhos.push(falso);
+  const linhas = require('node:readline').createInterface({ input: falso.stdout });
+  const { value: porta } = await linhas[Symbol.asyncIterator]().next();
+  linhas.close();
+  if (!/^\d+$/.test(porta)) throw new Error('O celular simulado não iniciou');
+  const endereco = `http://127.0.0.1:${porta}`;
+  const chamadasNoCelular = async () => (await (await fetch(endereco)).json()).chamadas;
+  celular(`r=painel.sincronizar(P,'e2e',url_mcp=lambda:'${endereco}/mcp/segredo-teste')\nprint(json.dumps(r))`);
   const semToken = await fetch(`${BASE}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
   ok(semToken.status === 401 && /resource_metadata/.test(semToken.headers.get('www-authenticate') || ''), '/mcp sem token → 401 apontando para o OAuth');
   const meta = await (await fetch(`${BASE}/.well-known/oauth-protected-resource/mcp`)).json();
@@ -140,8 +153,9 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   const MARCA = path.join(PASTA, 'acordou.txt');
   const acordadas = () => fs.existsSync(MARCA) ? fs.readFileSync(MARCA, 'utf8').length : 0;
   const esperar = async (cond, ms = 8000) => { const fim = Date.now() + ms; while (Date.now() < fim) { if (await cond()) return true; await new Promise(z => setTimeout(z, 150)); } return false; };
-  const CANAL = `import sys,time,os\nfrom controle_ir.canal import Canal\nP=sys.argv[1]\nm=os.path.join(P,'acordou.txt')\ndef ac():\n  open(m,'a').write('x')\nCanal(P,8799,'segredo-teste',ao_sincronizar=ac).iniciar()\nwhile True: time.sleep(1)`;
+  const CANAL = `import sys,time,os\nfrom controle_ir.canal import Canal\nP=sys.argv[1]\nm=os.path.join(P,'acordou.txt')\ndef ac():\n  open(m,'a').write('x')\nCanal(P,${porta},'segredo-teste',ao_sincronizar=ac).iniciar()\nwhile True: time.sleep(1)`;
   const canal = spawn('python3', ['-c', CANAL, PASTA], { env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: 'ignore' });
+  filhos.push(canal);
   ok(await esperar(() => acordadas() >= 1), 'canal direto aberto pelo celular, com o token do aparelho');
   let rc = await chamar('controlar');
   let tc = await rc.json();
@@ -191,7 +205,7 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   falso.kill();
 
   // 5. Sem digital recente, armar é recusado; a interface pede a digital e conclui
-  execFileSync('npx', ['wrangler', 'd1', 'execute', 'painel', '--local', '--command', 'UPDATE sessoes SET passkey_em = passkey_em - 600'], { cwd: path.join(RAIZ, 'painel'), stdio: 'ignore' });
+  execFileSync('npx', ['wrangler', 'd1', 'execute', 'painel', '--local', ...persistencia, '--command', 'UPDATE sessoes SET passkey_em = passkey_em - 600'], { cwd: path.join(RAIZ, 'painel'), stdio: 'ignore' });
   const cookies = await pagina.context().cookies();
   const comSessao = (rota, corpo) => fetch(`${BASE}/api/${rota}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-painel': '1',
     cookie: cookies.map(c => `${c.name}=${c.value}`).join('; ') }, body: JSON.stringify(corpo) }).then(r => r.status);
@@ -210,7 +224,6 @@ async function semSessao(rota, corpo = {}, cab = {}) {
     cookie: cookies.map(c => `${c.name}=${c.value}`).join('; ') }, body: '{}' })).json()).aparelhos[0].id;
   await clicar('#btArmarDia');
   ok(sincronizar().efetiva.armado_ate > 0, 'armado de novo');
-  pagina.once('dialog', d => d.accept());
   await pagina.click(`text=Revogar POCO`); await pagina.waitForTimeout(800);
   s = sincronizar();
   ok(s.revogado === true && s.efetiva.armado_ate === 0, `celular ${ap} revogado: falha fechada, desarmado`);
@@ -218,7 +231,7 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   // 8. Histórico encadeado: íntegro, e a adulteração é detectada
   ok(/íntegro/.test(await clicar('#btIntegridade')), 'histórico íntegro');
   ok(/stado_alterado|EMERG/.test(await pagina.textContent('#eventos')), 'histórico mostra as mudanças de estado');
-  execFileSync('npx', ['wrangler', 'd1', 'execute', 'painel', '--local', '--command',
+  execFileSync('npx', ['wrangler', 'd1', 'execute', 'painel', '--local', ...persistencia, '--command',
     `UPDATE eventos SET dados = '{"armado_ate":0,"adulterado":1}' WHERE id = (SELECT MIN(id) FROM eventos WHERE tipo = 'estado_alterado')`],
     { cwd: path.join(RAIZ, 'painel'), stdio: 'ignore' });
   ok(/alterado no evento \d+/.test(await clicar('#btIntegridade')), 'adulteração do histórico é detectada');

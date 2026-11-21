@@ -10,6 +10,7 @@ SmartIR, pedido composto, mudança só de temperatura, oscilação sem suporte
 e desligar.
 """
 import asyncio
+from contextlib import ExitStack
 import json
 import sys
 import tempfile
@@ -26,23 +27,28 @@ from controle_ir.servidor import criar_servidor  # noqa: E402
 
 from mcp import ClientSession  # noqa: E402
 from mcp.client.streamable_http import streamable_http_client  # noqa: E402
+from httpx import AsyncClient  # noqa: E402
 
 
-def preparar():
-    pasta = tempfile.mkdtemp(prefix="cir-sdk-")
+def preparar(recursos):
+    pasta = recursos.enter_context(tempfile.TemporaryDirectory(prefix="cir-sdk-"))
     c = catalogo.Catalogo(Path(pasta) / "catalogo.sqlite")
+    recursos.callback(c.fechar)
     catalogo.importar_jsonl(c, str(RAIZ / "controle-ir" / "dados" / "base.jsonl.gz"))
     em = EmissorSimulado()
     s = Servico(pasta, em, c)
     srv = criar_servidor(s, "segredo-sdk", 0)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    recursos.callback(srv.server_close)
+    th = threading.Thread(target=srv.serve_forever, daemon=True)
+    th.start()
+    recursos.callback(th.join)
+    recursos.callback(srv.shutdown)
     return srv.server_address[1], em
 
 
-async def main():
-    porta, em = preparar()
+async def main(porta, em):
     url = f"http://127.0.0.1:{porta}/mcp/segredo-sdk"
-    async with streamable_http_client(url) as (ler, escrever, *_):
+    async with AsyncClient(trust_env=False) as http, streamable_http_client(url, http_client=http) as (ler, escrever, *_):
         async with ClientSession(ler, escrever) as sessao:
             init = await sessao.initialize()
             g = lambda o, a, b: getattr(o, a, None) if hasattr(o, a) else getattr(o, b)  # SDK 1.x/2.x
@@ -78,4 +84,6 @@ async def main():
     print("\nOK: cliente MCP oficial conversou com o servidor e o roteiro produziu 3 transmissões.")
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    with ExitStack() as recursos:
+        asyncio.run(main(*preparar(recursos)))

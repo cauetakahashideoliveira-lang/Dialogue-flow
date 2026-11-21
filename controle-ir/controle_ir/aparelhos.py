@@ -196,8 +196,11 @@ def resumo_aparelho(a: dict) -> dict:
         "nome": a["nome"], "categoria": a.get("categoria"),
         "perfil": a["perfil"].get("nome"), "tipo_controle": cap["tipo_controle"],
         "comandos": len(a["perfil"].get("comandos", [])),
-        "parametros": sorted(cap["parametros"]) + (sorted(cap["estado_completo"]["parametros"])
-                                                   if "estado_completo" in cap else []),
+        # teclas avulsas primeiro, depois o que só o estado completo controla (sem repetir: um perfil misto
+        # pode ter "modo" nos dois, como o Gree do quarto com o turbo)
+        "parametros": sorted(cap["parametros"]) + [p for p in sorted((cap.get("estado_completo") or {})
+                                                                     .get("parametros", {}))
+                                                   if p not in cap["parametros"]],
         "macros": sorted(a.get("macros", {})),
     }
     if a.get("observacao"):

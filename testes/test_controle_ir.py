@@ -2167,6 +2167,12 @@ for linha in sys.stdin:
                '<node bounds="[0,1300][500,1400]" text="Desfazer" content-desc=""/></node></hierarchy>')
         self.assertEqual(self.m.regioes_visuais(xml), [[0, 200, 1000, 1000]])
         self.assertEqual(self.m.regioes_visuais(TestTela.XML), [])  # tela só de texto: nada de imagem
+        linhas = "".join(f'<node bounds="[0,{y}][1000,{y + 150}]" text="Opção {y}" content-desc=""/>'
+                         for y in range(300, 1800, 200))
+        lista = ('<?xml version="1.0"?><hierarchy><node bounds="[0,0][1000,2000]" text="" content-desc="">'
+                 '<node bounds="[0,250][1000,1900]" text="" content-desc="" class="FrameLayout"/>' + linhas +
+                 '</node></hierarchy>')
+        self.assertEqual(self.m.regioes_visuais(lista), [])  # contêiner vazio com as linhas por cima: não é imagem
         self.assertTrue(self.m.dentro([500, 700], [0, 200, 1000, 1000]))
         self._leitor_falso()
         self.m.ver(imagem=False)

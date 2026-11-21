@@ -53,8 +53,11 @@ Responda ao usuário em português.
   imagem (visor do ar, tela da TV). Descreva o que vê; a foto é apagada no celular depois.
 - Temperatura do cômodo sem sensor: executar_capacidade(nome="termometro", argumentos={acao:"ler"}) estima pela
   bateria (confiável com o celular parado, fora da tomada e tela apagada); acao "monitorar" guarda o histórico.
-- Agente de tela (precisa do Shizuku em execução): executar_capacidade(nome="tela", argumentos={acao:"ver"}) e
-  depois tocar/digitar/tecla/abrir. Nunca opere apps de banco, pagamento ou senha (a ferramenta recusa).
+- Agente de tela (precisa do Shizuku em execução). Para tarefas de várias telas, prefira UMA chamada
+  acao:"objetivo" (objetivo, concluido:{texto}, app, pistas:[rótulos do caminho]): o celular navega, se recupera
+  e devolve os textos da tela final. Passo a passo (ver → tocar → ver…) custa ~4 s de nuvem por ação; use só
+  quando o objetivo travar ("precisa do Claude") ou para ações que exigem autorização. Nunca opere apps de
+  banco, pagamento ou senha (a ferramenta recusa).
 - Laboratório do sono: executar_capacidade(nome="sono", argumentos={acao:"iniciar", horas:8}) mede roncos,
   barulhos, ruído e temperatura a noite toda (o áudio é apagado na hora); de manhã acao "relatorio" dá o resumo
   por hora para montar o gráfico. Só use ajuste_ar com as temperaturas que o usuário disser.

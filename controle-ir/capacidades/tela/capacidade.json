@@ -1,7 +1,7 @@
 {
  "nome": "tela",
  "titulo": "Agente de tela (ver e tocar no celular)",
- "descricao": "Missão contextual: acao=missao, texto=objetivo. Sem passos escolhe uma ferramenta no POCO; opcoes=[{nome,argumentos}] delimita as operações do pedido. Missão nativa: acao=missao, texto=objetivo, passos=[{pacote,texto:objetivo da etapa,marcador,controles}]. Com marcador e sem controles, decide pelo Claude no POCO entre os controles visíveis. Sem marcador/controles procura uma rota aprendida para a etapa. Retorna o resultado final. Navegação local: acao=navegar, pacote e passos=[{texto: objetivo, marcador: texto que confirma chegada, controles: [rótulos permitidos]}]. Envie todas as etapas na mesma chamada. nome guarda a rota após confirmação; para repetir, envie só pacote e nome com acao=navegar. iniciar.abrir=true abre o app se necessário. Vê e opera a tela do celular pelo Shizuku, sem root. CICLO RÁPIDO: toda ação (tocar/digitar/tecla/deslizar/sequencia) espera a tela assentar e devolve só o que MUDOU desde a última olhada (ver_depois='mudancas', padrão com o leitor rápido: entrou/saiu/mudou com o valor anterior; tela nova → lista inteira); ver_depois='imagem' inclui a captura, 'nada' só o app. acao=sequencia com 'passos' faz tudo numa chamada, injetado direto (ms por toque): {tocar:[x,y]|[[x,y],...]|'texto', intervalo:s, segurar:ms}, {deslizar:[x,y,x2,y2,ms]}, {digitar:'...'}, {tecla:'voltar'}, {esperar:s}, {calma:s} (até a tela parar), {esperar_texto|esperar_sumir:'...', ate:s}, {esperar_mudanca:s, ignorar:[ids/textos]} (fica olhando até a tela mudar de verdade), {abrir:'pacote'}, condições no próprio celular {se|se_nao:'texto', entao:[...], senao:[...]} e laços {repetir:[...], vezes:N, ate_texto|ate_sumir:'...'}. acao=ver: elementos (texto, id, clicável, marcado, selecionado, rolável, centro x,y) e captura; so_mudancas=true só a diferença; recorte=[x,y,l,a] para ver um pedaço nítido. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução. REFLEXO: numa leva de toques, se surgir uma janela nova (aviso, anúncio, fim de jogo, outro app) o celular para na hora, sem os toques restantes, e a resposta traz 'interrompido' com o que apareceu (parar_em_janela=true vigia também entre os passos; false desliga); parar_se=['texto',...] para quando algum desses textos aparecer. RESPOSTAS CURTAS: elementos numa linha (\"Texto\" (desc) #id x,y sinais) e mudanças como +/-/~; 'surgiu' lista as janelas que apareceram desde a última olhada (formato='json' volta ao antigo). acao=reflexos com regras=[{se:'texto'|janela:'trecho', tocar:[x,y]|'texto'|tecla:'voltar'}] guarda reflexos no celular: numa sequência, no lugar de parar, ele resolve sozinho e segue (resposta traz 'reflexos'); sem regras, lista. QUANDO TOCAR ÀS CEGAS × OLHAR DE NOVO (automático): coordenada só vale na tela em que foi lida. Se a janela mudou desde a última olhada (ou depois de voltar/abrir/rolar), o toque por coordenada não sai: volta 'interrompido' com a tela atual; toque por texto lê a tela na hora e reancora. Na mesma tela, levas de toques vão direto. confiar=true no passo pula a checagem. Depois de agir (ver_depois='auto', padrão): só o que mudou e, se há área visual sem texto (tabuleiro, jogo), a imagem só desse recorte quando a tela é nova ou a ação tocou nela. ANÚNCIOS: telas de anúncio (AppLovin, TikTok/Pangle, AdMob, Unity…) são fechadas no próprio celular: espera o fechar/pular e toca nele pelo nome (nunca no anúncio), volta se um toque abrir outro app e, se travar, encerra/reabre o app e toca Continuar; o resultado traz 'anuncios'. acao=fechar_anuncio força isso; anuncios=false desliga. Se a tela cair em outro app no meio da sequência, para na hora. Erros já voltam com a tela atual. acao=grade: lê NO CELULAR uma grade NxN de símbolos desenhados (9x9, 16x16 com letras, 6x6…), com os botões do próprio jogo como modelo — todas as páginas do teclado, deslizando a fileira (acha grade e teclado sozinho; recorte/teclado/n opcionais) e devolve as linhas em texto; resolver=true (sudoku 9x9) resolve, preenche numa leva rápida, relê e repete toques perdidos; antes=[passos] roda o preparo (ex.: retomar o jogo) na mesma chamada; espera a grade ficar estável em vez de pausa fixa. ROTINAS: acao=rotina salvar={nome,args} guarda uma chamada inteira no celular; depois {acao:'rotina',nome} a roda e nome+vezes=N repete N vezes numa chamada só (resumo por volta). Avisos de app que se repetem viram reflexos com app:'pacote'. Xadrez (apps que descrevem as casas): passo {lance:\"e2e4\"} toca origem e destino; {esperar_vez:s} espera o adversário mexer; ver_depois=\"tabuleiro\" devolve 8 linhas + relógios. Só contra robô: nunca em partida ao vivo contra pessoas. PILOTO (acao=piloto): laço rápido que roda no próprio celular sem passar pelo Claude a cada gesto — espera a tela mudar, lê a pergunta e as opções, faz uma corrida entre memória, modelo rápido (Claude Haiku pela API, streaming: toca no 1º dígito) e modelo local, e toca no texto escolhido relocalizado na hora; iniciar/estado/parar/ensinar/testar; o gravador guarda tempos de ler/decidir/tocar. Só em apps/jogos contra a máquina, nunca contra pessoas.",
+ "descricao": "OBJETIVO (preferido para tarefas de várias telas: 1 chamada em vez de uma por toque): acao=objetivo, objetivo='o que alcançar', concluido={texto|qualquer:[...]|todos:[...]|app} (como saber que terminou), app=pacote (abre e volta a ele se sair), pistas=['rótulos do caminho', ...] (opcional: tocados sem modelo), digitar='texto' (só em campo de busca), permitir=[rótulos de efeito externo liberados] (enviar/excluir/comprar… são recusados sem isso). O celular percebe→decide (pistas, memória, digitar, modelo do celular, rolar)→age→confere sozinho, se recupera de janelas por cima e devolve estado, passos e os textos da tela final (ler=true). Medido: ~4 s de nuvem por ação no passo a passo. Missão contextual: acao=missao, texto=objetivo. Sem passos escolhe uma ferramenta no POCO; opcoes=[{nome,argumentos}] delimita as operações do pedido. Missão nativa: acao=missao, texto=objetivo, passos=[{pacote,texto:objetivo da etapa,marcador,controles}]. Com marcador e sem controles, decide pelo Claude no POCO entre os controles visíveis. Sem marcador/controles procura uma rota aprendida para a etapa. Retorna o resultado final. Navegação local: acao=navegar, pacote e passos=[{texto: objetivo, marcador: texto que confirma chegada, controles: [rótulos permitidos]}]. Envie todas as etapas na mesma chamada. nome guarda a rota após confirmação; para repetir, envie só pacote e nome com acao=navegar. iniciar.abrir=true abre o app se necessário. Vê e opera a tela do celular pelo Shizuku, sem root. CICLO RÁPIDO: toda ação (tocar/digitar/tecla/deslizar/sequencia) espera a tela assentar e devolve só o que MUDOU desde a última olhada (ver_depois='mudancas', padrão com o leitor rápido: entrou/saiu/mudou com o valor anterior; tela nova → lista inteira); ver_depois='imagem' inclui a captura, 'nada' só o app. acao=sequencia com 'passos' faz tudo numa chamada, injetado direto (ms por toque): {tocar:[x,y]|[[x,y],...]|'texto', intervalo:s, segurar:ms}, {deslizar:[x,y,x2,y2,ms]}, {digitar:'...'}, {tecla:'voltar'}, {esperar:s}, {calma:s} (até a tela parar), {esperar_texto|esperar_sumir:'...', ate:s}, {esperar_mudanca:s, ignorar:[ids/textos]} (fica olhando até a tela mudar de verdade), {abrir:'pacote'}, condições no próprio celular {se|se_nao:'texto', entao:[...], senao:[...]} e laços {repetir:[...], vezes:N, ate_texto|ate_sumir:'...'}. acao=ver: elementos (texto, id, clicável, marcado, selecionado, rolável, centro x,y) e captura; so_mudancas=true só a diferença; recorte=[x,y,l,a] para ver um pedaço nítido. Recusa apps de banco, pagamento e senhas (~/.controle-ir/tela_bloqueados.json). Precisa do Shizuku em execução. REFLEXO: numa leva de toques, se surgir uma janela nova (aviso, anúncio, fim de jogo, outro app) o celular para na hora, sem os toques restantes, e a resposta traz 'interrompido' com o que apareceu (parar_em_janela=true vigia também entre os passos; false desliga); parar_se=['texto',...] para quando algum desses textos aparecer. RESPOSTAS CURTAS: elementos numa linha (\"Texto\" (desc) #id x,y sinais) e mudanças como +/-/~; 'surgiu' lista as janelas que apareceram desde a última olhada (formato='json' volta ao antigo). acao=reflexos com regras=[{se:'texto'|janela:'trecho', tocar:[x,y]|'texto'|tecla:'voltar'}] guarda reflexos no celular: numa sequência, no lugar de parar, ele resolve sozinho e segue (resposta traz 'reflexos'); sem regras, lista. QUANDO TOCAR ÀS CEGAS × OLHAR DE NOVO (automático): coordenada só vale na tela em que foi lida. Se a janela mudou desde a última olhada (ou depois de voltar/abrir/rolar), o toque por coordenada não sai: volta 'interrompido' com a tela atual; toque por texto lê a tela na hora e reancora. Na mesma tela, levas de toques vão direto. confiar=true no passo pula a checagem. Depois de agir (ver_depois='auto', padrão): só o que mudou e, se há área visual sem texto (tabuleiro, jogo), a imagem só desse recorte quando a tela é nova ou a ação tocou nela. ANÚNCIOS: telas de anúncio (AppLovin, TikTok/Pangle, AdMob, Unity…) são fechadas no próprio celular: espera o fechar/pular e toca nele pelo nome (nunca no anúncio), volta se um toque abrir outro app e, se travar, encerra/reabre o app e toca Continuar; o resultado traz 'anuncios'. acao=fechar_anuncio força isso; anuncios=false desliga. Se a tela cair em outro app no meio da sequência, para na hora. Erros já voltam com a tela atual. acao=grade: lê NO CELULAR uma grade NxN de símbolos desenhados (9x9, 16x16 com letras, 6x6…), com os botões do próprio jogo como modelo — todas as páginas do teclado, deslizando a fileira (acha grade e teclado sozinho; recorte/teclado/n opcionais) e devolve as linhas em texto; resolver=true (sudoku 9x9) resolve, preenche numa leva rápida, relê e repete toques perdidos; antes=[passos] roda o preparo (ex.: retomar o jogo) na mesma chamada; espera a grade ficar estável em vez de pausa fixa. ROTINAS: acao=rotina salvar={nome,args} guarda uma chamada inteira no celular; depois {acao:'rotina',nome} a roda e nome+vezes=N repete N vezes numa chamada só (resumo por volta). Avisos de app que se repetem viram reflexos com app:'pacote'. Xadrez (apps que descrevem as casas): passo {lance:\"e2e4\"} toca origem e destino; {esperar_vez:s} espera o adversário mexer; ver_depois=\"tabuleiro\" devolve 8 linhas + relógios. Só contra robô: nunca em partida ao vivo contra pessoas. PILOTO (acao=piloto): laço rápido que roda no próprio celular sem passar pelo Claude a cada gesto — espera a tela mudar, lê a pergunta e as opções, faz uma corrida entre memória, modelo rápido (Claude Haiku pela API, streaming: toca no 1º dígito) e modelo local, e toca no texto escolhido relocalizado na hora; iniciar/estado/parar/ensinar/testar; o gravador guarda tempos de ler/decidir/tocar. Só em apps/jogos contra a máquina, nunca contra pessoas.",
  "executar": "principal.py",
  "efeito": "acao",
  "acessos": [
@@ -16,7 +16,7 @@
   "properties": {
    "acao": {
     "type": "string",
-    "description": "navegar | ver | tocar | digitar | tecla | deslizar | abrir | sequencia | grade | rotina | reflexos | fechar_anuncio | piloto | estado"
+    "description": "objetivo | navegar | ver | tocar | digitar | tecla | deslizar | abrir | sequencia | grade | rotina | reflexos | fechar_anuncio | piloto | estado"
    },
    "x": {
     "type": "integer"
@@ -218,6 +218,56 @@
    "opcoes": {
     "type": "array",
     "description": "Operações permitidas para este pedido, com nome e argumentos já definidos."
+   },
+   "objetivo": {
+    "type": "string",
+    "description": "objetivo: o que alcançar (para o modelo do celular, se precisar)"
+   },
+   "concluido": {
+    "type": "object",
+    "description": "objetivo: {texto} | {qualquer:[...]} | {todos:[...]} | {app} — critério verificável na tela"
+   },
+   "app": {
+    "type": "string",
+    "description": "objetivo: pacote do app (abre e volta a ele se sair)"
+   },
+   "pistas": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "objetivo: rótulos prováveis do caminho, na ordem"
+   },
+   "permitir": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "objetivo: rótulos de efeito externo liberados (enviar, excluir…)"
+   },
+   "digitar": {
+    "type": "string",
+    "description": "objetivo: texto autorizado para campo de busca"
+   },
+   "max_passos": {
+    "type": "integer",
+    "description": "objetivo: limite de ações (padrão 12, até 25)"
+   },
+   "prazo": {
+    "type": "number",
+    "description": "objetivo: segundos (padrão 60, até 120)"
+   },
+   "ler": {
+    "type": "boolean",
+    "description": "objetivo: devolver os textos da tela final (padrão true)"
+   },
+   "ler_max": {
+    "type": "integer",
+    "description": "objetivo: quantos textos devolver (padrão 60)"
+   },
+   "modelo": {
+    "type": "boolean",
+    "description": "objetivo: deixar o modelo do celular decidir quando as pistas não bastam (padrão true)"
    }
   },
   "required": [

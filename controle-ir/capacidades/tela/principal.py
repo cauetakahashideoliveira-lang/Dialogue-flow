@@ -108,19 +108,25 @@ def regioes_visuais(xml_texto, fracao=0.15):
         raiz = ET.fromstring(xml_texto)
     except ET.ParseError:
         return []
-    caixas, folhas = [], []
+    caixas, folhas, textos = [], [], []
     for n in raiz.iter("node"):
         b = ler_bounds(n.attrib.get("bounds"))
         if not b or b[2] <= b[0] or b[3] <= b[1]:
             continue
         caixas.append(b)
-        if n.find("node") is None and not (n.attrib.get("text") or n.attrib.get("content-desc")):
+        if n.attrib.get("text") or n.attrib.get("content-desc"):
+            textos.append(((b[0] + b[2]) // 2, (b[1] + b[3]) // 2))
+        elif n.find("node") is None and n.attrib.get("scrollable") != "true":
             folhas.append(b)
     if not caixas:
         return []
     tela = max(c[2] for c in caixas) * max(c[3] for c in caixas)
+
+    def descrita(b):  # lista cujas linhas são irmãs do contêiner vazio (Configurações do HyperOS, 21/11): a
+        return sum(b[0] <= x <= b[2] and b[1] <= y <= b[3] for x, y in textos) >= 3  # acessibilidade já descreve
+
     out = [[b[0], b[1], b[2] - b[0], b[3] - b[1]] for b in folhas
-           if (b[2] - b[0]) * (b[3] - b[1]) >= fracao * tela and (b[2] - b[0]) * (b[3] - b[1]) < 0.9 * tela]
+           if fracao * tela <= (b[2] - b[0]) * (b[3] - b[1]) < 0.9 * tela and not descrita(b)]
     return sorted(out, key=lambda r: -r[2] * r[3])[:2]
 
 
@@ -2366,6 +2372,65 @@ def navegar_etapas(a):
     return medidas[0] if len(passos) == 1 else {"etapas": medidas}
 
 
+_OBJETIVO = {}
+
+
+def objetivo(a):
+    """acao=objetivo: o laço perceber → decidir → agir → conferir roda no celular (capacidades/tela/objetivo.py)."""
+    import importlib.util
+    if not _ajudante():
+        return {"erro": "o executor de objetivos precisa do leitor rápido (Shizuku em execução, dentro do serviço)"}
+    if "mod" not in _OBJETIVO:
+        spec = importlib.util.spec_from_file_location(
+            "tela_objetivo", os.path.join(os.path.dirname(os.path.abspath(__file__)), "objetivo.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _OBJETIVO["mod"] = mod
+    mod = _OBJETIVO["mod"]
+
+    class Ferramentas:
+        foco = staticmethod(foco)
+        dump_ui = staticmethod(dump_ui)
+        calma = staticmethod(calma)
+        em_anuncio = staticmethod(em_anuncio)
+        fechar_anuncio = staticmethod(fechar_anuncio)
+
+        @staticmethod
+        def elementos(xml, limite=300):
+            return elementos(xml, limite=limite)
+
+        @staticmethod
+        def injetar(cmd):
+            return _injetar(cmd)
+
+        @staticmethod
+        def abrir(pac):
+            return "feito" in agir({"acao": "abrir", "pacote": pac, "ver_depois": "nada"})
+
+        @staticmethod
+        def bloqueado(pac):
+            return bool(pac) and bloqueado(pac, bloqueados())
+
+        @staticmethod
+        def aplicar_regras(app, els):
+            return aplicar_regras(app, els)
+
+    def decidir(objetivo_, resumo, opcoes):
+        m = _modulo_piloto()
+        pergunta = (f"Objetivo no celular: {objetivo_}\nO que a tela mostra: {resumo or '(só botões)'}\n"
+                    "Qual opção leva ao objetivo? (rolar ou voltar se nenhuma servir)")
+        from controle_ir import ambiente_missao
+        if ambiente_missao.ATUAL.get() is not None:
+            return ambiente_missao.escolher(m, pergunta, opcoes)
+        if "cerebro" not in _OBJETIVO:
+            _OBJETIVO["cerebro"] = m.Cerebros({"cerebros": ["api"], "modelos": [m.MODELO], "pensar": False})
+        idx, _, _, _ = _OBJETIVO["cerebro"].decidir(pergunta, [{"texto": o} for o in opcoes], 8)
+        return idx
+
+    ex = mod.Executor(Ferramentas, decidir, os.path.join(TMP, "objetivos.json"))
+    return ex.executar(a)
+
+
 def _executar(a):
     acao = a.get("acao")
     try:
@@ -2391,6 +2456,8 @@ def _executar(a):
             r = missao.executar(a, navegar_etapas, escolher)
         elif acao == "navegar":
             r = navegar_etapas(a)
+        elif acao == "objetivo":
+            r = objetivo(a)
         elif acao == "rotina":
             r = rotina(a)
         elif acao == "fechar_anuncio":

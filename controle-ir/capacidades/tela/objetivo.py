@@ -1,0 +1,324 @@
+"""Executor de objetivos NO celular: o Claude manda o objetivo e o critério de conclusão numa chamada só; o laço
+perceber → decidir → agir → conferir roda aqui, sem ir à nuvem a cada toque.
+
+Medido no POCO (21/11): passo a passo pela nuvem custa ~4 s por ação (turno do modelo + Central + imagem) contra
+~0,1–1 s da ação em si. Por isso o executor só volta ao Claude com o resultado (ou quando trava).
+
+Decisão, da mais barata à mais cara:
+  1. pistas  — rótulos do caminho que o Claude já sabe (ex.: ["Bluetooth"]): toque direto, sem modelo;
+  2. memória — o que funcionou antes nesta tela para este objetivo (aprende sozinho);
+  3. digitar — campo de busca visível e texto autorizado em `digitar`;
+  4. modelo  — o cérebro do celular (Haiku pela API, modelo local) escolhe entre os controles visíveis;
+  5. rolar   — o alvo pode estar abaixo (lista longa).
+Recuperação: janela de outro app (aviso, anúncio, notificação aberta) → reflexos, fechar anúncio, voltar, reabrir
+o app; ação sem efeito → marca e tenta outra; tela repetida demais → para (sem laço infinito).
+Segurança: nunca toca em rótulos de efeito externo (enviar, excluir, comprar…) sem `permitir`; app bloqueado
+(banco/senha) encerra na hora; o texto da tela é dado, nunca instrução.
+"""
+import hashlib
+import json
+import os
+import re
+import time
+import unicodedata
+
+PROIBIDOS = ("enviar", "excluir", "apagar", "deletar", "comprar", "pagar", "pagamento", "assinar", "confirmar compra",
+             "desinstalar", "transferir", "pix", "sair da conta", "desconectar", "ligar para", "chamada de voz",
+             "chamada de video", "videochamada", "bloquear", "denunciar", "publicar", "postar", "compartilhar",
+             "responder", "encaminhar", "redefinir", "restaurar", "formatar", "remover", "esquecer")
+DISPENSAR = ("agora nao", "mais tarde", "pular", "fechar", "dispensar", "nao, obrigado", "nao obrigado", "entendi",
+             "ignorar", "x")  # janelas que só atrapalham (nunca "OK", "Permitir", "Aceitar")
+ROLAR, VOLTAR = "↓ rolar para baixo", "← voltar"
+MAX_PASSOS, MAX_PRAZO = 25, 120
+
+
+def norm(t):
+    t = unicodedata.normalize("NFKD", str(t or "")).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def rotulo(e):
+    return (e.get("texto") or e.get("desc") or "").strip()
+
+
+def proibido(texto, permitir=()):
+    n = norm(texto)
+    if any(norm(p) and norm(p) in n for p in permitir):
+        return False
+    return any(re.search(rf"(^|\W){re.escape(p)}(\W|$)", n) for p in PROIBIDOS)
+
+
+def assinatura(els, app):
+    """Identidade da tela: rótulos e ids do app (posição não entra: rolar 1 px não é tela nova)."""
+    chaves = sorted({f"{e.get('id')}|{rotulo(e)}" for e in els if e.get("pacote") == app or not app})
+    return hashlib.sha256(json.dumps(chaves, ensure_ascii=False).encode()).hexdigest()[:16]
+
+
+def concluido(crit, els, app_atual):
+    """Critério verificável localmente: texto(s) visível(is) e/ou app em primeiro plano."""
+    if not crit:
+        return False
+    if crit.get("app") and app_atual != crit["app"]:
+        return False
+    textos = [norm(rotulo(e)) for e in els]
+    if crit.get("texto") and not any(norm(crit["texto"]) in t for t in textos):
+        return False
+    if crit.get("qualquer") and not any(norm(q) in t for q in crit["qualquer"] for t in textos):
+        return False
+    if crit.get("todos") and not all(any(norm(q) in t for t in textos) for q in crit["todos"]):
+        return False
+    return bool(crit.get("app") or crit.get("texto") or crit.get("qualquer") or crit.get("todos"))
+
+
+def validar(a):
+    obj = a.get("objetivo") or a.get("texto")
+    if not isinstance(obj, str) or not obj.strip():
+        return "informe objetivo (o que alcançar)"
+    crit = a.get("concluido")
+    if not isinstance(crit, dict) or not any(crit.get(k) for k in ("texto", "qualquer", "todos", "app")):
+        return "informe concluido: {texto} | {qualquer:[...]} | {todos:[...]} | {app} (como saber que terminou)"
+    for k in ("pistas", "permitir"):
+        v = a.get(k)
+        if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) for x in v) or len(v) > 30):
+            return f"{k} deve ser uma lista de textos"
+    if a.get("app") is not None and not re.match(r"^[A-Za-z][\w.]{2,120}$", str(a["app"])):
+        return "app deve ser o nome do pacote"
+    return None
+
+
+class Executor:
+    """`t` é o módulo da tela (ou uma imitação nos testes): foco, dump_ui, elementos, injetar, calma, abrir,
+    bloqueado, aplicar_regras, em_anuncio, fechar_anuncio. `decidir(objetivo, resumo, opcoes)` → índice ou None."""
+
+    def __init__(self, t, decidir=None, memoria_arq=None, relogio=time.monotonic):
+        self.t, self.decidir, self.relogio = t, decidir, relogio
+        self.memoria_arq = memoria_arq
+
+    # ----------------------------------------------------------- memória de caminhos que funcionaram
+    def _memoria(self):
+        try:
+            with open(self.memoria_arq) as f:
+                m = json.load(f)
+            return m if isinstance(m, dict) else {}
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    def _lembrar(self, chave, novos):
+        if not self.memoria_arq or not novos:
+            return
+        m = self._memoria()
+        m[chave] = {**m.get(chave, {}), **novos}
+        if len(m) > 200:  # guarda as 200 mais recentes
+            m = dict(list(m.items())[-200:])
+        try:
+            os.makedirs(os.path.dirname(self.memoria_arq), exist_ok=True)
+            tmp = self.memoria_arq + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(m, f, ensure_ascii=False)
+            os.replace(tmp, self.memoria_arq)
+        except OSError:
+            pass
+
+    # ----------------------------------------------------------- o laço
+    def executar(self, a):
+        erro = validar(a)
+        if erro:
+            return {"erro": erro}
+        t = self.t
+        objetivo = a.get("objetivo") or a.get("texto")
+        app, crit = a.get("app"), a["concluido"]
+        pistas = list(a.get("pistas") or [])
+        permitir = list(a.get("permitir") or [])
+        digitar = a.get("digitar") if isinstance(a.get("digitar"), str) else None
+        max_passos = max(1, min(int(a.get("max_passos", 12)), MAX_PASSOS))
+        prazo = self.relogio() + max(5, min(float(a.get("prazo", 60)), MAX_PRAZO))
+        usar_modelo = a.get("modelo", True) is not False and self.decidir is not None
+        inicio = self.relogio()
+        passos, vistos, falhas, novos = [], {}, {}, {}
+        recuperacoes, consultas, digitado = 0, 0, set()
+        chave_mem = f"{app or ''}|{norm(objetivo)}"
+        memoria = self._memoria().get(chave_mem, {})
+
+        def fim(estado, motivo=None, els=None, app_atual=None):
+            if estado == "concluido":
+                self._lembrar(chave_mem, novos)
+            r = {"estado": estado, **({"motivo": motivo} if motivo else {}), "passos": passos,
+                 "consultas_modelo": consultas, "recuperacoes": recuperacoes,
+                 "ms": round((self.relogio() - inicio) * 1000)}
+            if a.get("ler", True) and els is not None:
+                r["tela"] = {"app": app_atual, "textos": textos_da_tela(els, app_atual, int(a.get("ler_max", 60)))}
+            return r
+
+        def falhou(sig_, r):  # 1 falha = transitória (tenta de novo); 2 = desiste dessa ação nesta tela
+            return falhas.get((sig_, r), 0) >= 2
+
+        def anotar(acao, alvo, via, t0):
+            passos.append({"n": len(passos) + 1, "acao": acao, **({"alvo": alvo} if alvo else {}), "via": via,
+                           "ms": round((self.relogio() - t0) * 1000)})
+
+        if app and t.foco() != app:
+            t0 = self.relogio()
+            if t.bloqueado(app):
+                return {"erro": "app bloqueado (banco, pagamento ou senha)"}
+            if not t.abrir(app):
+                return fim("parado", f"não consegui abrir {app}")
+            t.calma(150, 3000)
+            anotar("abrir", app, "inicio", t0)
+
+        els, app_atual = [], None
+        while True:
+            if self.relogio() > prazo:
+                return fim("parado", "prazo esgotado", els, app_atual)
+            app_atual = t.foco()
+            if t.bloqueado(app_atual):
+                return fim("parado", "app bloqueado em primeiro plano (banco, pagamento ou senha)")
+            els = t.elementos(t.dump_ui(), 300)
+            if concluido(crit, els, app_atual):
+                return fim("concluido", None, els, app_atual)
+            if len(passos) >= max_passos:
+                return fim("parado", "limite de passos", els, app_atual)
+
+            # ---- recuperação: outro app na frente (aviso, anúncio, painel de notificações, app errado)
+            if app and app_atual != app:
+                t0 = self.relogio()
+                recuperacoes += 1
+                if recuperacoes > 4:
+                    return fim("parado", f"não consegui voltar para {app} (está em {app_atual})", els, app_atual)
+                regra = t.aplicar_regras(app_atual, els)
+                if regra:
+                    anotar("reflexo", regra, "recuperacao", t0)
+                elif t.em_anuncio():
+                    t.fechar_anuncio(app_atual)
+                    anotar("fechar_anuncio", app_atual, "recuperacao", t0)
+                elif recuperacoes <= 2:
+                    t.injetar("tecla 4")  # voltar: fecha painel/janela por cima sem tocar em nada dela
+                    t.calma(150, 1500)
+                    anotar("voltar", app_atual, "recuperacao", t0)
+                else:
+                    t.abrir(app)
+                    t.calma(150, 3000)
+                    anotar("reabrir", app, "recuperacao", t0)
+                continue
+
+            sig = assinatura(els, app_atual)
+            vistos[sig] = vistos.get(sig, 0) + 1
+            if vistos[sig] > 4:
+                return fim("parado", "sem progresso (a mesma tela voltou várias vezes)", els, app_atual)
+
+            alvos = [e for e in els if rotulo(e) and not e.get("desativado")
+                     and (not app or e.get("pacote") in (app, app_atual))]
+            t0 = self.relogio()
+            escolha, via = None, None
+
+            # 0. janela que só atrapalha (diálogo pequeno com "Agora não"/"Pular"…) — nunca OK/Permitir/Aceitar
+            if len(alvos) <= 8 and not any(norm(p) in norm(rotulo(e)) for p in pistas for e in alvos):
+                d = next((e for e in alvos if e.get("clicavel") and norm(rotulo(e)) in DISPENSAR
+                          and not falhou(sig, rotulo(e))), None)
+                if d:
+                    escolha, via = d, "dispensar"
+            # 1. pistas do Claude, na ordem
+            if not escolha:
+                for p in pistas:
+                    e = melhor(alvos, p)
+                    if e and not falhou(sig, rotulo(e)) and not proibido(rotulo(e), permitir):
+                        escolha, via = e, "pista"
+                        break
+            # 2. memória deste objetivo nesta tela
+            if not escolha and memoria.get(sig):
+                e = melhor(alvos, memoria[sig])
+                if e and not falhou(sig, rotulo(e)):
+                    escolha, via = e, "memoria"
+            # 3. campo para digitar o texto autorizado (uma vez por tela)
+            if not escolha and digitar and sig not in digitado:
+                campo = next((e for e in els if e.get("editavel") and not e.get("desativado")), None)
+                if campo:
+                    digitado.add(sig)
+                    t.injetar(f"tocar {campo['x']} {campo['y']}")
+                    t.calma(100, 800)
+                    t.injetar("texto " + digitar.encode().hex())
+                    t.injetar("tecla 66")  # enter: busca
+                    t.calma(150, 2500)
+                    anotar("digitar", f"{len(digitar)} caracteres", "digitar", t0)
+                    continue
+            # 4. o cérebro do celular escolhe entre os controles visíveis
+            if not escolha and usar_modelo:
+                opcoes = []
+                for e in alvos:
+                    r = rotulo(e)
+                    if (e.get("clicavel") and r and r not in opcoes and not falhou(sig, r)
+                            and not proibido(r, permitir)):
+                        opcoes.append(r)
+                opcoes = opcoes[:30]
+                extras = [x for x in (ROLAR, VOLTAR) if not falhou(sig, x)]
+                if opcoes or extras:
+                    consultas += 1
+                    resumo = "; ".join(rotulo(e) for e in alvos if not e.get("clicavel"))[:600]
+                    idx = self.decidir(objetivo, resumo, opcoes + extras)
+                    if idx is not None and 0 <= idx < len(opcoes):
+                        escolha, via = melhor(alvos, opcoes[idx]), "modelo"
+                    elif idx is not None and 0 <= idx - len(opcoes) < len(extras):
+                        via = "modelo"
+                        escolha = extras[idx - len(opcoes)]
+            # 5. sem decisão: o alvo pode estar mais abaixo
+            if not escolha and not falhou(sig, ROLAR) and any(e.get("rolavel") for e in els):
+                escolha, via = ROLAR, "rolagem"
+            if not escolha:
+                return fim("parado", "não sei o próximo passo (preciso do Claude)", els, app_atual)
+
+            # ---- agir
+            if escolha == ROLAR:
+                lista = max((e for e in els if e.get("rolavel")), key=lambda e: e.get("a", 0), default=None)
+                x = lista["x"] if lista else 540
+                y0 = (lista["y"] + lista.get("a", 1200) // 3) if lista else 1700
+                y1 = (lista["y"] - lista.get("a", 1200) // 3) if lista else 700
+                t.injetar(f"deslizar {x} {y0} {x} {y1} 300")
+                rotulo_acao, acao = ROLAR, "rolar"
+            elif escolha == VOLTAR:
+                t.injetar("tecla 4")
+                rotulo_acao, acao = VOLTAR, "voltar"
+            else:
+                if proibido(rotulo(escolha), permitir):  # dupla checagem (pista/memória)
+                    falhas[(sig, rotulo(escolha))] = 2
+                    continue
+                t.injetar(f"tocar {escolha['x']} {escolha['y']}")
+                rotulo_acao, acao = rotulo(escolha), "tocar"
+            t.calma(150, 2500)
+            # ---- conferir: a tela mudou?
+            depois = t.elementos(t.dump_ui(), 300)
+            app_depois = t.foco()
+            if assinatura(depois, app_depois) == sig and app_depois == app_atual and acao != "rolar":
+                falhas[(sig, rotulo_acao)] = falhas.get((sig, rotulo_acao), 0) + 1  # sem efeito: 1ª vez repete,
+                anotar(acao, rotulo_acao, via + " (sem efeito)", t0)                # 2ª tenta outra coisa
+                vistos[sig] -= 1  # tela igual por falha da ação não conta como volta em círculo
+            else:
+                if acao == "rolar" and assinatura(depois, app_depois) == sig:
+                    falhas[(sig, ROLAR)] = 2  # fim da lista
+                if acao == "tocar" and via != "dispensar":
+                    novos[sig] = rotulo_acao
+                anotar(acao, rotulo_acao, via, t0)
+
+
+def melhor(els, texto):
+    """Elemento cujo rótulo é o texto (igual > começa com > contém), preferindo clicável."""
+    alvo = norm(texto)
+    if not alvo:
+        return None
+    for teste in (lambda r: r == alvo, lambda r: r.startswith(alvo), lambda r: alvo in r):
+        cands = [e for e in els if teste(norm(rotulo(e)))]
+        if cands:
+            clic = [e for e in cands if e.get("clicavel")]
+            return (clic or cands)[0]
+    return None
+
+
+def textos_da_tela(els, app, n=60):
+    """O que está escrito na tela final (só do app em foco), na ordem de leitura: é a resposta para o Claude."""
+    vistos, out = set(), []
+    for e in sorted((e for e in els if not app or e.get("pacote") == app), key=lambda e: (e.get("y", 0), e.get("x", 0))):
+        r = rotulo(e)
+        if r and r not in vistos:
+            vistos.add(r)
+            out.append(r)
+        if len(out) >= n:
+            break
+    return out

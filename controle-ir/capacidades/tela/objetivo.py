@@ -288,7 +288,9 @@ class Executor:
                 if e and not falhou(sig, rotulo(e)) and seguro(e, els, permitir):
                     escolha, via = e, "memoria"
             # 3. campo para digitar o texto autorizado (uma vez por tela)
-            if not escolha and digitar and sig not in digitado:
+            ja_escrito = any(e.get("editavel") and norm(digitar or "") in norm(e.get("texto")) for e in els)
+            if not escolha and digitar and not digitado and not ja_escrito:
+                # uma vez por objetivo: cada letra muda a tela e a "tela nova" fazia digitar de novo (8× no POCO)
                 campo = next((e for e in els if e.get("editavel") and not e.get("desativado")), None)
                 if campo:
                     digitado.add(sig)

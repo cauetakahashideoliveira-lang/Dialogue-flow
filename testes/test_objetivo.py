@@ -336,6 +336,24 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertEqual(r["estado"], "concluido")
         self.assertEqual(cel.digitado, "bluetooth")
 
+    def test_digita_uma_vez_so_mesmo_com_a_tela_mudando(self):
+        # 21/11, POCO: cada letra mudava a "identidade" da tela e o texto foi digitado 8 vezes
+        telas = {"busca": ([el("", 100, editavel=True), el("Resultado: conta", 300)], {}),
+                 "resultados": ([el("WhatsApp", 100, editavel=True), el("Resultado: conta", 300)], {})}
+        cel = Celular(telas, "busca")
+        orig = cel.injetar
+
+        def injetar(cmd):
+            r = orig(cmd)
+            if cmd.startswith("texto"):
+                cel.atual = "resultados"
+            return r
+        cel.injetar = injetar
+        r = self.executor(cel).executar({"objetivo": "achar o app", "app": APP, "digitar": "WhatsApp",
+                                         "concluido": {"texto": "Forçar parada"}, "modelo": False, "max_passos": 8})
+        self.assertEqual(cel.digitado, "WhatsApp")
+        self.assertEqual(sum(p["acao"] == "digitar" for p in r["passos"]), 1)
+
     def test_app_bloqueado_para_na_hora(self):
         cel = Celular(TELAS, "inicio", app="com.banco")
         r = self.executor(cel).executar({"objetivo": "x", "concluido": {"texto": "y"}})

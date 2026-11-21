@@ -1,7 +1,7 @@
 # Graph Report - Dialogue-flow  (2026-11-21)
 
 ## Corpus Check
-- 115 files · ~156,035 words
+- 115 files · ~156,077 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 15 file(s) not represented in the graph (top: (none) 3, .ir 3, .jsonl 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 157,587 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `51fcced2`
+- Built from commit: `0ff13ead`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -164,10 +164,10 @@
   docs/seguranca.md → testes/test_controle_ir.py
 - `variante()` --implements--> `Variante Gree a partir da captura real (troca só os bits)`  [INFERRED]
   ferramentas/gree_variante.py → docs/aparelhos/quarto/ar-do-quarto.md
-- `3a. Central de Controle (1.0.24, implementada) — `painel/`` --references--> `TestPainel`  [EXTRACTED]
-  docs/seguranca.md → testes/test_controle_ir.py
 - `Catálogo instalado: base + ampliado (9.380 perfis)` --conceptually_related_to--> `Catalogo`  [INFERRED]
   docs/estado-atual.md → controle-ir/controle_ir/catalogo.py
+- `3a. Central de Controle (1.0.24, implementada) — `painel/`` --references--> `TestPainel`  [EXTRACTED]
+  docs/seguranca.md → testes/test_controle_ir.py
 
 ## Import Cycles
 - None detected.
@@ -511,17 +511,17 @@ Nodes (7): Ajudante, _apagar(), captura(), foto_rapida(), _jar(), _jpeg(), _past
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Dialogue-flow · Controle do Android pelo ChatGPT e pelo Claude` connect `Dialogue-flow · Controle do Android pelo ChatGPT e pelo Claude` to `HANDOFF.md`?**
-  _High betweenness centrality (0.029) - this node is a cross-community bridge._
+- **Why does `TestPiloto` connect `TestPiloto` to `test_controle_ir.py`?**
+  _High betweenness centrality (0.031) - this node is a cross-community bridge._
 - **Are the 20 inferred relationships involving `Servico` (e.g. with `Aparelhos` and `ErroAparelho`) actually correct?**
   _`Servico` has 20 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Versão do servidor (celular 1.0.4, repositório 1.0.5)` to the rest of the system?**
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `index.js` be split into smaller, more focused modules?**
   _Cohesion score 0.08208955223880597 - nodes in this community are weakly interconnected._
-- **Why does `Servico` connect `Servico` to `Controlador`, `criar_servidor`, `formatos.py`, `normalizar`, `Controlador`, `_iniciar`, `EmissorSimulado`, `ServidorMCP`, `tv do quarto (TV Samsung)`, `test_controle_ir.py`, `Descoberta`, `ErroSinal`, `Sinal`, `novo_servico`, `cli.py`, `Aparelhos`, `Execucao`, `Registro`?**
-  _High betweenness centrality (0.029) - this node is a cross-community bridge._
+- **Why does `TestTelaPorArquivo` connect `TestTelaPorArquivo` to `test_controle_ir.py`?**
+  _High betweenness centrality (0.027) - this node is a cross-community bridge._
 - **Should `test_controle_ir.py` be split into smaller, more focused modules?**
   _Cohesion score 0.10483870967741936 - nodes in this community are weakly interconnected._
-- **Why does `Conexao` connect `Conexao` to `piloto.py`?**
+- **Why does `TestPainel` connect `TestPainel` to `novo_servico`, `test_controle_ir.py`?**
   _High betweenness centrality (0.026) - this node is a cross-community bridge._

@@ -163,7 +163,7 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertEqual(r["estado"], "concluido")
         self.assertEqual(r["consultas_modelo"], 2)
         self.assertTrue(all(p["via"].startswith("modelo:") for p in r["passos"]))
-        self.assertEqual(self.niveis, ["padrao", "padrao"])  # Haiku + Sonnet correndo juntos
+        self.assertEqual(self.niveis, ["forte", "forte"])  # padrão: Sonnet + Opus correndo juntos
         r2 = self.executor(Celular(TELAS, "inicio"), escolher).executar(pedido)  # aprendeu o caminho
         self.assertEqual((r2["estado"], r2["consultas_modelo"]), ("concluido", 0))
         self.assertEqual([p["via"] for p in r2["passos"]], ["memoria", "memoria"])
@@ -430,8 +430,8 @@ class TestExecutorObjetivo(unittest.TestCase):
         r = self.executor(cel, escolher).executar(
             {"objetivo": "abrir o Bluetooth", "app": APP, "concluido": {"texto": "AirPods"}})
         self.assertEqual(r["estado"], "concluido")
-        self.assertEqual(self.niveis[0], "padrao")
-        self.assertIn("forte", self.niveis[1:])  # depois da falha, Sonnet + Opus
+        self.assertEqual(self.niveis[0], "forte")
+        self.assertIn("maximo", self.niveis[1:])  # depois da falha, Opus pensando
         r = self.executor(Celular(TELAS, "inicio"), lambda o: o.index("Bluetooth")).executar(
             {"objetivo": "ver os fones conectados", "app": APP, "concluido": {"texto": "AirPods"}, "cerebro": "maximo"})
         self.assertEqual(self.niveis[-1], "maximo")  # pedido explícito: Opus pensando

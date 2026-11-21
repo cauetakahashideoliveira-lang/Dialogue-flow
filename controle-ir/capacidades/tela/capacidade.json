@@ -271,7 +271,7 @@
    },
    "cerebro": {
     "type": "string",
-    "description": "objetivo: rapido (Haiku) | padrao (Haiku+Sonnet, vale o Sonnet) | forte (Sonnet+Opus) | maximo (Opus pensando). Sobe um degrau sozinho em tela difícil"
+    "description": "objetivo: rapido (Haiku) | padrao (Haiku+Sonnet) | forte (Sonnet+Opus, PADRÃO) | maximo (Opus pensando). Sobe um degrau sozinho em tela difícil. Medido: Haiku 1,46 s, Opus 1,68 s por decisão"
    }
   },
   "required": [

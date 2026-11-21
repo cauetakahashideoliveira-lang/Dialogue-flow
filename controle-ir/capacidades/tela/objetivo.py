@@ -152,7 +152,9 @@ class Executor:
         permitir = list(a.get("permitir") or [])
         digitar = a.get("digitar") if isinstance(a.get("digitar"), str) else None
         max_passos = max(1, min(int(a.get("max_passos", 12)), MAX_PASSOS))
-        nivel_base = ORDEM_NIVEIS.index(a.get("cerebro")) if a.get("cerebro") in NIVEIS else 1
+        # padrão "forte": no POCO (21/11) Haiku decidiu em 1,46 s, Sonnet 1,55 s, Opus 1,68 s, Opus pensando 1,89 s
+        # (todos acertaram): o mais inteligente custa ~0,2 s por decisão — vale sempre
+        nivel_base = ORDEM_NIVEIS.index(a.get("cerebro")) if a.get("cerebro") in NIVEIS else 2
         prazo = self.relogio() + max(5, min(float(a.get("prazo", 60)), MAX_PRAZO))
         usar_modelo = a.get("modelo", True) is not False and self.decidir is not None
         inicio = self.relogio()

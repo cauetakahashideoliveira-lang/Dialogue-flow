@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import collections
 import http.client
+import hashlib
 import json
 import os
 import queue
@@ -43,7 +44,7 @@ def norm(t):
 
 
 # ----------------------------------------------------------------------------------------------------- percepção
-def quiz_da_tela(els, ignorar=IGNORAR):
+def quiz_da_tela(els, ignorar=IGNORAR, sem_pergunta=False):
     """(pergunta, [opções {texto,x,y,l,a}]) de uma tela de quiz, ou None. Opções: o maior grupo (2–6) de botões do
     mesmo tamanho com texto; pergunta: o texto mais longo acima delas."""
     clic = [e for e in els if e.get("clicavel") and e.get("l") and e.get("a")]
@@ -84,11 +85,72 @@ def quiz_da_tela(els, ignorar=IGNORAR):
     usados = {norm(o["texto"]) for o in g}
     perg = [t for t in textos if t["y"] < topo and len((t.get("texto") or "").strip()) >= 8
             and norm(t.get("texto")) not in usados and norm(t.get("texto")) not in ign]
-    if not perg:
-        return None
-    pergunta = max(perg, key=lambda t: len(t["texto"]))["texto"].strip()
     ops = sorted(g, key=lambda o: (round(o["y"] / 40), o["x"]))
+    if not perg:
+        if not sem_pergunta:
+            return None
+        # pergunta desenhada (imagem/fórmula): devolve as opções e a caixa acima delas para a visão ler
+        return None, [{k: v for k, v in o.items() if k != "_ids"} for o in ops]
+    pergunta = max(perg, key=lambda t: len(t["texto"]))["texto"].strip()
     return pergunta, [{k: v for k, v in o.items() if k != "_ids"} for o in ops]
+
+
+def caixa_da_pergunta(els, opcoes):
+    """Maior elemento sem texto acima das opções (a caixa onde a conta é desenhada): [x, y, l, a] para recortar."""
+    topo = min(o["y"] - o["a"] / 2 for o in opcoes)
+    cands = [e for e in els if e.get("l") and e.get("a") and e["y"] + e["a"] / 2 <= topo
+             and not (e.get("texto") or e.get("desc")) and e["l"] * e["a"] >= 40000]
+    if not cands:
+        return None
+    c = max(cands, key=lambda e: e["l"] * e["a"])
+    return [int(c["x"] - c["l"] / 2), int(c["y"] - c["a"] / 2), int(c["l"]), int(c["a"])]
+
+
+def calcular(expr):
+    """Conta aritmética transcrita (×, ÷, −, ^) → número, sem eval: só números, + - * / ** e parênteses."""
+    import ast
+    import operator as op
+    s = str(expr or "").strip().replace("×", "*").replace("x", "*").replace("X", "*").replace("÷", "/")
+    s = s.replace("−", "-").replace("–", "-").replace("^", "**").replace(",", ".").replace(" ", "").rstrip("=?")
+    if not s or not re.fullmatch(r"[\d.+\-*/()]+", s):
+        return None
+    ops = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv, ast.Pow: op.pow}
+
+    def ev(n):
+        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)):
+            return n.value
+        if isinstance(n, ast.BinOp) and type(n.op) in ops:
+            a, b = ev(n.left), ev(n.right)
+            if isinstance(n.op, ast.Pow) and abs(b) > 10:
+                raise ValueError
+            return ops[type(n.op)](a, b)
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.USub, ast.UAdd)):
+            return -ev(n.operand) if isinstance(n.op, ast.USub) else ev(n.operand)
+        raise ValueError
+    try:
+        return ev(ast.parse(s, mode="eval").body)
+    except (ValueError, SyntaxError, ZeroDivisionError, TypeError):
+        return None
+
+
+def escolher_pela_conta(texto_modelo, opcoes):
+    """Resposta da visão ("expressão" na 1ª linha, número da opção na 2ª) → índice da opção. Prefere a conta feita
+    aqui (exata) e cai no número que o modelo indicou."""
+    linhas = [l.strip() for l in str(texto_modelo or "").splitlines() if l.strip()]
+    if linhas:
+        v = calcular(linhas[0].split(":")[-1])
+        if v is not None:
+            for i, o in enumerate(opcoes):
+                try:
+                    if abs(float(o["texto"].replace(",", ".").replace("−", "-")) - v) < 1e-6:
+                        return i, "visao+conta"
+                except ValueError:
+                    continue
+    for l in reversed(linhas):
+        m = re.fullmatch(r"\D*([1-9])\D*", l)
+        if m and int(m.group(1)) <= len(opcoes):
+            return int(m.group(1)) - 1, "visao"
+    return None, None
 
 
 def chave_quiz(pergunta, opcoes):
@@ -293,6 +355,27 @@ class Cerebros:
             elif forca.get(nome, 0) == mais_forte:
                 forte = idx
         self._julgar(chave, pergunta, opcoes, local, forte)
+
+    def visao(self, b64, opcoes, modelo):
+        """Lê uma pergunta desenhada (imagem) com um modelo de visão, chamado DIRETO do celular."""
+        chave = ler_chave()
+        if not chave:
+            return None
+        if modelo not in self.conexoes:
+            self.conexoes[modelo] = Conexao(API_HOST)
+        texto = []
+        corpo = {"model": modelo, "max_tokens": 60, "stream": True,
+                 "messages": [{"role": "user", "content": [
+                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+                     {"type": "text", "text": "Linha 1: transcreva só a conta da imagem em ASCII (use * e /). "
+                                              "Linha 2: só o número da opção certa entre " + "  ".join(
+                                                  f"{i + 1}) {o['texto']}" for i, o in enumerate(opcoes))}]}]}
+        if "haiku" in modelo:
+            corpo["thinking"] = {"type": "disabled"}
+        self.conexoes[modelo].post_stream("/v1/messages", corpo, {"content-type": "application/json", "x-api-key": chave,
+                                                                  "anthropic-version": API_VERSAO},
+                                          lambda p, ev=None: texto.append(p))
+        return "".join(texto)
 
     @property
     def api(self):
@@ -709,6 +792,8 @@ class Piloto:
         prazo = max(0.3, min(float(cfg.get("prazo", 2.0)), 20))
         ignorar = tuple(cfg.get("ignorar") or ()) + IGNORAR
         ultima, contador, rasgada_desde = None, 0, None
+        parado_desde = None
+        self._ultima_visao = None
         fim = time.time() + max(10, min(float(cfg.get("duracao", 600)), 3600))
         self.estado_txt = "olhando"
         while not self.parar.is_set() and time.time() < fim:
@@ -727,8 +812,20 @@ class Piloto:
                     els = [e for e in els if e.get("pacote") in (cfg["app"], None, "")]  # sem sobreposições
                 self.estado_txt = "jogando"
                 q = quiz_da_tela(els, ignorar)
+                if not q and cfg.get("visao", True) and "capturar" in f:
+                    q2v = quiz_da_tela(els, ignorar, sem_pergunta=True)
+                    if q2v and q2v[0] is None:
+                        if self._responder_por_visao(els, q2v[1]):
+                            parado_desde = None
+                        continue
                 if not q:
+                    if parado_desde is None:
+                        parado_desde = time.time()
+                    elif time.time() - parado_desde > float(cfg.get("continuar_apos", 1.5)):
+                        if self._continuar(els):
+                            parado_desde = None
                     continue
+                parado_desde = None
                 pergunta, opcoes = q
                 chave = chave_quiz(pergunta, opcoes)
                 if chave == ultima:
@@ -788,6 +885,49 @@ class Piloto:
         gravar_memoria(self.cerebros.memoria)
         if "bloqueado" not in self.estado_txt:
             self.estado_txt = "parado"
+
+    def _responder_por_visao(self, els, opcoes):
+        """Pergunta desenhada: recorta a caixa, a visão transcreve, o celular calcula e toca. Tudo local + API."""
+        f, cfg = self.f, self.cfg
+        t_mud = time.time()
+        caixa = caixa_da_pergunta(els, opcoes)
+        if not caixa:
+            return False
+        b64 = f["capturar"](caixa)
+        if not b64:
+            return False
+        chave = hashlib.md5(b64.encode()).hexdigest() + "|" + "|".join(o["texto"] for o in opcoes)
+        if chave == self._ultima_visao:
+            return False
+        t_lido = time.time()
+        erros = []
+        try:
+            txt = self.cerebros.visao(b64, opcoes, cfg.get("modelo_visao", "claude-sonnet-5-5"))
+        except Exception as e:  # noqa: BLE001
+            txt, erros = None, [str(e)[:120]]
+        idx, fonte = escolher_pela_conta(txt, opcoes)
+        t_dec = time.time()
+        toque = None
+        if idx is None and cfg.get("chutar", True):
+            idx, fonte = 0, "chute"
+        if idx is not None:
+            f["tocar"](opcoes[idx]["x"], opcoes[idx]["y"])
+            toque = time.time()
+        self._ultima_visao = chave
+        self._registrar((txt or "").split("\n")[0][:80] or "(imagem)", opcoes, idx, fonte, None, t_mud, t_lido, t_dec,
+                        toque, erros)
+        return True
+
+    def _continuar(self, els):
+        """Fim de rodada: regras do pedido {se: texto na tela, tocar: [x, y]} (ex.: ▶ do próximo nível)."""
+        textos = " | ".join(norm(e.get("texto") or e.get("desc") or "") for e in els)
+        for r in self.cfg.get("continuar") or []:
+            if isinstance(r, dict) and r.get("se") and norm(r["se"]) in textos and isinstance(r.get("tocar"), list):
+                self.f["tocar"](int(r["tocar"][0]), int(r["tocar"][1]))
+                self.rodadas.append({"t": round(time.time(), 3), "continuar": r["se"][:40]})
+                time.sleep(float(self.cfg.get("pausa_continuar", 1.2)))
+                return True
+        return False
 
     def _registrar(self, pergunta, opcoes, idx, fonte, motivo, t_mud, t_lido, t_dec, t_toque, erros):
         r = {"t": round(t_mud, 3), "pergunta": pergunta[:160], "opcoes": [o["texto"][:60] for o in opcoes],

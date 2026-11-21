@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795291901.1015255,
-    "seen": 1795291902.7635212,
-    "ast_hash": "06eb4c72ff9c5704fd5bf4fabfbbf56d",
+    "mtime": 1795292815.5901225,
+    "seen": 1795292817.831046,
+    "ast_hash": "8bbf44049c2ca40ac7e60cc43f9c8b5c",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795289533.2546563,
-    "seen": 1795289755.0835602,
-    "ast_hash": "e89143923ec819fc0f5ecca403e626d0",
+    "mtime": 1795292019.9908736,
+    "seen": 1795292817.8311462,
+    "ast_hash": "d1eeb6d84446e165c62a68f86619cb3a",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/principal.py": {
-    "mtime": 1795290883.378125,
-    "seen": 1795290945.0877016,
-    "ast_hash": "d8cd975305d93e045f5f40126ca51efe",
+    "mtime": 1795292738.7369652,
+    "seen": 1795292817.831042,
+    "ast_hash": "0ead48c35165428f49c5c751ad02b9e8",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/termometro/capacidade.json": {
@@ -444,9 +444,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/piloto.py": {
-    "mtime": 1795285348.3763645,
-    "seen": 1795285368.5137932,
-    "ast_hash": "4934ac06279a2c521232b923bacc5547",
+    "mtime": 1795292738.7362616,
+    "seen": 1795292817.8310406,
+    "ast_hash": "89d7d61dbf5672147b8467a710a839cc",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/quiz/quiz.html": {
@@ -732,9 +732,9 @@
     "semantic_hash": ""
   },
   "testes/test_objetivo.py": {
-    "mtime": 1795291847.8957658,
-    "seen": 1795291902.7635822,
-    "ast_hash": "90acb7dab4a89b2da5746ee65e69bfe3",
+    "mtime": 1795292754.5920317,
+    "seen": 1795292817.8311224,
+    "ast_hash": "68f4dd187b8756ce46dfc26e60f3d08b",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

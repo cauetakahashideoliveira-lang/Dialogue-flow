@@ -570,3 +570,56 @@ class TestExecutorObjetivo(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPilotoVisao(unittest.TestCase):
+    """Piloto com visão: pergunta desenhada (Mental Math Master, 21/11) → recorte → modelo de visão no celular →
+    conta feita no celular → toque. Sem a nuvem do Claude no laço."""
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("tela_piloto_teste", CAP / "piloto.py")
+        self.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.m)
+
+    def tela(self):
+        def b(t, x):
+            return {"texto": t, "desc": "", "clicavel": True, "x": x, "y": 2538, "l": 250, "a": 250, "pacote": "g"}
+        return [{"texto": "", "desc": "", "clicavel": True, "x": 640, "y": 906, "l": 1100, "a": 560, "pacote": "g"},
+                {"texto": "9", "desc": "", "clicavel": False, "x": 640, "y": 1660, "l": 60, "a": 80, "pacote": "g"},
+                b("19", 239), b("20", 639), b("16", 1040)]
+
+    def test_conta_e_escolha(self):
+        m = self.m
+        self.assertEqual(m.calcular("(5 × 3) + 4"), 19)
+        self.assertEqual(m.calcular("74 + 12"), 86)
+        self.assertEqual(m.calcular("2^3 - 1"), 7)
+        self.assertIsNone(m.calcular("__import__('os')"))
+        ops = [{"texto": "19"}, {"texto": "20"}, {"texto": "16"}]
+        self.assertEqual(m.escolher_pela_conta("(5*3)+4\n1", ops), (0, "visao+conta"))
+        self.assertEqual(m.escolher_pela_conta("ilegível\n2", ops), (1, "visao"))  # cai no número do modelo
+        self.assertEqual(m.escolher_pela_conta("(5*3)+4\n3", ops), (0, "visao+conta"))  # a conta manda
+
+    def test_quiz_sem_pergunta_e_caixa(self):
+        m = self.m
+        self.assertIsNone(m.quiz_da_tela(self.tela()))
+        perg, ops = m.quiz_da_tela(self.tela(), sem_pergunta=True)
+        self.assertIsNone(perg)
+        self.assertEqual([o["texto"] for o in ops], ["19", "20", "16"])
+        self.assertEqual(m.caixa_da_pergunta(self.tela(), ops), [90, 626, 1100, 560])
+
+    def test_rodada_por_visao_toca_a_certa(self):
+        m = self.m
+        toques = []
+        f = {"capturar": lambda caixa: "QUJD", "tocar": lambda x, y: toques.append((x, y))}
+        p = m.Piloto(f)
+        p.cfg = {}
+
+        class Cer:
+            def visao(self, b64, opcoes, modelo):
+                return "(5 x 3) + 4\n2"
+        p.cerebros = Cer()
+        p._ultima_visao = None
+        _, ops = m.quiz_da_tela(self.tela(), sem_pergunta=True)
+        self.assertTrue(p._responder_por_visao(self.tela(), ops))
+        self.assertEqual(toques, [(239, 2538)])  # 19, pela conta (o modelo disse 2, errado)
+        self.assertFalse(p._responder_por_visao(self.tela(), ops))  # a mesma pergunta não é respondida 2×

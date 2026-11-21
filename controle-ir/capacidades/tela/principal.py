@@ -2142,7 +2142,8 @@ def _ferramentas_piloto():
     return {"aguardar": aguardar, "elementos": lambda: elementos(dump_ui(), limite=300), "tocar": tocar,
             "tabuleiro_local": tabuleiro_local, "vez": lambda: vez_no_historico(tela_chess()),
             "bloqueado": lambda app: bool(app) and bloqueado(app, bloqueados()),
-            "casas": lambda: casas_xadrez(elementos(dump_ui(), limite=300)), "contra_robo": partida_contra_robo}
+            "casas": lambda: casas_xadrez(elementos(dump_ui(), limite=300)), "contra_robo": partida_contra_robo,
+            "capturar": lambda caixa: foto_rapida(560, caixa)[0]}  # pergunta desenhada: recorte para a visão
 
 
 def partida_contra_robo(app=None):

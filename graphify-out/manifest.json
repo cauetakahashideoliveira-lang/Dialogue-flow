@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795285359.421569,
-    "seen": 1795285368.513802,
-    "ast_hash": "3f6ede03f2fa0183d268a567fa00dd97",
+    "mtime": 1795286164.8552754,
+    "seen": 1795286166.7743938,
+    "ast_hash": "bbc69b90fee23938e8e3be9f8baf6e1e",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -54,9 +54,9 @@
     "semantic_hash": "91ccb5e9b53ecfb24d8263f1b519395a"
   },
   "controle-ir/controle_ir/mcp.py": {
-    "mtime": 1795276791.7519875,
-    "seen": 1795276883.396187,
-    "ast_hash": "36c172fc6d48cf6c53b323538f8f9eca",
+    "mtime": 1795286164.8670058,
+    "seen": 1795286166.7744126,
+    "ast_hash": "7ad73b2844be439da0a1c81c89e06026",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/protocolos.py": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795285366.6381428,
-    "seen": 1795285368.5139909,
-    "ast_hash": "35ff99e28eb1fdf7f0d18919026ba6d6",
+    "mtime": 1795286164.8676598,
+    "seen": 1795286166.7744834,
+    "ast_hash": "60201bd5f8aaf2c00e8aebdb1911419f",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -588,21 +588,21 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/bluetooth/capacidade.json": {
-    "mtime": 1795276663.8272884,
-    "seen": 1795276883.3961415,
-    "ast_hash": "b329f30d82d7f3446af6b218dd3c30aa",
+    "mtime": 1795286150.3917007,
+    "seen": 1795286166.7743611,
+    "ast_hash": "f57c6d5f65b3e259970779055b9b15b9",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/bluetooth/java/controleir/Bluetooth.java": {
-    "mtime": 1795277548.156885,
-    "seen": 1795285270.311921,
-    "ast_hash": "867cdd449309aa47da99a3a3a04f27c2",
+    "mtime": 1795285701.3481002,
+    "seen": 1795286166.7743628,
+    "ast_hash": "f071bf3ac1a80800bf9d6066682c66f5",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/bluetooth/principal.py": {
-    "mtime": 1795285240.442364,
-    "seen": 1795285270.311924,
-    "ast_hash": "18f77b1d05c6f9c9c80a6abbd0924a3a",
+    "mtime": 1795286102.0320714,
+    "seen": 1795286166.7743642,
+    "ast_hash": "67c2e1658a3d38cbc9531fe9ace3f9ae",
     "semantic_hash": ""
   },
   "testes/android_stub/android/bluetooth/BluetoothAdapter.java": {
@@ -696,15 +696,33 @@
     "semantic_hash": ""
   },
   "testes/test_bluetooth.py": {
-    "mtime": 1795285253.8848076,
-    "seen": 1795285270.3120658,
-    "ast_hash": "32eca3435d0376cad6cdaa75ab3f9860",
+    "mtime": 1795286136.8628974,
+    "seen": 1795286166.7744591,
+    "ast_hash": "8a62f92bca59bc0f8d3096f78fe48896",
     "semantic_hash": ""
   },
   "testes/android_stub/README.md": {
     "mtime": 1795277556.0704758,
     "seen": 1795285270.312112,
     "ast_hash": "89567c9f65e7b1499fbf468b16b8bebe",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/bluetooth/app/java/br/controleir/bluetooth/Busca.java": {
+    "mtime": 1795285692.6074307,
+    "seen": 1795286166.774358,
+    "ast_hash": "26a7630c59448f0283855627104e0d37",
+    "semantic_hash": ""
+  },
+  "ferramentas/construir_app_bluetooth.py": {
+    "mtime": 1795286136.860778,
+    "seen": 1795286166.7744293,
+    "ast_hash": "be9bd6cc5e6d816169b036ae048a4aac",
+    "semantic_hash": ""
+  },
+  "ferramentas/construir_app_bluetooth.sh": {
+    "mtime": 1795286136.8606942,
+    "seen": 1795286166.7744305,
+    "ast_hash": "910957a32c56440d4ee1cb47b1d1b0bf",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

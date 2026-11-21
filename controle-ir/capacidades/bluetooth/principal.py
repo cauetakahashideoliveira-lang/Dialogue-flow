@@ -145,7 +145,7 @@ def resumir(bruto, limite=40):
                     "então um mesmo aparelho pode aparecer duas vezes; aparelhos só clássicos e calados não aparecem")}
     if len(vistos) > limite:
         out["omitidos"] = len(vistos) - limite
-    for k in ("codigo_falha", "detalhe", "avisos", "ligado_para_buscar"):
+    for k in ("via", "app_auxiliar", "codigo_falha", "detalhe", "avisos", "ligado_para_buscar"):
         if bruto.get(k):
             out[k] = bruto[k]
     sinais = bruto.get("sinais_registro") or []
@@ -159,6 +159,8 @@ def resumir(bruto, limite=40):
         out["dica"] = ("o HyperOS recusa a busca Bluetooth do shell (regra da Xiaomi: pacote do sistema só busca com "
                        "tela própria em primeiro plano). Os pareados vêm completos; 'sinais_registro' traz os aparelhos "
                        "que as buscas do próprio sistema captaram, só com força do sinal e fim do endereço (sem nome)")
+        if bruto.get("app_auxiliar") == "instalacao_bloqueada":
+            out["dica"] += ". Para a busca completa (nomes e tipos): " + DICA_USB
     if bruto.get("busca") == "bluetooth_desligado":
         out["dica"] = ("o Bluetooth está desligado e o modo só BLE não subiu: ligue o Bluetooth ou chame de novo com "
                        "ligar=true (ele liga só durante a busca e desliga no fim)")
@@ -272,8 +274,8 @@ def ultima_linha_json(texto):
     return None
 
 
-def buscar(segundos, ligar=False, tela=None):
-    tela = tela or _tela()
+def buscar_shell(segundos, tela):
+    """Leitor Java como shell (app_process). No Android puro busca de verdade; no HyperOS só pareados + registro."""
     jar, erro = compilar()
     if not jar:
         return {"erro": erro}
@@ -281,14 +283,7 @@ def buscar(segundos, ligar=False, tela=None):
     copia = os.path.join(pasta, os.path.basename(jar))
     shutil.copy(jar, copia)
     destino = f"{tela.TMP_SHELL}/controle-bt.jar"
-    ligou = False
     try:
-        if ligar:
-            estado, _, _ = tela.rish("settings get global bluetooth_on", timeout=10)
-            if estado.strip() == "0":
-                tela.rish("cmd bluetooth_manager enable; cmd bluetooth_manager wait-for-state:STATE_ON", timeout=20)
-                ligou = True
-                time.sleep(1)
         # o registro do sistema diz se o HyperOS recusou a busca e traz os sinais que as buscas do próprio sistema
         # captam (só a força e o fim do endereço): é o que dá para ver quando a busca do shell é recusada
         cmd = (f"T=$(date '+%m-%d %H:%M:%S.000'); cp {shlex.quote(copia)} {destino} && CLASSPATH={destino} "
@@ -297,8 +292,6 @@ def buscar(segundos, ligar=False, tela=None):
                f"grep -E 'MIUI PERMISSION DENIED|onScanResult' | tail -800")
         out, err, cod = tela.rish(cmd, timeout=segundos + 25)
     finally:
-        if ligou:
-            tela.rish("cmd bluetooth_manager disable", timeout=15)
         try:
             os.remove(copia)
         except OSError:
@@ -313,9 +306,141 @@ def buscar(segundos, ligar=False, tela=None):
             bruto["sinais_registro"] = sinais
     if bruto is None:
         return {"erro": "o leitor Bluetooth não respondeu", "codigo": cod, "detalhe": (err or out or "")[-800:]}
+    bruto["via"] = "shell"
+    return bruto
+
+
+# --------------------------------------------------------------------------- app auxiliar (busca completa no HyperOS)
+APP_APK = os.path.join(AQUI, "app", "controle-ir-bluetooth.apk")
+APP_PACOTE = "br.controleir.bluetooth"
+APP_MARCA = os.path.join(TMP, "app_instalado.sha")
+APP_PERMISSOES = ("android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT")
+DICA_USB = ("o HyperOS só deixa o shell instalar apps com “Instalar via USB” ligado: Configurações → Opções do "
+            "desenvolvedor → Instalar via USB (pede a conta Xiaomi). Depois disso a busca completa se instala sozinha")
+
+
+def _sha(caminho):
+    with open(caminho, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()[:16]
+
+
+def _ler_marca():
+    try:
+        with open(APP_MARCA) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def preparar_app(tela):
+    """Garante o app auxiliar (a versão deste pacote) instalado e com as permissões de Bluetooth.
+    Devolve (pronto, motivo). Instalado à mão ou numa versão antiga, mas sem poder atualizar: usa o que há."""
+    if not os.path.exists(APP_APK):
+        return False, "o app auxiliar não veio no pacote"
+    sha = _sha(APP_APK)
+    caminho, _, _ = tela.rish(f"pm path {APP_PACOTE}", timeout=15)
+    instalado = "package:" in (caminho or "")
+    motivo = None
+    if not instalado or _ler_marca() != sha:
+        pasta = tela._pasta_troca()
+        copia = os.path.join(pasta, "cir-bt.apk")
+        shutil.copy(APP_APK, copia)
+        alvo = f"{tela.TMP_SHELL}/cir-bt.apk"
+        try:
+            # assinatura diferente (o app foi montado com outra chave): desinstala e instala de novo, sem dados a perder
+            out, err, _ = tela.rish(
+                f"cp {shlex.quote(copia)} {alvo} && r=$(pm install -r -t {alvo} 2>&1); echo \"$r\"; "
+                f"case \"$r\" in *UPDATE_INCOMPATIBLE*|*SIGNATURES*) pm uninstall {APP_PACOTE} >/dev/null 2>&1; "
+                f"pm install -t {alvo} 2>&1;; esac; rm -f {alvo}", timeout=90)
+        finally:
+            try:
+                os.remove(copia)
+            except OSError:
+                pass
+        texto = (out or "") + (err or "")
+        if "Success" in texto:
+            instalado = True
+            try:
+                os.makedirs(TMP, exist_ok=True)
+                with open(APP_MARCA, "w") as f:
+                    f.write(sha)
+            except OSError:
+                pass
+        elif "USER_RESTRICTED" in texto:
+            motivo = "instalacao_bloqueada"
+        else:
+            motivo = "instalação falhou: " + texto.strip()[-300:]
+    if not instalado:
+        return False, motivo
+    tela.rish("; ".join(f"pm grant {APP_PACOTE} {p}" for p in APP_PERMISSOES), timeout=20)
+    return True, motivo  # motivo != None: rodando uma versão antiga instalada antes
+
+
+def buscar_app(segundos, tela):
+    """Abre a janela de busca do app por `segundos` e lê o resultado que ele grava na pasta dele."""
+    token = f"{os.getpid()}x{int(time.time() * 1000) % 10 ** 9}"
+    arq = f"/storage/emulated/0/Android/data/{APP_PACOTE}/files/resultado-{token}.json"
+    voltas = int((segundos + 15) * 2)
+    cmd = (f"am start -n {APP_PACOTE}/.Busca --el ms {int(segundos * 1000)} --es token {token} >/dev/null 2>&1; "
+           f"i=0; while [ $i -lt {voltas} ] && [ ! -f {arq} ]; do sleep 0.5; i=$((i+1)); done; "
+           f"cat {arq} 2>/dev/null; rm -f {arq}")
+    out, err, _ = tela.rish(cmd, timeout=segundos + 30)
+    bruto = ultima_linha_json(out)
+    if bruto is None:
+        return {"erro": "o app auxiliar não devolveu resultado (tela bloqueada ou o HyperOS impediu a janela?)"}
+    bruto["via"] = "app"
+    return bruto
+
+
+def buscar(segundos, ligar=False, tela=None, modo="auto"):
+    """modo auto: app auxiliar se der (busca completa), senão o leitor do shell; app/shell força um deles."""
+    tela = tela or _tela()
+    ligou = False
+    try:
+        if ligar:
+            estado, _, _ = tela.rish("settings get global bluetooth_on", timeout=10)
+            if estado.strip() == "0":
+                tela.rish("cmd bluetooth_manager enable; cmd bluetooth_manager wait-for-state:STATE_ON", timeout=20)
+                ligou = True
+                time.sleep(1)
+        nota_app = None
+        if modo in ("auto", "app"):
+            pronto, motivo = preparar_app(tela)
+            if pronto:
+                bruto = buscar_app(segundos, tela)
+                if "erro" not in bruto and bruto.get("busca") not in ("recusada", "falhou"):
+                    if motivo:
+                        bruto["app_auxiliar"] = "versão antiga em uso: " + motivo
+                    return _marcar(bruto, ligou)
+                nota_app = bruto.get("erro") or f"busca do app: {bruto.get('busca')}"
+            else:
+                nota_app = motivo
+            if modo == "app":
+                return _marcar({"erro": nota_app or "app auxiliar indisponível",
+                                **({"dica": DICA_USB} if nota_app == "instalacao_bloqueada" else {})}, ligou)
+        bruto = buscar_shell(segundos, tela)
+        if nota_app:
+            bruto["app_auxiliar"] = nota_app
+        return _marcar(bruto, ligou)
+    finally:
+        if ligou:
+            tela.rish("cmd bluetooth_manager disable", timeout=15)
+
+
+def _marcar(bruto, ligou):
     if ligou:
         bruto["ligado_para_buscar"] = True
     return bruto
+
+
+def remover_app(tela=None):
+    tela = tela or _tela()
+    out, err, _ = tela.rish(f"pm uninstall {APP_PACOTE} 2>&1", timeout=60)
+    try:
+        os.remove(APP_MARCA)
+    except OSError:
+        pass
+    return {"removido": "Success" in (out or ""), "saida": (out or err or "").strip()[-200:]}
 
 
 def pareados_rapido(tela=None):
@@ -339,7 +464,8 @@ def main():
     try:
         if acao == "buscar":
             segundos = max(3, min(int(a.get("segundos", 10)), 30))
-            bruto = buscar(segundos, bool(a.get("ligar")))
+            modo = a.get("modo", "auto") if a.get("modo") in ("auto", "app", "shell") else "auto"
+            bruto = buscar(segundos, bool(a.get("ligar")), modo=modo)
             if "erro" not in bruto and not bruto.get("pareados"):
                 try:  # o leitor não teve permissão para os pareados: tenta pelo dumpsys
                     bruto["pareados"] = pareados_rapido()
@@ -348,6 +474,12 @@ def main():
             out = resumir(bruto, max(5, min(int(a.get("limite", 40)), 200)))
             if "erro" not in out:
                 guardar(out)
+        elif acao == "instalar_app":
+            pronto, motivo = preparar_app(_tela())
+            out = {"pronto": pronto, **({"motivo": motivo} if motivo else {}),
+                   **({"dica": DICA_USB} if motivo == "instalacao_bloqueada" else {})}
+        elif acao == "remover_app":
+            out = remover_app()
         elif acao == "pareados":
             out = {"pareados": [{**p, "tipo": classificar(p)[0]} for p in pareados_rapido()]}
         elif acao == "ultima":
@@ -357,7 +489,7 @@ def main():
             except (OSError, ValueError):
                 out = {"erro": "nenhuma busca guardada ainda"}
         else:
-            out = {"erro": "acao deve ser buscar, pareados ou ultima"}
+            out = {"erro": "acao deve ser buscar, pareados, ultima, instalar_app ou remover_app"}
     except Exception as e:  # noqa: BLE001 — SemShizuku e afins viram resposta clara
         out = {"erro": str(e)[:400]}
     print(json.dumps(out, ensure_ascii=False))

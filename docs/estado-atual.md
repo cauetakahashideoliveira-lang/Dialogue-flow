@@ -11,7 +11,7 @@ Ao reabrir pelo terminal, o estudo recuperou os dois valores. O ensaio usou uma 
 preferências. A configuração pessoal conferida ao final foi nível 20 e tempo automático.
 
 ## 21/11 — atualização e correções (branch `ccr-201914aa-m2jj33`)
-- **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → 1.0.67 (`f55b4ef`) → 1.0.68 (`42ff118`) → 1.0.69 (`a17970f`) → 1.0.70 (`9af8695`) → 1.0.71 (`d8ed2bc`) → 1.0.72 (`a2bf6f4`) → 1.0.72.1 (Stockfish, `9e59cdb`) → **1.0.74** (junção do Bluetooth com o Stockfish) pelo `atualizar_sistema`. O canal
+- **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → 1.0.67 (`f55b4ef`) → 1.0.68 (`42ff118`) → 1.0.69 (`a17970f`) → 1.0.70 (`9af8695`) → 1.0.71 (`d8ed2bc`) → 1.0.72 (`a2bf6f4`) → 1.0.72.1 (Stockfish, `9e59cdb`) → 1.0.74 (`2da4d0d`, junção com o Stockfish) → **1.0.75** pelo `atualizar_sistema`. O canal
   direto voltou sozinho a cada reinício; aparelhos, catálogo e política ficaram preservados. Conferido com `consultar`
   e com uma missão de leitura (Sonnet, grafo de 1.858 nós). Pareado, armado até a meia-noite, modo autônomo.
 - **Android 16:** o Termux não lê `/proc/uptime` nem `/proc/loadavg` (`Permission denied`); o `CLOCK_BOOTTIME`
@@ -59,8 +59,15 @@ preferências. A configuração pessoal conferida ao final foi nível 20 e tempo
   em primeiro plano ou serviço em primeiro plano declarado — o Shell não tem nenhum dos dois. Pacote vazio passa
   na regra e quebra adiante (NullPointerException no serviço); `MIUIOP(10053)` não muda nada (testado e
   revertido). A capacidade devolve `busca: bloqueada_hyperos` e, do registro do sistema, os sinais que as buscas
-  do próprio sistema captam (fim do endereço e força, sem nome). Busca completa no HyperOS: precisaria de um app
-  auxiliar próprio (uid comum) instalado pelo shell — decisão do dono.
+  do próprio sistema captam (fim do endereço e força, sem nome).
+- **App auxiliar `Controle IR Bluetooth` (1.0.75):** `br.controleir.bluetooth`, montado aqui com o build-tools 35
+  (`ferramentas/construir_app_bluetooth.sh`; chave fora do repositório; `fontes.sha256` + teste acusam APK velho).
+  Uma janela de diálogo (`Busca`, só abre com a permissão DUMP, ou seja, pelo shell) escuta a busca BLE como app
+  comum — que o HyperOS aceita — e grava o JSON em `Android/data/br.controleir.bluetooth/files`. `modo=auto`
+  instala/atualiza pelo shell, dá BLUETOOTH_SCAN/CONNECT (`neverForLocation`: sem localização) e cai no shell se
+  não der. O analisador do próprio Android leu o APK (`getPackageArchiveInfo`: ok). **Instalar pelo shell exige
+  “Instalar via USB”** (`INSTALL_FAILED_USER_RESTRICTED`); pelo instalador do Android, o arquivo vindo do Termux,
+  da pasta Downloads ou do app Arquivos dava “problema ao analisar o pacote” (entrega do arquivo, não o APK).
 - **Achados sem correção pelo conector:** Termux:Boot não instalado (o início automático fica desligado: instale-o do
   F-Droid, abra uma vez e rode `controle-ir inicio-automatico sim` no Termux); no celular só há os modelos Qwen2.5
   1.5B (o 3B do guia de passagem não está lá); `controle-ir painel …` é recusado pelo conector por ser administrativo

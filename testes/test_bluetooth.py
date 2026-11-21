@@ -195,7 +195,7 @@ class TestBuscarNoCelular(unittest.TestCase):
         self.tela = Tela
 
     def test_busca_roda_o_leitor_pelo_shell(self):
-        r = self.m.buscar(8, tela=self.tela)
+        r = self.m.buscar(8, tela=self.tela, modo="shell")
         self.assertEqual(r["busca"], "ok")
         self.assertEqual(len(self.comandos), 1)
         self.assertIn("app_process /system/bin controleir.Bluetooth 8000 ble", self.comandos[0])
@@ -205,12 +205,12 @@ class TestBuscarNoCelular(unittest.TestCase):
         saida = json.dumps({"bluetooth_ligado": True, "busca": "ok", "pareados": [], "proximos": []})
         reg = TestClassificacao.REGISTRO
         self.tela.rish = staticmethod(lambda cmd, timeout=20: (saida + "\n" + self.m.MARCA + "\n" + reg, "", 0))
-        r = self.m.buscar(5, tela=self.tela)
+        r = self.m.buscar(5, tela=self.tela, modo="shell")
         self.assertEqual(r["busca"], "bloqueada_hyperos")
         self.assertEqual(len(r["sinais_registro"]), 2)
 
     def test_ligar_liga_so_durante_a_busca(self):
-        r = self.m.buscar(5, ligar=True, tela=self.tela)
+        r = self.m.buscar(5, ligar=True, tela=self.tela, modo="shell")
         self.assertTrue(r["ligado_para_buscar"])
         self.assertIn("cmd bluetooth_manager enable", self.comandos[1])
         self.assertIn("app_process", self.comandos[2])
@@ -218,7 +218,7 @@ class TestBuscarNoCelular(unittest.TestCase):
 
     def test_sem_resposta_do_leitor(self):
         self.tela.rish = staticmethod(lambda cmd, timeout=20: ("", "Exception in thread main", 1))
-        r = self.m.buscar(5, tela=self.tela)
+        r = self.m.buscar(5, tela=self.tela, modo="shell")
         self.assertEqual(r["erro"], "o leitor Bluetooth não respondeu")
         self.assertIn("Exception", r["detalhe"])
 
@@ -255,6 +255,99 @@ class TestCompilar(unittest.TestCase):
                 self.assertEqual(Path(jar).read_bytes(), b"dex")
                 self.assertEqual(os.listdir(m.TMP), [os.path.basename(jar)])
                 self.assertEqual(m.compilar(), (jar, None))  # 2ª vez: reaproveita
+
+
+class TestAppAuxiliar(unittest.TestCase):
+    """Busca completa pelo app auxiliar: instala/atualiza pelo shell, dá as permissões, lê o resultado; se o HyperOS
+    bloquear a instalação, cai no leitor do shell e explica como liberar."""
+
+    def setUp(self):
+        self.m = _carregar()
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.m.TMP = os.path.join(self.tmp, "bt")
+        self.m.APP_MARCA = os.path.join(self.m.TMP, "app_instalado.sha")
+        self.m.APP_APK = os.path.join(self.tmp, "app.apk")
+        Path(self.m.APP_APK).write_bytes(b"apk")
+        self.m.compilar = lambda: (os.path.join(self.tmp, "x.jar"), None)
+        Path(self.tmp, "x.jar").write_bytes(b"jar")
+        os.makedirs(os.path.join(self.tmp, "troca"))
+        self.comandos = []
+        self.instalado = False
+        self.instalar = "Success"
+        teste = self
+
+        class Tela:
+            TMP_SHELL = "/data/local/tmp"
+
+            @staticmethod
+            def _pasta_troca():
+                return os.path.join(teste.tmp, "troca")
+
+            @staticmethod
+            def rish(cmd, timeout=20):
+                teste.comandos.append(cmd)
+                if cmd.startswith("pm path"):
+                    return ("package:/data/app/base.apk\n" if teste.instalado else ""), "", 0
+                if "pm install" in cmd:
+                    if teste.instalar == "Success":
+                        teste.instalado = True
+                    return teste.instalar + "\n", "", 0
+                if cmd.startswith("am start"):
+                    return json.dumps({"via_teste": 1, "identidade_busca": "app", "busca": "ok", "pareados": [],
+                                       "proximos": [{"endereco": "X", "nome": "Galaxy Buds", "rssi": -50}]}), "", 0
+                if "app_process" in cmd:
+                    return json.dumps({"busca": "ok", "pareados": [], "proximos": []}) + "\n", "", 0
+                return "", "", 0
+
+        self.tela = Tela
+
+    def test_instala_da_permissoes_e_busca_pelo_app(self):
+        r = self.m.buscar(6, tela=self.tela)
+        self.assertEqual((r["via"], r["busca"]), ("app", "ok"))
+        self.assertEqual(r["proximos"][0]["nome"], "Galaxy Buds")
+        self.assertTrue(any("pm install -r -t" in c for c in self.comandos))
+        self.assertTrue(any("pm grant br.controleir.bluetooth android.permission.BLUETOOTH_SCAN" in c
+                            for c in self.comandos))
+        am = next(c for c in self.comandos if c.startswith("am start"))
+        self.assertIn("-n br.controleir.bluetooth/.Busca --el ms 6000", am)
+        # 2ª busca: mesma versão já instalada, não reinstala
+        self.comandos.clear()
+        self.m.buscar(6, tela=self.tela)
+        self.assertFalse(any("pm install" in c for c in self.comandos))
+
+    def test_instalacao_bloqueada_cai_no_shell_e_explica(self):
+        self.instalar = "Failure [INSTALL_FAILED_USER_RESTRICTED: Install canceled by user]"
+        r = self.m.buscar(5, tela=self.tela)
+        self.assertEqual(r["via"], "shell")
+        self.assertEqual(r["app_auxiliar"], "instalacao_bloqueada")
+        resumo = self.m.resumir({**r, "busca": "bloqueada_hyperos"})
+        self.assertIn("Instalar via USB", resumo["dica"])
+        self.assertIn("erro", self.m.buscar(5, tela=self.tela, modo="app"))
+
+    def test_versao_antiga_instalada_a_mao_ainda_serve(self):
+        self.instalado = True  # instalado antes, sem a marca desta versão, e o HyperOS não deixa atualizar
+        self.instalar = "Failure [INSTALL_FAILED_USER_RESTRICTED: Install canceled by user]"
+        r = self.m.buscar(5, tela=self.tela)
+        self.assertEqual(r["via"], "app")
+        self.assertIn("versão antiga", r["app_auxiliar"])
+
+
+class TestApkAtualizado(unittest.TestCase):
+    def test_apk_montado_dos_fontes_atuais(self):
+        import zipfile
+        sys.path.insert(0, str(RAIZ / "ferramentas"))
+        try:
+            import construir_app_bluetooth as c
+        finally:
+            sys.path.pop(0)
+        apk = CAP / "app" / "controle-ir-bluetooth.apk"
+        self.assertEqual((CAP / "app" / "fontes.sha256").read_text().strip(), c.impressao(),
+                         "Java/manifesto mudou: rode ferramentas/construir_app_bluetooth.sh")
+        with zipfile.ZipFile(apk) as z:
+            nomes = {i.filename: i for i in z.infolist()}
+        self.assertIn("classes.dex", nomes)
+        self.assertEqual(nomes["resources.arsc"].compress_type, zipfile.ZIP_STORED)  # Android 11+ exige
 
 
 class TestManifesto(unittest.TestCase):

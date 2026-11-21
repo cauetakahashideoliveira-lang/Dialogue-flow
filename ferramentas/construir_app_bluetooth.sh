@@ -28,5 +28,7 @@ fi
 "$BT/apksigner" sign --ks "$CHAVE" --ks-pass pass:controleir --ks-key-alias controleir \
   --out "$CAP/app/controle-ir-bluetooth.apk" "$T/alinhado.apk"
 rm -f "$CAP/app/controle-ir-bluetooth.apk.idsig"
+# impressão digital dos fontes: o teste acusa APK velho se alguém mexer no Java sem remontar
+python3 "$RAIZ/ferramentas/construir_app_bluetooth.py" > "$CAP/app/fontes.sha256"
 "$BT/apksigner" verify "$CAP/app/controle-ir-bluetooth.apk"
 sha256sum "$CAP/app/controle-ir-bluetooth.apk" | cut -c1-16

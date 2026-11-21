@@ -148,6 +148,17 @@ def resumir(bruto, limite=40):
     for k in ("codigo_falha", "detalhe", "avisos", "ligado_para_buscar"):
         if bruto.get(k):
             out[k] = bruto[k]
+    sinais = bruto.get("sinais_registro") or []
+    if sinais:
+        pareados_fim = {str(p.get("endereco", ""))[-5:].upper(): p.get("nome") for p in pareados.values()}
+        out["sinais_registro"] = [{**s, "distancia": distancia(s["rssi_max"]),
+                                   **({"pareado": pareados_fim[s["fim_endereco"]]} if s["fim_endereco"] in pareados_fim else {})}
+                                  for s in sinais[:limite]]
+        out["total_sinais_registro"] = len(sinais)
+    if bruto.get("busca") == "bloqueada_hyperos":
+        out["dica"] = ("o HyperOS recusa a busca Bluetooth do shell (regra da Xiaomi: pacote do sistema só busca com "
+                       "tela própria em primeiro plano). Os pareados vêm completos; 'sinais_registro' traz os aparelhos "
+                       "que as buscas do próprio sistema captaram, só com força do sinal e fim do endereço (sem nome)")
     if bruto.get("busca") == "bluetooth_desligado":
         out["dica"] = ("o Bluetooth está desligado e o modo só BLE não subiu: ligue o Bluetooth ou chame de novo com "
                        "ligar=true (ele liga só durante a busca e desliga no fim)")
@@ -176,6 +187,26 @@ def ler_pareados_dumpsys(texto):
             out.append({"endereco": m.group(1).upper(), "nome": nome,
                         "tipo_radio": {"DUAL": "duplo", "LE": "ble", "CLASSIC": "classico"}.get((m.group(2) or "").upper())})
     return out
+
+
+MARCA = "@@REGISTRO-DO-SISTEMA@@"
+_RESULTADO = re.compile(r"onScanResult\(\) - eventType=0x([0-9a-fA-F]+), addressType=(\d+), "
+                        r"address=[X:]*([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}),.*?rssi=(-?\d+)")
+
+
+def ler_registro(texto):
+    """Linhas do BtGatt.ScanController → (o HyperOS recusou o shell?, sinais por fim de endereço).
+    O endereço vem mascarado (XX:XX:XX:XX:C4:A8); evento bit 0 = conectável."""
+    negado = "MIUI PERMISSION DENIED: com.android.shell" in (texto or "")
+    sinais = {}
+    for m in _RESULTADO.finditer(texto or ""):
+        evento, tipo_end, fim, rssi = int(m.group(1), 16), m.group(2), m.group(3).upper(), int(m.group(4))
+        s = sinais.setdefault(fim, {"fim_endereco": fim, "aleatorio": tipo_end != "0", "vezes": 0, "rssi_max": -999,
+                                    "conectavel": False})
+        s["vezes"] += 1
+        s["rssi_max"] = max(s["rssi_max"], rssi)
+        s["conectavel"] = s["conectavel"] or bool(evento & 1)
+    return negado, sorted(sinais.values(), key=lambda s: -s["rssi_max"])
 
 
 # --------------------------------------------------------------------------- celular
@@ -258,8 +289,12 @@ def buscar(segundos, ligar=False, tela=None):
                 tela.rish("cmd bluetooth_manager enable; cmd bluetooth_manager wait-for-state:STATE_ON", timeout=20)
                 ligou = True
                 time.sleep(1)
-        cmd = (f"cp {shlex.quote(copia)} {destino} && CLASSPATH={destino} app_process /system/bin "
-               f"controleir.Bluetooth {int(segundos * 1000)} ble")
+        # o registro do sistema diz se o HyperOS recusou a busca e traz os sinais que as buscas do próprio sistema
+        # captam (só a força e o fim do endereço): é o que dá para ver quando a busca do shell é recusada
+        cmd = (f"T=$(date '+%m-%d %H:%M:%S.000'); cp {shlex.quote(copia)} {destino} && CLASSPATH={destino} "
+               f"app_process /system/bin controleir.Bluetooth {int(segundos * 1000)} ble; echo {MARCA}; "
+               f"logcat -d -T \"$T\" -s BtGatt.ScanController:V 2>/dev/null | "
+               f"grep -E 'MIUI PERMISSION DENIED|onScanResult' | tail -800")
         out, err, cod = tela.rish(cmd, timeout=segundos + 25)
     finally:
         if ligou:
@@ -268,7 +303,14 @@ def buscar(segundos, ligar=False, tela=None):
             os.remove(copia)
         except OSError:
             pass
+    out, _, registro = (out or "").partition(MARCA)
     bruto = ultima_linha_json(out)
+    if bruto is not None and registro:
+        negado, sinais = ler_registro(registro)
+        if negado and not bruto.get("proximos"):
+            bruto["busca"] = "bloqueada_hyperos"
+        if sinais and not bruto.get("proximos"):
+            bruto["sinais_registro"] = sinais
     if bruto is None:
         return {"erro": "o leitor Bluetooth não respondeu", "codigo": cod, "detalhe": (err or out or "")[-800:]}
     if ligou:

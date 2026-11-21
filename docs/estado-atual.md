@@ -3,7 +3,7 @@
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
 ## 21/11 — atualização e correções (branch `ccr-201914aa-m2jj33`)
-- **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → 1.0.67 (`f55b4ef`) → 1.0.68 (`42ff118`) → 1.0.69 (`a17970f`) → 1.0.70 (`9af8695`) → 1.0.71 (`d8ed2bc`) → **1.0.72** pelo `atualizar_sistema`. O canal
+- **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → 1.0.67 (`f55b4ef`) → 1.0.68 (`42ff118`) → 1.0.69 (`a17970f`) → 1.0.70 (`9af8695`) → 1.0.71 (`d8ed2bc`) → 1.0.72 (`a2bf6f4`) → **1.0.73** pelo `atualizar_sistema`. O canal
   direto voltou sozinho a cada reinício; aparelhos, catálogo e política ficaram preservados. Conferido com `consultar`
   e com uma missão de leitura (Sonnet, grafo de 1.858 nós). Pareado, armado até a meia-noite, modo autônomo.
 - **Android 16:** o Termux não lê `/proc/uptime` nem `/proc/loadavg` (`Permission denied`); o `CLOCK_BOOTTIME`
@@ -44,7 +44,15 @@ A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padr
   e desfaz no fim (`ligar=true` liga de verdade só durante a busca, por `cmd bluetooth_manager`). O Python
   classifica pelo nome, fabricante (ID da Bluetooth SIG, anúncio Continuity da Apple) e serviços, e estima a
   distância pelo sinal. Testada aqui contra imitações do Android (`testes/android_stub/`, `testes/test_bluetooth.py`);
-  **falta validar no POCO** (se o shell tem permissão de busca no Android 16 e se o modo só BLE sobe).
+  **No POCO (1.0.73):** o `app_process` precisa registrar o serviço do Bluetooth (`ActivityThread.initializeMainlineModules`,
+  senão o adaptador vem nulo); estado e pareados funcionam (Honda HFT e AirPods Pro). A **busca é recusada pelo
+  HyperOS**: `BtGatt.ScanController: MIUI PERMISSION DENIED: com.android.shell`. Lido no `Bluetooth.apk` (dexdump):
+  `ScanController.checkAllowedToScan` libera apps comuns (uid ≥ 10000), mas pacotes do sistema só com tela própria
+  em primeiro plano ou serviço em primeiro plano declarado — o Shell não tem nenhum dos dois. Pacote vazio passa
+  na regra e quebra adiante (NullPointerException no serviço); `MIUIOP(10053)` não muda nada (testado e
+  revertido). A capacidade devolve `busca: bloqueada_hyperos` e, do registro do sistema, os sinais que as buscas
+  do próprio sistema captam (fim do endereço e força, sem nome). Busca completa no HyperOS: precisaria de um app
+  auxiliar próprio (uid comum) instalado pelo shell — decisão do dono.
 - **Achados sem correção pelo conector:** Termux:Boot não instalado (o início automático fica desligado: instale-o do
   F-Droid, abra uma vez e rode `controle-ir inicio-automatico sim` no Termux); no celular só há os modelos Qwen2.5
   1.5B (o 3B do guia de passagem não está lá); `controle-ir painel …` é recusado pelo conector por ser administrativo

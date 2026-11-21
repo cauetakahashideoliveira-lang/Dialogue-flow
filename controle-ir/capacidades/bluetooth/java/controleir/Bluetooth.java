@@ -60,22 +60,11 @@ public class Bluetooth {
         }
         saida.put("modo_so_ble", ligueiBle || (!ligado && leAntes));
         saida.put("pareados", pareados(adaptador));
-        // A busca vai SEM nome de pacote: o HyperOS (ScanController.checkAllowedToScan) recusa calado os pacotes do
-        // sistema fora do primeiro plano, como o com.android.shell, mas libera quando o pacote vem vazio (lido no
-        // Bluetooth.apk do POCO, 21/11). Se o Android recusar assim, volta para o pacote do shell.
-        BluetoothAdapter semPacote = adaptador(null);
-        BluetoothLeScanner sc = null;
-        boolean pronto = ligado || leLigado(adaptador);
-        if (pronto && semPacote != null) {
-            sc = scanner(semPacote);
-            saida.put("identidade_busca", "sem_pacote");
-        }
-        if (pronto && sc == null) {
-            sc = scanner(adaptador);
-            saida.put("identidade_busca", "shell");
-        }
-        final BluetoothLeScanner scanner = sc;
-        final BluetoothLeScanner[] emUso = new BluetoothLeScanner[] {sc};
+        // No HyperOS (POCO, 21/11) a busca do com.android.shell é recusada calada: ScanController.checkAllowedToScan
+        // só deixa pacotes do sistema (uid < 10000) buscarem com uma tela própria em primeiro plano, e o Shell não tem
+        // nenhuma. Sem nome de pacote a regra passa, mas o serviço quebra adiante (NullPointerException). O Python
+        // reconhece a recusa pelo registro do sistema. O Android puro não tem essa regra.
+        final BluetoothLeScanner scanner = (ligado || leLigado(adaptador)) ? scanner(adaptador) : null;
         if (scanner == null) {
             saida.put("busca", ligado ? "sem_scanner" : "bluetooth_desligado");
             if (ligueiBle) invocar(adaptador, "disableBLE");
@@ -106,17 +95,7 @@ public class Bluetooth {
             } catch (Throwable t) {
                 // Android antigo
             }
-            try {
-                scanner.startScan(new ArrayList<ScanFilter>(), b.build(), ouvinte);
-            } catch (SecurityException se) {
-                if (!"sem_pacote".equals(saida.get("identidade_busca"))) throw se;
-                aviso("busca sem pacote recusada: " + causa(se));
-                BluetoothLeScanner outro = scanner(adaptador);
-                if (outro == null) throw se;
-                outro.startScan(new ArrayList<ScanFilter>(), b.build(), ouvinte);
-                saida.put("identidade_busca", "shell");
-                emUso[0] = outro;
-            }
+            scanner.startScan(new ArrayList<ScanFilter>(), b.build(), ouvinte);
         } catch (Throwable t) {
             saida.put("busca", "recusada");
             saida.put("detalhe", String.valueOf(t));
@@ -131,7 +110,7 @@ public class Bluetooth {
             @Override
             public void run() {
                 try {
-                    emUso[0].stopScan(ouvinte);
+                    scanner.stopScan(ouvinte);
                 } catch (Throwable t) {
                     aviso("parar: " + t);
                 }

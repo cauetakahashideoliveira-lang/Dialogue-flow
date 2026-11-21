@@ -52,8 +52,7 @@ class TestLeitorJava(unittest.TestCase):
         out, err = self.rodar("ligado")
         self.assertIn("criado como com.android.shell uid 2000", err)  # identidade do shell (permissões)
         self.assertIn("stopScan", err)
-        self.assertIn("busca como null", err)  # sem pacote: o HyperOS recusa calado o com.android.shell
-        self.assertEqual(out["identidade_busca"], "sem_pacote")
+        self.assertIn("busca como com.android.shell", err)
         self.assertEqual(out["busca"], "ok")
         self.assertTrue(out["bluetooth_ligado"])
         prox = {d["endereco"]: d for d in out["proximos"]}
@@ -77,13 +76,6 @@ class TestLeitorJava(unittest.TestCase):
         self.assertEqual(out["busca"], "bluetooth_desligado")
         self.assertNotIn("proximos", out)
         self.assertEqual(len(out["pareados"]), 2)
-
-    def test_sem_pacote_recusado_volta_ao_shell(self):
-        out, err = self.rodar("recusa_sem_pacote")
-        self.assertIn("busca como com.android.shell", err)
-        self.assertEqual((out["busca"], out["identidade_busca"]), ("ok", "shell"))
-        self.assertEqual(len(out["proximos"]), 3)
-        self.assertTrue(any("busca sem pacote recusada" in a for a in out["avisos"]))
 
     def test_falha_da_busca_vem_com_codigo(self):
         out, _ = self.rodar("falha")
@@ -133,6 +125,35 @@ class TestClassificacao(unittest.TestCase):
         self.assertEqual({p["nome"]: p["por_perto"] for p in r["pareados"]}, {"JBL Go 3": True, "Redmi Watch": False})
         self.assertEqual(self.m.resumir({"busca": "bluetooth_desligado"})["dica"][:24], "o Bluetooth está desliga")
 
+    REGISTRO = (
+        "11-21 13:06:53.885  7947 10851 E BtGatt.ScanController: MIUI PERMISSION DENIED: com.android.shell\n"
+        "11-21 13:06:54.949  7947  9999 V BtGatt.ScanController: onScanResult() - eventType=0x10, addressType=1, "
+        "address=XX:XX:XX:XX:C4:A8, primaryPhy=1, secondaryPhy=0, advertisingSid=0xff, txPower=127, rssi=-55, "
+        "periodicAdvInt=0x0, originalAddress=00:00:00:00:00:00\n"
+        "11-21 13:06:56.938  7947  9999 V BtGatt.ScanController: onScanResult() - eventType=0x1b, addressType=0, "
+        "address=XX:XX:XX:XX:cc:0c, primaryPhy=1, secondaryPhy=0, advertisingSid=0xff, txPower=127, rssi=-88, "
+        "periodicAdvInt=0x0, originalAddress=00:00:00:00:00:00\n"
+        "11-21 13:06:57.000  7947  9999 V BtGatt.ScanController: onScanResult() - eventType=0x10, addressType=1, "
+        "address=XX:XX:XX:XX:C4:A8, primaryPhy=1, secondaryPhy=0, advertisingSid=0xff, txPower=127, rssi=-61, "
+        "periodicAdvInt=0x0\n")
+
+    def test_registro_do_sistema(self):
+        negado, sinais = self.m.ler_registro(self.REGISTRO)
+        self.assertTrue(negado)
+        self.assertEqual([(s["fim_endereco"], s["vezes"], s["rssi_max"], s["conectavel"], s["aleatorio"]) for s in sinais],
+                         [("C4:A8", 2, -55, False, True), ("CC:0C", 1, -88, True, False)])
+        self.assertEqual(self.m.ler_registro("nada"), (False, []))
+
+    def test_resumo_com_bloqueio_do_hyperos(self):
+        _, sinais = self.m.ler_registro(self.REGISTRO)
+        r = self.m.resumir({"busca": "bloqueada_hyperos", "bluetooth_ligado": True, "proximos": [],
+                            "pareados": [{"endereco": "40:B3:FA:33:CC:0C", "nome": "AirPods Pro"}],
+                            "sinais_registro": sinais})
+        self.assertIn("HyperOS", r["dica"])
+        self.assertEqual(r["total_sinais_registro"], 2)
+        self.assertEqual(r["sinais_registro"][1]["pareado"], "AirPods Pro")
+        self.assertEqual(r["sinais_registro"][0]["distancia"], "muito perto (até ~1 m)")
+
     def test_pareados_pelo_dumpsys(self):
         texto = ("Bluetooth Status\n  enabled: true\nBonded devices:\n"
                  "  4C:87:5D:11:22:33 [ DUAL ] JBL Flip 5\n  E0:9D:13:AA:BB:CC [  LE  ] Redmi Watch 3 (Ativo)\n"
@@ -179,6 +200,14 @@ class TestBuscarNoCelular(unittest.TestCase):
         self.assertEqual(len(self.comandos), 1)
         self.assertIn("app_process /system/bin controleir.Bluetooth 8000 ble", self.comandos[0])
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "controle-bt-x.jar")))  # cópia de troca apagada
+
+    def test_bloqueio_reconhecido_pelo_registro(self):
+        saida = json.dumps({"bluetooth_ligado": True, "busca": "ok", "pareados": [], "proximos": []})
+        reg = TestClassificacao.REGISTRO
+        self.tela.rish = staticmethod(lambda cmd, timeout=20: (saida + "\n" + self.m.MARCA + "\n" + reg, "", 0))
+        r = self.m.buscar(5, tela=self.tela)
+        self.assertEqual(r["busca"], "bloqueada_hyperos")
+        self.assertEqual(len(r["sinais_registro"]), 2)
 
     def test_ligar_liga_so_durante_a_busca(self):
         r = self.m.buscar(5, ligar=True, tela=self.tela)

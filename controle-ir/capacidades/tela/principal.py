@@ -2422,18 +2422,20 @@ def objetivo(a):
         def recolher():
             rish("cmd statusbar collapse", timeout=10)
 
-    def decidir(objetivo_, resumo, opcoes):
+    def decidir(objetivo_, contexto, opcoes, nivel="padrao"):
         m = _modulo_piloto()
-        pergunta = (f"Objetivo no celular: {objetivo_}\nO que a tela mostra: {resumo or '(só botões)'}\n"
+        pergunta = (f"Objetivo no celular: {objetivo_}\n{contexto or '(tela só com botões)'}\n"
                     "Qual opção leva ao objetivo? (rolar ou voltar se nenhuma servir)")
         from controle_ir import ambiente_missao
         if ambiente_missao.ATUAL.get() is not None:
             return ambiente_missao.escolher(m, pergunta, opcoes)
-        if "cerebro" not in _OBJETIVO:
-            _OBJETIVO["cerebro"] = m.Cerebros({"cerebros": ["api"], "modelos": [m.MODELO], "pensar": False,
-                                               "politica": POLITICA_NAVEGAR})
-        idx, _, _, _ = _OBJETIVO["cerebro"].decidir(pergunta, [{"texto": o} for o in opcoes], 8)
-        return idx
+        modelos, pensar, prazo = mod.NIVEIS.get(nivel, mod.NIVEIS["padrao"])
+        chave = f"cerebro:{nivel}"
+        if chave not in _OBJETIVO:  # conexões ficam abertas entre as chamadas (sem novo TLS a cada decisão)
+            _OBJETIVO[chave] = m.Cerebros({"cerebros": ["api"], "modelos": modelos, "pensar": pensar,
+                                           "politica": POLITICA_NAVEGAR, "esforco": "high" if pensar else "low"})
+        idx, fonte, seg, erros = _OBJETIVO[chave].decidir(pergunta, [{"texto": o} for o in opcoes], prazo)
+        return idx, fonte or ("; ".join(erros)[:80] if erros else None), seg
 
     ex = mod.Executor(Ferramentas, decidir, os.path.join(TMP, "objetivos.json"))
     return ex.executar(a)

@@ -30,6 +30,13 @@ DISPENSAR = ("agora nao", "mais tarde", "pular", "fechar", "dispensar", "nao, ob
              "ignorar", "x")  # janelas que só atrapalham (nunca "OK", "Permitir", "Aceitar")
 ROLAR, VOLTAR = "↓ rolar para baixo", "← voltar"
 MAX_PASSOS, MAX_PRAZO = 25, 120
+# Escada de cérebros (chamados direto do celular, sem passar pela nuvem do Claude): modelos disparados juntos, vale
+# o mais forte que responder no prazo. Sobe um degrau sozinho quando a tela já falhou ou se repetiu.
+NIVEIS = {"rapido": (["claude-haiku-5-5"], False, 6),
+          "padrao": (["claude-haiku-5-5", "claude-sonnet-5-5"], False, 10),
+          "forte": (["claude-sonnet-5-5", "claude-opus-5-5"], False, 20),
+          "maximo": (["claude-opus-5-5"], True, 40)}
+ORDEM_NIVEIS = list(NIVEIS)
 
 
 def norm(t):
@@ -145,6 +152,7 @@ class Executor:
         permitir = list(a.get("permitir") or [])
         digitar = a.get("digitar") if isinstance(a.get("digitar"), str) else None
         max_passos = max(1, min(int(a.get("max_passos", 12)), MAX_PASSOS))
+        nivel_base = ORDEM_NIVEIS.index(a.get("cerebro")) if a.get("cerebro") in NIVEIS else 1
         prazo = self.relogio() + max(5, min(float(a.get("prazo", 60)), MAX_PRAZO))
         usar_modelo = a.get("modelo", True) is not False and self.decidir is not None
         inicio = self.relogio()
@@ -297,14 +305,23 @@ class Executor:
                 extras = [x for x in (ROLAR, VOLTAR) if not falhou(sig, x)]
                 if opcoes or extras:
                     consultas += 1
-                    resumo = "; ".join(rotulo(e) for e in alvos if not e.get("clicavel"))[:600]
-                    idx = self.decidir(objetivo, resumo, opcoes + extras)
+                    dificil = any(k[0] == sig for k in falhas) or vistos[sig] >= 2 or recuperacoes > 1
+                    nivel = ORDEM_NIVEIS[min(len(ORDEM_NIVEIS) - 1, nivel_base + (1 if dificil else 0))]
+                    contexto = ("Tela atual (" + str(app_atual) + "): " + " | ".join(textos_da_tela(alvos, None, 80))
+                                )[:1800]
+                    if passos:
+                        contexto += "\nJá feito: " + "; ".join(
+                            f"{p['acao']} {p.get('alvo', '')} ({p['via']})" for p in passos[-6:])
+                    t_dec = self.relogio()
+                    res = self.decidir(objetivo, contexto, opcoes + extras, nivel)
+                    idx, fonte = (res[0], res[1]) if isinstance(res, tuple) else (res, None)
+                    via_modelo = f"modelo:{fonte or '?'} ({nivel}, {round((self.relogio() - t_dec) * 1000)} ms)"
                     if idx is not None and 0 <= idx < len(opcoes):
-                        escolha, via = melhor(alvos, opcoes[idx]), "modelo"
+                        escolha, via = melhor(alvos, opcoes[idx]), via_modelo
                         if escolha is not None and not seguro(escolha, els, permitir):
                             escolha = None
                     elif idx is not None and 0 <= idx - len(opcoes) < len(extras):
-                        via = "modelo"
+                        via = via_modelo
                         escolha = extras[idx - len(opcoes)]
             # 5. sem decisão: o alvo pode estar mais abaixo
             if not escolha and not falhou(sig, ROLAR) and any(e.get("rolavel") for e in els):

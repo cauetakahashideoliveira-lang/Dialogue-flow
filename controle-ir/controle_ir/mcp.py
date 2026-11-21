@@ -55,7 +55,8 @@ Responda ao usuário em português.
   bateria (confiável com o celular parado, fora da tomada e tela apagada); acao "monitorar" guarda o histórico.
 - Agente de tela (precisa do Shizuku em execução). Para tarefas de várias telas, prefira UMA chamada
   acao:"objetivo" (objetivo, concluido:{texto}, app, pistas:[rótulos do caminho]): o celular navega, se recupera
-  e devolve os textos da tela final. Passo a passo (ver → tocar → ver…) custa ~4 s de nuvem por ação; use só
+  e devolve os textos da tela final (cerebro: rapido|padrao|forte|maximo escolhe Haiku…Opus no próprio
+  celular; sobe sozinho em tela difícil). Passo a passo (ver → tocar → ver…) custa ~4 s de nuvem por ação; use só
   quando o objetivo travar ("precisa do Claude") ou para ações que exigem autorização. Nunca opere apps de
   banco, pagamento ou senha (a ferramenta recusa).
 - Laboratório do sono: executar_capacidade(nome="sono", argumentos={acao:"iniciar", horas:8}) mede roncos,

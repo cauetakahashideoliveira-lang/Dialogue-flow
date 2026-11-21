@@ -134,10 +134,12 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.mem = os.path.join(self.tmp, "objetivos.json")
         self.perguntas = []
+        self.niveis = []
 
     def executor(self, cel, escolher=None):
-        def decidir(objetivo, resumo, opcoes):
+        def decidir(objetivo, resumo, opcoes, nivel="padrao"):
             self.perguntas.append(opcoes)
+            self.niveis.append(nivel)
             return escolher(opcoes) if escolher else None
         return self.m.Executor(cel, decidir, self.mem)
 
@@ -160,7 +162,8 @@ class TestExecutorObjetivo(unittest.TestCase):
         r = self.executor(Celular(TELAS, "inicio"), escolher).executar(pedido)
         self.assertEqual(r["estado"], "concluido")
         self.assertEqual(r["consultas_modelo"], 2)
-        self.assertEqual([p["via"] for p in r["passos"]], ["modelo", "modelo"])
+        self.assertTrue(all(p["via"].startswith("modelo:") for p in r["passos"]))
+        self.assertEqual(self.niveis, ["padrao", "padrao"])  # Haiku + Sonnet correndo juntos
         r2 = self.executor(Celular(TELAS, "inicio"), escolher).executar(pedido)  # aprendeu o caminho
         self.assertEqual((r2["estado"], r2["consultas_modelo"]), ("concluido", 0))
         self.assertEqual([p["via"] for p in r2["passos"]], ["memoria", "memoria"])
@@ -415,6 +418,24 @@ class TestExecutorObjetivo(unittest.TestCase):
         import json as _j
         memoria = list(_j.load(open(self.mem)).values())[0]
         self.assertEqual(sorted(memoria.values()), ["Você"])  # o desvio por "Mae" não foi aprendido
+
+    def test_escada_de_cerebros_sobe_quando_a_tela_ja_falhou(self):
+        cel = Celular(TELAS, "inicio")
+        cel.falhar = {"Sistema": 99}  # o modelo escolhe "Sistema", que não responde
+        vistos = []
+
+        def escolher(opcoes):
+            vistos.append(list(opcoes))
+            return opcoes.index("Sistema") if "Sistema" in opcoes else opcoes.index("Bluetooth")
+        r = self.executor(cel, escolher).executar(
+            {"objetivo": "abrir o Bluetooth", "app": APP, "concluido": {"texto": "AirPods"}})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertEqual(self.niveis[0], "padrao")
+        self.assertIn("forte", self.niveis[1:])  # depois da falha, Sonnet + Opus
+        r = self.executor(Celular(TELAS, "inicio"), lambda o: o.index("Bluetooth")).executar(
+            {"objetivo": "ver os fones conectados", "app": APP, "concluido": {"texto": "AirPods"}, "cerebro": "maximo"})
+        self.assertEqual(self.niveis[-1], "maximo")  # pedido explícito: Opus pensando
+        self.assertEqual(set(self.m.NIVEIS), {"rapido", "padrao", "forte", "maximo"})
 
     def test_validacao(self):
         ex = self.executor(Celular(TELAS, "inicio"))

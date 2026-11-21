@@ -2,6 +2,21 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 21/11 — atualização e correções (branch `ccr-201914aa-m2jj33`)
+- **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → **1.0.67** (`f55b4ef`) pelo `atualizar_sistema`. O canal
+  direto voltou sozinho a cada reinício; aparelhos, catálogo e política ficaram preservados. Conferido com `consultar`
+  e com uma missão de leitura (Sonnet, grafo de 1.858 nós). Pareado, armado até a meia-noite, modo autônomo.
+- **Android 16:** o Termux não lê `/proc/uptime` nem `/proc/loadavg` (`Permission denied`); o `CLOCK_BOOTTIME`
+  funciona e o Python do Termux não tem `os.getloadavg`. O `estado_celular` usa o relógio de boot (98,6 h ligado em
+  21/11) e devolve `carga_cpu_1min: null` quando não há leitura (antes saía 0, que parecia processador ocioso).
+- **`consultar`:** o perfil misto do “ar do quarto” repetia `modo` (teclas + estado completo); corrigido.
+- **Pacote × cache do Python:** o ZIP grava a data fixa de 1980; com um fonte novo do mesmo tamanho o `.pyc` antigo era
+  reaproveitado (a 1.0.66 rodou o código novo informando 1.0.65). Desde a 1.0.67 o `instalar.sh` apaga os
+  `__pycache__` antes de religar.
+- **Testes:** `testes/test_consistencia.py` (listas de risco iguais no celular e na Central, ferramentas da missão,
+  resumo, estado do celular, cache na atualização): 184 testes Python no total.
+- **Pendente (decisão do dono):** merge na branch padrão. Até lá, a linha de instalação do README baixa a 1.0.65.
+
 ## Resumo (fim do dia 19/11)
 - **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.28**, pareado com a
   Central de Controle (só o painel arma, com a digital do POCO ou do iPad), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar

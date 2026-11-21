@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795269475.5424194,
-    "seen": 1795269477.847209,
-    "ast_hash": "fa54a2673dae1f9bbbabd88b38563372",
+    "mtime": 1795274889.8164098,
+    "seen": 1795274956.233844,
+    "ast_hash": "18f2b147f0703fe1d4b2733c2577aa4b",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795269105.6002932,
-    "seen": 1795269477.8472724,
-    "ast_hash": "cbea8e68854208548e13f1f0682d15a4",
+    "mtime": 1795274952.0890787,
+    "seen": 1795274956.2339063,
+    "ast_hash": "6fa627d9d613f534cd6159b59eed422a",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -276,9 +276,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/descobrir_rede/principal.py": {
-    "mtime": 1795266209.219294,
-    "seen": 1795267593.401077,
-    "ast_hash": "c7a3d8c4df732a6e073d0e354c4f4426",
+    "mtime": 1795274811.232573,
+    "seen": 1795274956.2338247,
+    "ast_hash": "1c68ca1657078356c688abf621614e5f",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/foto/capacidade.json": {
@@ -582,9 +582,9 @@
     "semantic_hash": ""
   },
   "testes/test_capacidades_aparelho.py": {
-    "mtime": 1795269462.7940147,
-    "seen": 1795269477.8472505,
-    "ast_hash": "6bd25c641ac95a3ee8b73e0913446e99",
+    "mtime": 1795274831.9571989,
+    "seen": 1795274956.2338839,
+    "ast_hash": "b2cf1e7cf2f8aafa5e8b47ffaa3ab9a1",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

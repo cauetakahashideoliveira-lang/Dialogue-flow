@@ -64,9 +64,32 @@ def udp(ip, porta, dados, t=1.2):
 def ip_do_wifi():
     try:
         r = subprocess.run(["termux-wifi-connectioninfo"], capture_output=True, text=True, timeout=10)
-        return json.loads(r.stdout).get("ip")
+        ip = json.loads(r.stdout).get("ip")
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
+    # Wi-Fi desligado/desconectado: o Termux:API devolve "0.0.0.0" (visto em 21/11 fora de casa), o que virava a
+    # "sub-rede 0.0.0" e apagava o inventário de casa.
+    return ip if valido(ip) else None
+
+
+def valido(ip):
+    partes = str(ip or "").split(".")
+    return (len(partes) == 4 and all(p.isdigit() and int(p) <= 255 for p in partes)
+            and partes[0] not in ("0", "127") and not str(ip).startswith("169.254."))
+
+
+def ler_inventarios(caminho=None):
+    """{sub_rede: {"quando", "aparelhos"}}. Lê também o formato antigo (uma sub-rede só)."""
+    try:
+        with open(caminho or ARQUIVO) as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if "redes" in d:
+        return d["redes"]
+    if d.get("sub_rede") and not str(d["sub_rede"]).startswith("0."):
+        return {d["sub_rede"]: {"quando": d.get("quando"), "aparelhos": d.get("aparelhos", {})}}
+    return {}
 
 
 def ssdp():
@@ -130,8 +153,9 @@ def main():
     arg = json.loads(sys.stdin.read() or "{}")
     meu = ip_do_wifi()
     base = arg.get("sub_rede") or (meu.rsplit(".", 1)[0] if meu else None)
-    if not base:
-        print(json.dumps({"erro": "sem Wi-Fi: informe sub_rede (ex.: 192.168.5)"}, ensure_ascii=False))
+    if not base or not valido(base + ".1"):
+        print(json.dumps({"erro": "o celular não está conectado a um Wi-Fi: conecte-se à rede que quer varrer "
+                                  "(ou informe sub_rede, ex.: 192.168.5)"}, ensure_ascii=False))
         return
     com_udp = arg.get("udp", True)
     gateway = base + ".1"
@@ -148,12 +172,8 @@ def main():
         up = ficha_upnp(anuncios[ip]["location"]) if anuncios.get(ip, {}).get("location") else {}
         tipo, motivo = classificar(abertas, up, gree, midea, ip == gateway, ip == meu)
         inventario[ip] = {"tipo": tipo, "motivo": motivo, "portas": abertas, "upnp": up or None}
-    anterior = {}
-    try:
-        with open(ARQUIVO) as f:
-            anterior = json.load(f).get("aparelhos", {})
-    except (OSError, ValueError):
-        pass
+    redes = ler_inventarios()
+    anterior = redes.get(base, {}).get("aparelhos", {})  # cada sub-rede tem o seu inventário
     for ip, nome in rotulos.items():
         if ip in inventario:
             inventario[ip]["nome"] = nome
@@ -162,11 +182,11 @@ def main():
             inventario[ip]["nome"] = anterior[ip]["nome"]
     novos = sorted(set(inventario) - set(anterior)) if anterior else []
     sumidos = sorted(set(anterior) - set(inventario))
+    redes[base] = {"quando": time.strftime("%Y-%m-%d %H:%M:%S"), "aparelhos": inventario}
     try:
         os.makedirs(os.path.dirname(ARQUIVO), exist_ok=True)
         with open(ARQUIVO, "w") as f:
-            json.dump({"quando": time.strftime("%Y-%m-%d %H:%M:%S"), "sub_rede": base, "aparelhos": inventario},
-                      f, ensure_ascii=False, indent=1)
+            json.dump({"redes": redes}, f, ensure_ascii=False, indent=1)
     except OSError:
         pass
     print(json.dumps({"sub_rede": base, "total": len(inventario), "aparelhos": inventario,

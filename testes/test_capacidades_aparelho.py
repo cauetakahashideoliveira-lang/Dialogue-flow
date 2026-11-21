@@ -259,5 +259,52 @@ public class AccessibilityNodeInfo {
             self.assertEqual(r.stdout.strip().splitlines()[-1:], ["ok"], r.stdout + r.stderr)
 
 
+class TestDescobrirRedeSemWifi(unittest.TestCase):
+    """Fora do Wi-Fi o Termux:API devolve ip 0.0.0.0: a varredura virava "sub-rede 0.0.0" e apagava o inventário
+    de casa (visto em 21/11)."""
+
+    def setUp(self):
+        self.m = _carregar("descobrir_rede")
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.m.ARQUIVO = os.path.join(self.tmp, "inventario.json")
+
+    def _rodar(self, ip, arg="{}"):
+        saida = io.StringIO()
+        info = json.dumps({"ip": ip, "supplicant_state": "UNINITIALIZED" if ip == "0.0.0.0" else "COMPLETED"})
+        with mock.patch.object(self.m.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, info, "")), \
+                mock.patch.object(self.m, "vivos", return_value=[]), mock.patch.object(self.m, "ssdp", return_value={}), \
+                mock.patch.object(self.m, "sondar", side_effect=lambda ip, u: (ip, [], False, False)), \
+                mock.patch.object(self.m.sys, "stdin", io.StringIO(arg)), mock.patch("sys.stdout", saida):
+            self.m.main()
+        return json.loads(saida.getvalue())
+
+    def test_ip_invalido_nao_conta_como_wifi(self):
+        for ip in ("0.0.0.0", "", None, "169.254.3.4", "127.0.0.1"):
+            self.assertFalse(self.m.valido(ip), ip)
+        self.assertTrue(self.m.valido("192.168.5.20"))
+
+    def test_sem_wifi_da_erro_e_preserva_o_inventario(self):
+        antigo = {"quando": "2026-11-20 10:00:00", "sub_rede": "192.168.5",
+                  "aparelhos": {"192.168.5.1": {"tipo": "roteador"}, "192.168.5.45": {"tipo": "tv", "nome": "TV sala"}}}
+        with open(self.m.ARQUIVO, "w") as f:
+            json.dump(antigo, f)
+        out = self._rodar("0.0.0.0")
+        self.assertIn("erro", out)
+        self.assertIn("Wi-Fi", out["erro"])
+        with open(self.m.ARQUIVO) as f:
+            self.assertEqual(json.load(f), antigo)
+
+    def test_cada_sub_rede_tem_seu_inventario(self):
+        with open(self.m.ARQUIVO, "w") as f:  # formato antigo, de uma sub-rede só
+            json.dump({"sub_rede": "192.168.5", "aparelhos": {"192.168.5.45": {"tipo": "tv", "nome": "TV sala"}}}, f)
+        fora = self._rodar("10.0.0.7")
+        self.assertEqual(fora["sumidos"], [])  # outra rede não acusa os aparelhos de casa como sumidos
+        casa = self._rodar("192.168.5.20")
+        self.assertIn("192.168.5.45", casa["sumidos"])
+        redes = self.m.ler_inventarios()
+        self.assertEqual(set(redes), {"192.168.5", "10.0.0"})
+
+
 if __name__ == "__main__":
     unittest.main()

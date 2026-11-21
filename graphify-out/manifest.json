@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795268677.2245288,
-    "seen": 1795268679.5870762,
-    "ast_hash": "4e673ce5aa53a716938529ef94e4ff12",
+    "mtime": 1795268958.7090206,
+    "seen": 1795268960.874459,
+    "ast_hash": "70dd36748cc437731c832980de279efe",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/sonar/principal.py": {
-    "mtime": 1795268669.040332,
-    "seen": 1795268679.5870662,
-    "ast_hash": "4e3dce710f7889746cec4eb340668daa",
+    "mtime": 1795268944.7780948,
+    "seen": 1795268960.8744497,
+    "ast_hash": "123959400be5e29cb138972c98ae1801",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/sono/capacidade.json": {
@@ -582,9 +582,9 @@
     "semantic_hash": ""
   },
   "testes/test_capacidades_aparelho.py": {
-    "mtime": 1795268660.2665048,
-    "seen": 1795268679.5871193,
-    "ast_hash": "1460038a59b5e8700f34cd9392ea4e84",
+    "mtime": 1795268944.0424922,
+    "seen": 1795268960.874497,
+    "ast_hash": "a395c002e4f2e29741f339ccd915575e",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

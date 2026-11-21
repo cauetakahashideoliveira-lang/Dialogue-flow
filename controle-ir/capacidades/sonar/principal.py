@@ -45,8 +45,14 @@ def analisar_sonar(x, freq, taxa=TAXA, n=8192, faixa_doppler=(12.0, 160.0), limi
     desvio = np.abs(f - freq)
     lat = (desvio >= faixa_doppler[0]) & (desvio <= faixa_doppler[1])
     razoes = np.array([10 * np.log10((q[lat].sum() + 1e-20) / (q[perto].sum() + 1e-20)) for q in quadros])
-    base = float(np.median(razoes))
-    mov = razoes > base + limiar_db
+    # Quadros sem o tom não contam: a gravação começa ~0,4 s antes dele, e sem tom a razão lateral/tom dispara —
+    # virava "movimento" no 1º segundo de toda medição (visto no POCO em 21/11). Vale o quadro com o tom a até
+    # 10 dB do nível típico. A referência de "parado" é o percentil 10 (antes a mediana: com movimento em metade
+    # ou mais da gravação, a referência caía dentro do próprio movimento e ele sumia; o p10 aguenta até ~80 %).
+    tons = np.array([float(q[perto].sum()) for q in quadros])
+    com_tom = tons >= float(np.median(tons)) * 0.1
+    base = float(np.percentile(razoes[com_tom] if com_tom.any() else razoes, 10))
+    mov = (razoes > base + limiar_db) & com_tom
     seg_quadro = passo / taxa
     linha, por_meio = [], max(1, int(round(0.5 / seg_quadro)))
     for i in range(0, mov.size, por_meio):

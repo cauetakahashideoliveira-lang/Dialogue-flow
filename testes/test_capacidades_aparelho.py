@@ -154,6 +154,40 @@ class TestSonarFrequencia(unittest.TestCase):
         self.assertIn("tente 17000 Hz", self.m.sugestao_sem_tom(18000))
         self.assertIn("não serve", self.m.sugestao_sem_tom(17000))
 
+    def _sinal(self, freq, segundos=10, atraso=0.4, mexe_desde=None, semente=4):
+        """Como no celular: a gravação começa ~0,4 s antes do tom (com rampa); opcionalmente alguém se mexe."""
+        np = self._numpy()
+        taxa = 48000
+        rng = np.random.default_rng(semente)
+        tom = self.m.gerar_tom(freq, segundos).astype(np.float32) / 32768.0 * 0.3
+        x = np.concatenate([np.zeros(int(atraso * taxa), np.float32), tom])
+        t = np.arange(x.size) / taxa
+        if mexe_desde is not None:
+            fase = 2 * np.pi * np.cumsum(freq + 60 * np.sin(2 * np.pi * 0.8 * t)) / taxa
+            x = x + np.where(t >= mexe_desde, 0.03 * np.sin(fase), 0).astype(np.float32)
+        return (x + rng.normal(0, 0.002, x.size)).astype(np.float32)
+
+    @staticmethod
+    def _numpy():
+        try:
+            import numpy
+        except ImportError:
+            raise unittest.SkipTest("numpy ausente")
+        return numpy
+
+    def test_inicio_da_gravacao_sem_tom_nao_vira_movimento(self):
+        for freq in (17000, 19000):
+            for atraso in (0.0, 0.4, 1.0):
+                r = self.m.analisar_sonar(self._sinal(freq, atraso=atraso), freq)
+                self.assertTrue(r["suporte"])
+                self.assertEqual(sum(r["linha_do_tempo_meio_s"]), 0, (freq, atraso, r["linha_do_tempo_meio_s"]))
+
+    def test_movimento_na_maior_parte_da_gravacao_ainda_aparece(self):
+        r = self.m.analisar_sonar(self._sinal(17000, mexe_desde=2.4), 17000)
+        linha = r["linha_do_tempo_meio_s"]
+        self.assertEqual(sum(linha[:4]), 0, linha)  # parado até ~2 s
+        self.assertGreaterEqual(sum(linha[6:]), len(linha[6:]) - 1, linha)  # mexendo até o fim
+
     def test_erro_do_aparelho_para_a_fila(self):
         chamadas = []
 

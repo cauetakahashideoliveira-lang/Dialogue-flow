@@ -443,6 +443,27 @@ class TestExecutorObjetivo(unittest.TestCase):
         for r in ("Armazenamento", "Notificações", "Sobre o telefone", "Apps"):
             self.assertFalse(self.m.proibido(r), r)
 
+    def test_toque_que_abre_outro_app_faz_parte_do_caminho(self):
+        # HyperOS: Configurações → "Apps" abre com.miui.securitycenter. Não é "app errado": foi o nosso toque.
+        seg = "com.miui.securitycenter"
+        telas = {"inicio": ([el("Apps", 300)], {"Apps": "gerenciar"}),
+                 "gerenciar": ([el("WhatsApp", 300, pacote=seg)], {"WhatsApp": "info"}),
+                 "info": ([el("WhatsApp", 100, clic=False, pacote=seg), el("Forçar parada", 900, pacote=seg)], {})}
+        cel = Celular(telas, "inicio")
+        orig = cel.injetar
+
+        def injetar(cmd):
+            r = orig(cmd)
+            cel.app = seg if cel.atual in ("gerenciar", "info") else APP
+            return r
+        cel.injetar = injetar
+        r = self.executor(cel).executar({"objetivo": "info do WhatsApp", "app": APP,
+                                         "concluido": {"texto": "Forçar parada"}, "pistas": ["Apps", "WhatsApp"]})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertEqual(r["recuperacoes"], 0)
+        self.assertFalse(any(p["acao"] == "tocar" and p.get("alvo") == "Forçar parada" for p in r["passos"]))
+        self.assertIn("Forçar parada", r["tela"]["textos"])
+
     def test_validacao(self):
         ex = self.executor(Celular(TELAS, "inicio"))
         self.assertIn("erro", ex.executar({"objetivo": "x"}))  # sem critério de conclusão

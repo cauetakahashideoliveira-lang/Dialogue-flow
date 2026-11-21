@@ -70,9 +70,10 @@ def concluido(crit, els, app_atual, app=None):
         return False
     if crit.get("app") and app_atual != crit["app"]:
         return False
-    if app and app_atual != app:
+    apps = {app} if isinstance(app, str) else set(app or ())
+    if apps and app_atual not in apps:
         return False
-    textos = [norm(rotulo(e)) for e in els if not app or e.get("pacote") in (app, "")]
+    textos = [norm(rotulo(e)) for e in els if not apps or e.get("pacote") in apps | {""}]
     if crit.get("texto") and not any(norm(crit["texto"]) in t for t in textos):
         return False
     if crit.get("qualquer") and not any(norm(q) in t for q in crit["qualquer"] for t in textos):
@@ -166,6 +167,9 @@ class Executor:
         memoria = self._memoria().get(chave_mem, {})
 
         caminho = []  # [(tela, rótulo)] do caminho que deu certo; desvios (voltar a uma tela) são cortados
+        # apps da tarefa: o pedido + os que um toque NOSSO abriu (no HyperOS, Configurações → Apps abre a Central de
+        # Segurança, outro pacote: o executor reabria as Configurações e desfazia o caminho — 21/11)
+        apps_ok = {app} if app else set()
 
         def fim(estado, motivo=None, els=None, app_atual=None):
             if estado == "concluido":
@@ -174,7 +178,7 @@ class Executor:
                  "consultas_modelo": consultas, "recuperacoes": recuperacoes,
                  "ms": round((self.relogio() - inicio) * 1000)}
             if a.get("ler", True) and els is not None:
-                if (app and app_atual != app) or sistema(app_atual):
+                if (app and app_atual not in apps_ok) or sistema(app_atual):
                     # outra janela na frente (notificações, outro app): o conteúdo dela não sai do celular
                     r["tela"] = {"app": app_atual, "textos": [], "nota": "outra janela por cima: conteúdo não enviado"}
                 else:
@@ -208,13 +212,13 @@ class Executor:
             if t.bloqueado(app_atual):
                 return fim("parado", "app bloqueado em primeiro plano (banco, pagamento ou senha)")
             els = t.elementos(t.dump_ui(), 300)
-            if concluido(crit, els, app_atual, app):
+            if concluido(crit, els, app_atual, apps_ok):
                 return fim("concluido", None, els, app_atual)
             if len(passos) >= max_passos:
                 return fim("parado", "limite de passos", els, app_atual)
 
             # ---- recuperação: outro app na frente (aviso, anúncio, painel de notificações, app errado)
-            if app and app_atual != app:
+            if app and app_atual not in apps_ok:
                 t0 = self.relogio()
                 recuperacoes += 1
                 if recuperacoes > 4:
@@ -251,7 +255,7 @@ class Executor:
                 return fim("parado", "sem progresso (a mesma tela voltou várias vezes)", els, app_atual)
 
             alvos = [e for e in els if rotulo(e) and not e.get("desativado")
-                     and (not app or e.get("pacote") in (app, app_atual))]
+                     and (not app or e.get("pacote") in apps_ok)]
             t0 = self.relogio()
             escolha, via, escolhida_pista = None, None, None
 
@@ -354,6 +358,9 @@ class Executor:
             # ---- conferir: a tela mudou?
             depois = t.elementos(t.dump_ui(), 300)
             app_depois = t.foco()
+            if (acao == "tocar" and app and app_depois and app_depois != app_atual and not sistema(app_depois)
+                    and not t.bloqueado(app_depois)):
+                apps_ok.add(app_depois)  # o nosso toque abriu este app: faz parte do caminho
             if assinatura(depois, app_depois) == sig and app_depois == app_atual and acao != "rolar":
                 falhas[(sig, rotulo_acao)] = falhas.get((sig, rotulo_acao), 0) + 1  # sem efeito: 1ª vez repete,
                 anotar(acao, rotulo_acao, via + " (sem efeito)", t0)                # 2ª tenta outra coisa

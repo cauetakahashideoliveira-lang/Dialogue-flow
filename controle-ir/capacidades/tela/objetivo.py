@@ -54,13 +54,16 @@ def assinatura(els, app):
     return hashlib.sha256(json.dumps(chaves, ensure_ascii=False).encode()).hexdigest()[:16]
 
 
-def concluido(crit, els, app_atual):
-    """Critério verificável localmente: texto(s) visível(is) e/ou app em primeiro plano."""
+def concluido(crit, els, app_atual, app=None):
+    """Critério verificável localmente: texto(s) visível(is) e/ou app em primeiro plano. Com `app` (a tarefa é
+    nele), só vale dentro dele: a barra "Pesquisar" da tela inicial não conclui uma tarefa na Play Store (21/11)."""
     if not crit:
         return False
     if crit.get("app") and app_atual != crit["app"]:
         return False
-    textos = [norm(rotulo(e)) for e in els]
+    if app and app_atual != app:
+        return False
+    textos = [norm(rotulo(e)) for e in els if not app or e.get("pacote") in (app, "")]
     if crit.get("texto") and not any(norm(crit["texto"]) in t for t in textos):
         return False
     if crit.get("qualquer") and not any(norm(q) in t for q in crit["qualquer"] for t in textos):
@@ -119,6 +122,17 @@ class Executor:
         except OSError:
             pass
 
+    def _esperar_app(self, app, segundos):
+        fim = self.relogio() + segundos
+        while self.relogio() < fim:
+            f = self.t.foco()
+            if f == app:
+                return True
+            if sistema(f):  # cortina/painel por cima: esperar não adianta, a recuperação recolhe
+                return False
+            self.t.calma(100, 300)
+        return False
+
     # ----------------------------------------------------------- o laço
     def executar(self, a):
         erro = validar(a)
@@ -166,6 +180,7 @@ class Executor:
                 return {"erro": "app bloqueado (banco, pagamento ou senha)"}
             if not t.abrir(app):
                 return fim("parado", f"não consegui abrir {app}")
+            self._esperar_app(app, 8)  # carregamento lento: espera o app vir para a frente antes de "corrigir"
             t.calma(150, 3000)
             anotar("abrir", app, "inicio", t0)
 
@@ -177,7 +192,7 @@ class Executor:
             if t.bloqueado(app_atual):
                 return fim("parado", "app bloqueado em primeiro plano (banco, pagamento ou senha)")
             els = t.elementos(t.dump_ui(), 300)
-            if concluido(crit, els, app_atual):
+            if concluido(crit, els, app_atual, app):
                 return fim("concluido", None, els, app_atual)
             if len(passos) >= max_passos:
                 return fim("parado", "limite de passos", els, app_atual)
@@ -198,12 +213,14 @@ class Executor:
                 elif t.em_anuncio():
                     t.fechar_anuncio(app_atual)
                     anotar("fechar_anuncio", app_atual, "recuperacao", t0)
-                elif recuperacoes <= 2:
-                    t.injetar("tecla 4")  # voltar: fecha painel/janela por cima sem tocar em nada dela
+                elif sistema(app_atual) or recuperacoes > 2:
+                    t.injetar("tecla 4")  # janela do sistema que não recolhe: voltar, sem tocar em nada dela
                     t.calma(150, 1500)
                     anotar("voltar", app_atual, "recuperacao", t0)
                 else:
+                    # outro app comum na frente: traz o app da tarefa de volta (voltar mexeria no outro app)
                     t.abrir(app)
+                    self._esperar_app(app, 6)
                     t.calma(150, 3000)
                     anotar("reabrir", app, "recuperacao", t0)
                 continue

@@ -212,6 +212,35 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertEqual(r["tela"]["textos"], [])
         self.assertNotIn("Ana", str(r))
 
+    def test_7_app_lento_para_abrir_espera_e_nao_conclui_em_outro_app(self):
+        # 21/11, POCO: a Play Store demorou; o executor apertou voltar no app anterior, caiu na tela inicial e a
+        # barra "Pesquisar" dela "concluiu" a tarefa. Agora espera o app e só conclui dentro dele.
+        telas = {"loja": ([el("Pesquisar apps e jogos", 100)], {})}
+        cel = Celular(telas, "loja", app="com.android.settings")
+        demora = {"n": 4}
+        foco_original = cel.foco
+
+        def foco():
+            if cel.app == APP and demora["n"] > 0:
+                demora["n"] -= 1
+                return "com.android.settings"  # ainda carregando
+            return foco_original()
+        cel.foco = foco
+        r = self.executor(cel).executar({"objetivo": "abrir a loja", "app": APP,
+                                         "concluido": {"texto": "Pesquisar"}, "modelo": False})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertEqual([p["acao"] for p in r["passos"]], ["abrir"])
+        self.assertNotIn("tecla 4", cel.injetados)  # não apertou voltar no app que estava na frente
+
+        telas = {"home": ([el("Pesquisar", 100, pacote="com.launcher")], {})}
+        cel = Celular(telas, "home", app="com.launcher")
+        cel.abrir = lambda pac: True  # o app nunca abre
+        ex = self.executor(cel)
+        ex._esperar_app = lambda app, s: False  # sem esperar de verdade no teste
+        r = ex.executar({"objetivo": "abrir a loja", "app": APP, "concluido": {"texto": "Pesquisar"},
+                         "modelo": False, "prazo": 5})
+        self.assertEqual(r["estado"], "parado")  # o "Pesquisar" da tela inicial não conclui
+
     def test_6_interface_mudou_alvo_abaixo_rola_e_acha(self):
         cel = Celular(TELAS, "inicio")
         r = self.executor(cel).executar({"objetivo": "ver o modelo", "app": APP, "concluido": {"texto": "Modelo:"},

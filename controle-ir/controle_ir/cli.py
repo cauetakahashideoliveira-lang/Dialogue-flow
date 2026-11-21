@@ -1104,7 +1104,8 @@ def main(argv=None):
                                        "atualização até a meia-noite ou por HORAS")
     par.add_argument("horas", nargs="?", type=float)
     sub.add_parser("desarmar", help="desarma: pelo conector só passam infravermelho, consulta e travar")
-    sub.add_parser("stockfish", help="abre o estudo de xadrez local e o controle do piloto contra robô")
+    px = sub.add_parser("stockfish", help="abre o estudo de xadrez local e o controle do piloto contra robô")
+    px.add_argument("acao", nargs="?", choices=["configurar"], help="escolhe o nível e o tempo por lance")
     pa = sub.add_parser("atalhos", help="cria os atalhos Ligar/Desligar para o Termux:Widget")
     pa.add_argument("--silencioso", action="store_true")
     pl = sub.add_parser("log", help="últimas linhas do registro do serviço em segundo plano")
@@ -1142,7 +1143,7 @@ def main(argv=None):
         return inicio_automatico(a.acao, a.silencioso)
     if cmd == "stockfish":
         from .estudo_xadrez import abrir
-        return abrir()
+        return abrir(a.acao)
     if cmd == "atalhos":
         return criar_atalhos(a.silencioso)
     if cmd == "rota":

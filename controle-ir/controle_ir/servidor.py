@@ -23,6 +23,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import painel as painel_mod
+from .estudo_xadrez import ler_preferencias
 from .mcp import ServidorMCP
 from .servico import ErroUso, Servico
 
@@ -306,8 +307,10 @@ def criar_servidor(servico: Servico, segredo: str, porta: int = 8765, host: str 
                 return {"mensagem": "Piloto de xadrez desligado."}
             if acao == "parar":
                 return {"mensagem": "Piloto de xadrez desligado."}
+            prefs = ler_preferencias(servico.pasta)
             resposta = chamar(iniciar={"modo":"xadrez", "app":"com.chess", "cerebros":["memoria"], "tabuleiro_local":True,
-                                       "ms_lance":200, "threads":2, "hash_mb":64,
+                                       "nivel":prefs.nivel, "ms_lance":prefs.ms_lance or 200,
+                                       "tempo_fixo":prefs.ms_lance is not None, "threads":2, "hash_mb":64,
                                        "minha_vez":dados.get("minha_vez") is True})
             if "atividade" in resposta and resposta.get("erro"):
                 return {"aguardar_tabuleiro": True}

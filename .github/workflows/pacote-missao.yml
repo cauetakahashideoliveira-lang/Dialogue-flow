@@ -1,8 +1,9 @@
 name: Empacotar missão no POCO
 on:
   push:
-    branches: [codex/sonnet-ambiente-nativo, codex/benchmark-planejador-estruturado, codex/botao-stockfish-estudos]
-    paths: ['controle-ir/**', '.github/workflows/pacote-missao.yml']
+    branches: ['codex/**']
+    paths: ['controle-ir/**', '.claude/skills/**', '.graphifyignore', 'ferramentas/atualizar_conhecimento.sh', 'ferramentas/empacotar.sh', 'ferramentas/pacote.py', '.github/workflows/pacote-missao.yml']
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -10,19 +11,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Atualizar o conhecimento embarcado
+        run: |
+          python -m pip install 'graphifyy[sql]==0.9.111'
+          bash ferramentas/atualizar_conhecimento.sh
+          git add -- controle-ir/conhecimento
+          git add -u -- graphify-out
       - name: Conferir Python e gerar o ZIP
         run: |
           python3 -m compileall -q controle-ir
           python3 testes/test_stockfish_local.py
           PYTHONPATH=testes python3 -m unittest test_controle_ir.TestPiloto.test_xadrez_joga_na_vez_certa
           bash ferramentas/empacotar.sh
-          (cd dist && sha256sum -c controle-ir.zip.sha256)
+          bash ferramentas/empacotar.sh --verificar
       - name: Publicar no mesmo branch
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add dist/controle-ir.zip dist/controle-ir.zip.sha256
-          git commit -m 'Empacotar missão contextual no POCO'
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Sincronizar grafo de código e pacote do POCO'
           git push origin HEAD:"$GITHUB_REF_NAME"
 
 

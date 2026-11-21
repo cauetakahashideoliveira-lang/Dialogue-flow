@@ -1,6 +1,6 @@
 # Contexto para o Claude Code
 
-- **Passagem de bastão / outro repositório:** `docs/HANDOFF.md` (visão geral, publicação, credenciais, migração).
+- Comece por [CONTRIBUTING.md](CONTRIBUTING.md) para instalar e testar. [docs/HANDOFF.md](docs/HANDOFF.md) traz as decisões, as medições e o trabalho seguinte, inclusive a integração com ChatGPT.
 - Leia primeiro `graphify-out/GRAPH_REPORT.md` (grafo do código) e `docs/estado-atual.md` (instalação real do usuário).
 - **Para operar aparelhos**, use `docs/aparelhos/README.md`: mapa cômodo → aparelho → controle, com uma ficha por
   aparelho (nome exato no conector, perfil, comandos testados, sinais extras `.ir`, ressalvas). Ao cadastrar ou
@@ -8,7 +8,7 @@
 - Sessões na nuvem: o hook `.claude/hooks/session-start.sh` instala o graphify (pacote `graphifyy`) e o numpy
   quando faltam. Se `graphify` não existir, rode esse hook com `CLAUDE_CODE_REMOTE=true`.
 - Para perguntas de arquitetura use a skill graphify: `graphify query "<pergunta>"`, `graphify explain "<nó>"`,
-  `graphify path "A" "B"`. Após mudar código, rode `graphify update .` (sem custo de LLM).
+  `graphify path "A" "B"`. Ao atualizar o conhecimento embarcado, rode `bash ferramentas/atualizar_conhecimento.sh` para regenerar o grafo de código e sincronizar as cópias usadas nas missões.
 - **Visão e roadmap** (capacidades plugáveis, execução governada, atualização pelo GitHub, mapa de oportunidades,
   limites reais): `docs/modo-deus.md`. Capacidade nova reutilizável: pasta em `controle-ir/capacidades/` com
   `capacidade.json` + script (JSON entra/sai) e teste; depois empacote, publique e use `atualizar_sistema(ref)`.
@@ -32,7 +32,7 @@
   Cloudflare Worker): pareado (1.0.24+), só ele arma, com a digital; desde a 1.0.26 o conector pode entrar por ele
   (`https://<painel>/mcp`, OAuth com a digital, bloqueio na borda). Conector em uso: **Controle Geral** (o antigo
   “Controle master”, pela URL do ngrok, é recusado desde que “só pelo painel” foi ligado). Mudança no painel = PR que o dono aprova (merge);
-  teste local: `painel/testes/e2e.cjs` com `wrangler dev` sem as variáveis de proxy.
+  teste local com estado descartável em `painel/`: `npm ci`, `npx playwright install --with-deps chromium` e `npm run test:e2e`.
 - **Canal direto** (1.0.46+): o celular mantém um WebSocket com a Central (`controle_ir/canal.py`, Durable Object
   `Canal`); chamadas sem túnel e avisos na hora; sem canal, volta ao ngrok sozinho (`docs/seguranca.md` §3d).
   `consultar` mostra `servidor.canal`. Tela: `acao=grade` lê/resolve grades NxN no celular (9x9, 16x16 com
@@ -44,5 +44,5 @@
   os prompts de jailbreak nem o Parseltongue do original. Não confundir com `/godmode` (capacidade máxima).
 - **Piloto** (1.0.51+, `capacidades/tela/piloto.py`, `acao=piloto`): laço rápido NO celular (o Claude fica fora do
   laço, como treinador): corrida memória/modelo local/Haiku, alvo semântico, gravador. Modelo local e quiz de teste:
-  `docs/estado-atual.md` (19/11 noite). Só contra a máquina, nunca contra pessoas. Apps bloqueados (banco/senha) não
+  `docs/estado-atual.md` (19/11 noite). Para o estudo e o piloto do botão Stockfish no POCO, veja o README. Apps bloqueados (banco/senha) não
   são lidos nem tocados.

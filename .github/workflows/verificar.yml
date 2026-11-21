@@ -16,6 +16,7 @@ jobs:
       - run: python -m unittest discover -s testes
       - run: python benchmarks/2026-11-20-planejador/test_planejador.py
       - run: python ferramentas/verificar_cliente_mcp.py
+      - run: cmp graphify-out/graph.json controle-ir/conhecimento/graph.json
       - run: bash ferramentas/empacotar.sh --verificar
   central:
     runs-on: ubuntu-latest

@@ -16,7 +16,7 @@
   "properties": {
    "acao": {
     "type": "string",
-    "description": "objetivo | navegar | ver | tocar | digitar | tecla | deslizar | abrir | sequencia | grade | rotina | reflexos | fechar_anuncio | piloto | estado"
+    "description": "objetivo | objetivo_resultado (último objetivo, se a chamada foi cortada) | navegar | ver | tocar | digitar | tecla | deslizar | abrir | sequencia | grade | rotina | reflexos | fechar_anuncio | piloto | estado"
    },
    "x": {
     "type": "integer"
@@ -255,7 +255,7 @@
    },
    "prazo": {
     "type": "number",
-    "description": "objetivo: segundos (padrão 60, até 120)"
+    "description": "objetivo: segundos (padrão 45, até 50: o cliente do Claude corta aos 60 s; se acabar, chame de novo para continuar)"
    },
    "ler": {
     "type": "boolean",

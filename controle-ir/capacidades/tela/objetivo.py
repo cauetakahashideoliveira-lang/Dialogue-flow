@@ -31,7 +31,9 @@ PROIBIDOS = ("enviar", "excluir", "apagar", "deletar", "comprar", "pagar", "paga
 DISPENSAR = ("agora nao", "mais tarde", "pular", "fechar", "dispensar", "nao, obrigado", "nao obrigado", "entendi",
              "ignorar", "x")  # janelas que só atrapalham (nunca "OK", "Permitir", "Aceitar")
 ROLAR, VOLTAR = "↓ rolar para baixo", "← voltar"
-MAX_PASSOS, MAX_PRAZO = 25, 120
+# O cliente do Claude desiste de uma chamada aos 60 s (medido em 21/11: o objetivo terminou no celular em 72 s e o
+# resultado se perdeu). Acima disso, devolve "parado: prazo" e uma nova chamada continua da tela atual.
+MAX_PASSOS, MAX_PRAZO, MAX_ROLAGENS = 25, 50, 30
 # Escada de cérebros (chamados direto do celular, sem passar pela nuvem do Claude): modelos disparados juntos, vale
 # o mais forte que responder no prazo. Sobe um degrau sozinho quando a tela já falhou ou se repetiu.
 NIVEIS = {"rapido": (["claude-haiku-5-5"], False, 6),
@@ -158,7 +160,7 @@ class Executor:
         # padrão "forte": no POCO (21/11) Haiku decidiu em 1,46 s, Sonnet 1,55 s, Opus 1,68 s, Opus pensando 1,89 s
         # (todos acertaram): o mais inteligente custa ~0,2 s por decisão — vale sempre
         nivel_base = ORDEM_NIVEIS.index(a.get("cerebro")) if a.get("cerebro") in NIVEIS else 2
-        prazo = self.relogio() + max(5, min(float(a.get("prazo", 60)), MAX_PRAZO))
+        prazo = self.relogio() + max(5, min(float(a.get("prazo", 45)), MAX_PRAZO))
         usar_modelo = a.get("modelo", True) is not False and self.decidir is not None
         inicio = self.relogio()
         passos, vistos, falhas, novos = [], {}, {}, {}
@@ -174,6 +176,8 @@ class Executor:
         def fim(estado, motivo=None, els=None, app_atual=None):
             if estado == "concluido":
                 self._lembrar(chave_mem, dict(caminho))
+            if estado == "parado" and motivo == "prazo esgotado":
+                motivo = "prazo esgotado (chame de novo para continuar desta tela)"
             r = {"estado": estado, **({"motivo": motivo} if motivo else {}), "passos": passos,
                  "consultas_modelo": consultas, "recuperacoes": recuperacoes,
                  "ms": round((self.relogio() - inicio) * 1000)}
@@ -214,7 +218,8 @@ class Executor:
             els = t.elementos(t.dump_ui(), 300)
             if concluido(crit, els, app_atual, apps_ok):
                 return fim("concluido", None, els, app_atual)
-            if len(passos) >= max_passos:
+            rolagens = sum(p["via"] == "rolagem contínua" for p in passos)
+            if len(passos) - rolagens >= max_passos or rolagens >= MAX_ROLAGENS:
                 return fim("parado", "limite de passos", els, app_atual)
 
             # ---- recuperação: outro app na frente (aviso, anúncio, painel de notificações, app errado)

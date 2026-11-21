@@ -2438,7 +2438,14 @@ def objetivo(a):
         return idx, fonte or ("; ".join(erros)[:80] if erros else None), seg
 
     ex = mod.Executor(Ferramentas, decidir, os.path.join(TMP, "objetivos.json"))
-    return ex.executar(a)
+    r = ex.executar(a)
+    try:  # se a chamada for cortada (limite de 60 s do cliente), acao=objetivo_resultado devolve isto
+        os.makedirs(TMP, exist_ok=True)
+        with open(os.path.join(TMP, "ultimo_objetivo.json"), "w") as f:
+            json.dump({"quando": time.strftime("%H:%M:%S"), "objetivo": a.get("objetivo"), **r}, f, ensure_ascii=False)
+    except OSError:
+        pass
+    return r
 
 
 def _executar(a):
@@ -2468,6 +2475,12 @@ def _executar(a):
             r = navegar_etapas(a)
         elif acao == "objetivo":
             r = objetivo(a)
+        elif acao == "objetivo_resultado":
+            try:
+                with open(os.path.join(TMP, "ultimo_objetivo.json")) as f:
+                    r = json.load(f)
+            except (OSError, ValueError):
+                r = {"erro": "nenhum objetivo executado ainda"}
         elif acao == "rotina":
             r = rotina(a)
         elif acao == "fechar_anuncio":

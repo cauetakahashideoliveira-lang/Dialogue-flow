@@ -340,6 +340,31 @@ class TestExecutorObjetivo(unittest.TestCase):
         self.assertIn("bloqueado", r["motivo"])
         self.assertNotIn("tela", r)  # nada da tela do banco sai do celular
 
+    def test_modelo_ve_os_titulos_das_linhas_clicaveis(self):
+        # Configurações do HyperOS: a linha (sem texto) é clicável, o título não. O modelo precisa ver o título.
+        linha = dict(el("", 400, clic=True), l=1200, a=160)
+        titulo = el("Sobre o telefone", 400, clic=False)
+        telas = {"inicio": ([el("Configurações", 50, clic=False), linha, titulo,
+                             el("Lista", 800, clic=False, rolavel=True, a=1500)], {"Sobre o telefone": "sobre"}),
+                 "sobre": ([el("Versão do Android", 200, clic=False)], {})}
+        cel = Celular(telas, "inicio")
+        orig = cel.injetar
+
+        def injetar(cmd):  # o toque no título cai na linha
+            if cmd.startswith("tocar") and cmd.split()[2] == "400":
+                cel.atual = "sobre"
+                cel.injetados.append(cmd)
+                return True
+            return orig(cmd)
+        cel.injetar = injetar
+        r = self.executor(cel, lambda o: o.index("Sobre o telefone")).executar(
+            {"objetivo": "ver a versão do Android", "app": APP, "concluido": {"texto": "Versão do Android"}})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertIn("Sobre o telefone", self.perguntas[0])
+        self.assertLessEqual(len(self.perguntas[0]), 9)  # o cérebro responde 1 dígito
+        self.assertEqual(self.m.ranquear([f"Item {i}" for i in range(12)] + ["Versão do sistema"],
+                                         "ver a versão do sistema", 3)[-1], "Versão do sistema")
+
     def test_validacao(self):
         ex = self.executor(Celular(TELAS, "inicio"))
         self.assertIn("erro", ex.executar({"objetivo": "x"}))  # sem critério de conclusão

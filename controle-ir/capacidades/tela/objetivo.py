@@ -275,10 +275,12 @@ class Executor:
                 opcoes = []
                 for e in alvos:
                     r = rotulo(e)
-                    if (e.get("clicavel") and r and r not in opcoes and not falhou(sig, r)
+                    # tocável: o próprio elemento ou a linha clicável que o contém (nas Configurações o título
+                    # "Sobre o telefone" não é clicável, a linha sem texto é — 21/11, o modelo só via rolar/voltar)
+                    if (r and r not in opcoes and tocavel(e, els) and not falhou(sig, r)
                             and seguro(e, els, permitir)):
                         opcoes.append(r)
-                opcoes = opcoes[:30]
+                opcoes = ranquear(opcoes, objetivo, 7)  # o cérebro responde 1 dígito: até 7 + rolar + voltar
                 extras = [x for x in (ROLAR, VOLTAR) if not falhou(sig, x)]
                 if opcoes or extras:
                     consultas += 1
@@ -330,6 +332,24 @@ class Executor:
                 if escolhida_pista:
                     usadas.add(escolhida_pista)
                 anotar(acao, rotulo_acao, via, t0)
+
+
+def tocavel(e, els):
+    if e.get("clicavel"):
+        return True
+    x, y = e.get("x", 0), e.get("y", 0)
+    return any(o.get("clicavel") and o is not e and abs(o.get("x", 0) - x) <= o.get("l", 0) / 2
+               and abs(o.get("y", 0) - y) <= o.get("a", 0) / 2 for o in els)
+
+
+def ranquear(opcoes, objetivo, n):
+    """As `n` opções que mais lembram o objetivo (palavras em comum), na ordem da tela."""
+    if len(opcoes) <= n:
+        return opcoes
+    alvo = set(re.findall(r"\w{3,}", norm(objetivo)))
+    pont = {o: len(alvo & set(re.findall(r"\w{3,}", norm(o)))) for o in opcoes}
+    melhores = set(sorted(opcoes, key=lambda o: -pont[o])[:n])
+    return [o for o in opcoes if o in melhores]
 
 
 def interruptor(e, els):

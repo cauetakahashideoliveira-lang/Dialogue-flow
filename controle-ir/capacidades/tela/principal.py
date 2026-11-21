@@ -2373,6 +2373,9 @@ def navegar_etapas(a):
 
 
 _OBJETIVO = {}
+POLITICA_NAVEGAR = ("Você opera um celular Android para cumprir um objetivo. Escolha a opção da tela que mais "
+                    "aproxima do objetivo (um item com o nome do assunto costuma ser o caminho). Só escolha rolar se "
+                    "nenhum item servir, e voltar se a tela for errada. Responda APENAS com o número da opção.")
 
 
 def objetivo(a):
@@ -2427,7 +2430,8 @@ def objetivo(a):
         if ambiente_missao.ATUAL.get() is not None:
             return ambiente_missao.escolher(m, pergunta, opcoes)
         if "cerebro" not in _OBJETIVO:
-            _OBJETIVO["cerebro"] = m.Cerebros({"cerebros": ["api"], "modelos": [m.MODELO], "pensar": False})
+            _OBJETIVO["cerebro"] = m.Cerebros({"cerebros": ["api"], "modelos": [m.MODELO], "pensar": False,
+                                               "politica": POLITICA_NAVEGAR})
         idx, _, _, _ = _OBJETIVO["cerebro"].decidir(pergunta, [{"texto": o} for o in opcoes], 8)
         return idx
 

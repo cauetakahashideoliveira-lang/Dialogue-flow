@@ -1,5 +1,7 @@
 # Modo deus — arquitetura evolutiva e mapa de oportunidades
 
+Este mapa registra a investigação iniciada em 18/11. Para conferir quais propostas chegaram ao código, quais foram medidas e o que falta validar no Android, consulte a [passagem de bastão de 21/11](HANDOFF.md).
+
 Investigação de 18/11/2026. Objetivo: transformar POCO X8 Pro Max + Termux + Claude (app, Claude Code na nuvem) +
 conector MCP numa ferramenta que **entende, age, observa e cresce** sobre aparelhos, computadores, redes e contas
 autorizadas. Legenda de estado: ✅ funciona hoje · 🧪 construído e testado em simulação (falta o POCO) ·

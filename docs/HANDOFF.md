@@ -2,6 +2,8 @@
 
 Este guia acompanha a revisão de 21/11/2026. A base auditada foi o merge do PR #21 (`6ba61cc`, serviço 1.0.64). A atualização 1.0.65 sincroniza o grafo usado nas missões e o pacote instalável. Consulte o SHA do pacote para distinguir alterações que compartilharam o número 1.0.64.
 
+**Pacote de referência** · [commit instalável 5237933](https://github.com/cauetakahashideoliveira-lang/Dialogue-flow/commit/52379333a86d8bfdefcc924ebaae648763a8f90c). O ZIP da versão 1.0.65 contém 65 arquivos. O SHA-256 é `c4058a18f43cff83d24d8e1a6156cfbb1850fd461e2aba97cabd9c7909071adc`. Duas compilações em um checkout separado produziram o mesmo ZIP que o GitHub Actions. O grafo embarcado é idêntico ao grafo do repositório, com 1.820 nós e 4.231 relações. A consulta ao POCO de referência nesta revisão ainda informou 1.0.64.
+
 **Primeira hora de um novo dev.** Clone a branch padrão, rode o cliente MCP simulado e inicie a Central local com uma passkey virtual. O procedimento inclui as versões, as dependências e os resultados esperados. [Guia de contribuição](../CONTRIBUTING.md)
 
 ## Arquitetura
@@ -48,6 +50,7 @@ As opções padrão são consultar o servidor, ler o estado do celular, consulta
 | Amostra de 20/11/2026 | Resultado publicado e interpretação |
 |---|---|
 | 142 execuções em 55 casos multidomínio | 54 respostas de raciocínio, 10 missões, 6 operações de calculadora e 72 tentativas de xadrez. O relatório e os CSV podem ser recalculados dentro de uma cópia extraída do ZIP com `python analisar.py`. Cada família tem seu próprio critério de acerto. [Dados, casos e instruções](../benchmarks/2026-11-20-multidominio/) |
+| 18 problemas de raciocínio em três perfis | O conteúdo das respostas foi correto nos 18 casos em cada perfil. Com esforço alto, o JSON diretamente utilizável passou de 7/18 no formato livre para 18/18 com esquema. A mediana foi de 2,15 s no formato livre e de 2,19 s com esquema. [Relatório multidomínio](../benchmarks/2026-11-20-multidominio/Bateria_POCO.zip) |
 | 160 missões de consulta no mesmo POCO | Os mesmos 40 pedidos foram repetidos duas vezes por versão. Acertos totais passaram de 66/80 para 80/80. Na candidata, 60/60 pedidos viáveis foram concluídos e 20/20 inviáveis foram interrompidos, com zero operações extras. [Registros e gabarito](../benchmarks/2026-11-20-planejador/) |
 | Latência das mesmas missões | A mediana de ponta a ponta passou de 5,55 s para 5,26 s e o P95 de 7,29 s para 6,65 s. Nos 46 pares viáveis concluídos por ambas as versões, a diferença mediana foi **+15,5 ms**. O ganho demonstrado foi concluir mais pedidos corretamente. As versões rodaram em blocos no mesmo aparelho. [Protocolo](../benchmarks/2026-11-20-planejador/protocolo.md) |
 | Xadrez e telas | Na bateria de busca pura, 200 e 500 ms resolveram os mesmos 24/24 problemas; 50 ms resolveu 23/24. O diário registra separadamente uma partida bullet contra o robô Máximo (3200), com mate em 65 lances. Os tempos do motor puro e de uma partida com leitura e toques medem coisas diferentes. [Relatório da bateria](../benchmarks/2026-11-20-multidominio/Bateria_POCO.zip) · [partidas registradas](estado-atual.md) |
@@ -82,20 +85,20 @@ Na revisão, passaram **172 testes Python** e **6 testes de contrato do planejad
 
 ## Publicar no celular (o ciclo que se repete)
 
-O celular instala **o `dist/controle-ir.zip` de um commit** — não o código solto. Sempre:
+O atualizador do Android instala o arquivo **`dist/controle-ir.zip` de um commit específico**. O procedimento é o seguinte.
 
-1. Suba a versão em `controle-ir/controle_ir/__init__.py` (para conferir depois).
-2. `bash ferramentas/empacotar.sh` (gera `dist/controle-ir.zip`) — **antes** do commit.
-3. Testes passando; `git commit` e `git push`.
-4. No Claude (conector), `atualizar_sistema(ref=<hash completo do commit>)` — o celular baixa
+1. Atualize a versão em `controle-ir/controle_ir/__init__.py` e adicione os fontes novos ao índice do Git.
+2. Execute `bash ferramentas/empacotar.sh` e confira com `bash ferramentas/empacotar.sh --verificar`.
+3. Publique o ZIP junto com o manifesto. Nas branches com empacotamento automático, aguarde o commit do workflow.
+4. No conector do ChatGPT ou do Claude, `atualizar_sistema(ref=<hash completo do commit>)` — o celular baixa
    `<repositório>/raw/<hash>/dist/controle-ir.zip`, guarda a versão anterior e reinicia em ~1 min.
 5. Confira com `consultar` (campo `servidor.versao`). Para voltar atrás: atalho "Reverter Controle IR" no celular.
 
-O repositório precisa ser **público** (o download é sem login).
+O atualizador atual faz download anônimo. Use uma origem pública para esse caminho de instalação.
 
-## Central de Controle (Cloudflare)
+## Central de Controle no Cloudflare
 
-O gateway MCP escolhe o primeiro aparelho cadastrado que esteja ativo, por ordem de criação. Para desenvolver e operar um segundo ambiente de forma independente, use a Central da conta do novo dev e pareie o telefone dele ali. O teste local usa um Worker e um banco próprios a cada execução.
+O gateway MCP escolhe o primeiro aparelho cadastrado que esteja sem revogação, por ordem de criação. Para desenvolver e operar um segundo ambiente de forma independente, use a Central da conta do novo dev e pareie o telefone dele ali. O teste local usa um Worker e um banco próprios a cada execução.
 
 - Worker `painel-casa` (`painel/wrangler.jsonc`). Recursos: D1 `painel` (`painel/schema.sql`), KV `OAUTH_KV`,
   Durable Object `Canal` (migração `v1`), assets em `public/`.
@@ -124,9 +127,9 @@ Na revisão de 21/11, uma busca por formatos conhecidos de chaves privadas, toke
 | Termux, Termux:API, Termux:Widget, Termux:Boot (F-Droid) + Shizuku | apps | README → "Instalação" |
 | Serviço `controle-ir` | `~/controle-ir`, config em `~/.controle-ir` | linha de instalação do README |
 | Chave da Anthropic | `~/.controle-ir/anthropic.key` | no Termux: `read -rsp "Chave: " K; printf %s "$K" > ~/.controle-ir/anthropic.key; chmod 600 ~/.controle-ir/anthropic.key; unset K` |
-| llama.cpp otimizado (dotprod/i8mm) | `~/.controle-ir/llama.cpp/build/bin` | `pkg install cmake git clang`; `git clone --depth 1 https://github.com/ggml-org/llama.cpp`; `cmake -B build -DGGML_NATIVE=ON -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build -j8 --target llama-server llama-bench` (o pacote `llama-cpp` do Termux é genérico e ~4,5x mais lento) |
+| llama.cpp otimizado (dotprod/i8mm) | `~/.controle-ir/llama.cpp/build/bin` | `pkg install cmake git clang`; `git clone --depth 1 https://github.com/ggml-org/llama.cpp ~/.controle-ir/llama.cpp`; `cd ~/.controle-ir/llama.cpp && cmake -B build -DGGML_NATIVE=ON -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build -j8 --target llama-server llama-bench` (o pacote `llama-cpp` do Termux é genérico e ~4,5x mais lento) |
 | Modelos locais | `~/.controle-ir/modelos/` | Qwen2.5-3B-Instruct Q4_0 (`huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF`, arquivo `qwen2.5-3b-instruct-q4_0.gguf`); também há o 1.5B |
-| Servidor do modelo local | processo `llama-server` em 127.0.0.1:8080 | `B=~/.controle-ir/llama.cpp/build/bin; LD_LIBRARY_PATH=$B setsid nohup $B/llama-server -m ~/.controle-ir/modelos/qwen2.5-3b-q4_0.gguf --host 127.0.0.1 --port 8080 -c 1024 -t 6 -tb 6 --no-webui > ~/.controle-ir/piloto/llama.log 2>&1 &` |
+| Servidor do modelo local | processo `llama-server` em 127.0.0.1:8080 | `B=~/.controle-ir/llama.cpp/build/bin; LD_LIBRARY_PATH=$B setsid nohup $B/llama-server -m ~/.controle-ir/modelos/qwen2.5-3b-instruct-q4_0.gguf --host 127.0.0.1 --port 8080 -c 1024 -t 6 -tb 6 --no-webui > ~/.controle-ir/piloto/llama.log 2>&1 &` |
 | Stockfish 19 | `pkg install stockfish` | idem |
 | Quiz de teste | servidor em 127.0.0.1:**8766** (a 8765 é do serviço) | `cd ~/controle-ir/capacidades/tela/quiz && setsid nohup python -m http.server 8766 --bind 127.0.0.1 &` (religar após cada atualização) |
 | Memória e gravador do piloto | `~/.controle-ir/piloto/` (`memoria.json`, `rodadas.jsonl`) | criados sozinhos |
@@ -151,15 +154,18 @@ xadrez — vitórias contra os robôs de 1200 (blitz), 2500 e **3200 "Máximo" (
 
 - O sistema fica **desarmado** por padrão: pelo conector só infravermelho, consultas e travar. Armar é só no
   celular/Central, com a digital. A aprovação remota, se habilitada pelo dono, exige o código do autenticador. O pareamento transfere a armação para a Central.
-- Agente de tela: apps de banco/pagamento/senha (lista em `tela/principal.py`, `BLOQUEADOS_PADRAO`, editável em
-  `~/.controle-ir/tela_bloqueados.json`) **não são lidos nem tocados**.
+- O agente de tela aplica a lista de apps protegidos durante a leitura e a interação. A configuração padrão está em `tela/principal.py` (`BLOQUEADOS_PADRAO`) e pode ser consultada no aparelho em `~/.controle-ir/tela_bloqueados.json` quando personalizada.
 - O piloto de xadrez padrão do MCP verifica a atividade de robô. O atalho Stockfish usa o modo de tabuleiro local descrito acima. O estado do piloto informa a configuração em uso.
 - Nunca colocar chaves/tokens no repositório nem no chat.
 
 ## Continuar em OUTRO repositório
 
-1. Crie o repositório novo (público) e envie tudo: `git remote add novo <url>` e
-   `git push novo --all && git push novo --tags`.
+1. Para colaborar neste repositório, use o fluxo de branch ou fork do guia de contribuição. Para manter uma cópia independente com todas as branches e tags, crie um repositório vazio na conta de destino e copie os refs a partir de um clone bare. Configure a branch padrão no destino depois da cópia.
+
+   ```bash
+   git clone --bare https://github.com/cauetakahashideoliveira-lang/Dialogue-flow.git Dialogue-flow.git
+   git -C Dialogue-flow.git push https://github.com/SEU-USUARIO/SEU-REPO.git 'refs/heads/*:refs/heads/*' 'refs/tags/*:refs/tags/*'
+   ```
 2. No **celular**, aponte as atualizações para o repositório novo, sem republicar nada:
    `echo https://github.com/<dono>/<repo> > ~/.controle-ir/repositorio` (ou variável `CONTROLE_IR_REPO`).
    A partir daí `atualizar_sistema(ref)` baixa do repositório novo.

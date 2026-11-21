@@ -3,7 +3,7 @@
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
 ## 21/11 — atualização e correções (branch `ccr-201914aa-m2jj33`)
-- **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → **1.0.67** (`f55b4ef`) pelo `atualizar_sistema`. O canal
+- **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → 1.0.67 (`f55b4ef`) → 1.0.68 (`42ff118`) → **1.0.69** (`a17970f`) pelo `atualizar_sistema`. O canal
   direto voltou sozinho a cada reinício; aparelhos, catálogo e política ficaram preservados. Conferido com `consultar`
   e com uma missão de leitura (Sonnet, grafo de 1.858 nós). Pareado, armado até a meia-noite, modo autônomo.
 - **Android 16:** o Termux não lê `/proc/uptime` nem `/proc/loadavg` (`Permission denied`); o `CLOCK_BOOTTIME`
@@ -14,7 +14,24 @@ A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padr
   reaproveitado (a 1.0.66 rodou o código novo informando 1.0.65). Desde a 1.0.67 o `instalar.sh` apaga os
   `__pycache__` antes de religar.
 - **Testes:** `testes/test_consistencia.py` (listas de risco iguais no celular e na Central, ferramentas da missão,
-  resumo, estado do celular, cache na atualização): 184 testes Python no total.
+  resumo, estado do celular, cache na atualização) e `testes/test_capacidades_aparelho.py` (download, termômetro,
+  sonar): 196 testes Python no total.
+- **Checagem completa (1.0.68 `42ff118` → 1.0.69 `a17970f`):** canal direto, emissor (pulso neutro e TV volume +1/−1:
+  `sinal_enviado`), os 4 aparelhos (`opcoes` e plano simulado), tela (ler, abrir Configurações, voltar ao início),
+  câmera, microfone, sono, missão e rede funcionando. Encontrado e corrigido:
+  - `diagnostico_rede`: download voltava HTTP 403 (a Cloudflare recusa o urllib sem User-Agent) → User-Agent próprio e
+    OVH de reserva (28 Mbps medidos); a perda até a internet vale pelo melhor de 1.1.1.1 e 8.8.8.8.
+  - `termometro`: uma leitura do Termux:API passou de 15 s com outra chamada em andamento e derrubava a medição →
+    vira amostra ausente. Chamadas ao Termux:API em paralelo travam; rode uma por vez.
+  - `sonar`: no POCO 19 e 18 kHz não chegam ao microfone; 17 kHz chega com ~98 dB de folga. Sem frequência pedida ele
+    desce até a que funciona e lembra dela (`~/.controle-ir/medicoes/sonar.json`). O 1º segundo marcava movimento
+    falso (gravação começa antes do tom) e a referência pela mediana sumia com movimento longo → percentil 10 dos
+    quadros com tom.
+- **Achados sem correção pelo conector:** Termux:Boot não instalado (o início automático fica desligado: instale-o do
+  F-Droid, abra uma vez e rode `controle-ir inicio-automatico sim` no Termux); no celular só há os modelos Qwen2.5
+  1.5B (o 3B do guia de passagem não está lá); `controle-ir painel …` é recusado pelo conector por ser administrativo
+  (de propósito). Rede: Wi-Fi 5 GHz em −68 a −72 dBm, ~23–31 ms até o roteador, 10 aparelhos na rede local (2
+  prováveis câmeras IP); túnel de reserva da Central respondendo (HTTP 405 a um GET, como esperado).
 - **Pendente (decisão do dono):** merge na branch padrão. Até lá, a linha de instalação do README baixa a 1.0.65.
 
 ## Resumo (fim do dia 19/11)

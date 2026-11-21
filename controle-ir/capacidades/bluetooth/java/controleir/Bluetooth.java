@@ -34,7 +34,7 @@ import java.util.Set;
 public class Bluetooth {
     static final Map<String, Map<String, Object>> achados = new LinkedHashMap<String, Map<String, Object>>();
     static final List<String> avisos = new ArrayList<String>();
-    static int falhaBusca = 0;
+    public static int falhaBusca = 0;
     static int lotes = 0;
 
     public static void main(String[] args) {
@@ -117,7 +117,7 @@ public class Bluetooth {
                 if (desfazer) invocar(a, "disableBLE");
                 s.put("busca", falhaBusca == 0 ? "ok" : "falhou");
                 if (falhaBusca != 0) s.put("codigo_falha", falhaBusca);
-                s.put("proximos", new ArrayList<Object>(achados.values()));
+                s.put("proximos", proximos());
                 fim(s);
             }
         }, ms);
@@ -171,7 +171,7 @@ public class Bluetooth {
         }
     }
 
-    static boolean ligado(BluetoothAdapter a) {
+    public static boolean ligado(BluetoothAdapter a) {
         try {
             return a.isEnabled();
         } catch (Throwable t) {
@@ -184,7 +184,7 @@ public class Bluetooth {
         return invocar(a, "isLeEnabled") == Boolean.TRUE;
     }
 
-    static BluetoothLeScanner scanner(BluetoothAdapter a) {
+    public static BluetoothLeScanner scanner(BluetoothAdapter a) {
         try {
             return a.getBluetoothLeScanner();
         } catch (Throwable t) {
@@ -205,7 +205,7 @@ public class Bluetooth {
     }
 
     // ------------------------------------------------------------------ dados
-    static List<Object> pareados(BluetoothAdapter a) {
+    public static List<Object> pareados(BluetoothAdapter a) {
         List<Object> lista = new ArrayList<Object>();
         try {
             Set<BluetoothDevice> ds = a.getBondedDevices();
@@ -253,7 +253,7 @@ public class Bluetooth {
         }
     }
 
-    static synchronized void anotar(ScanResult r) {
+    public static synchronized void anotar(ScanResult r) {
         BluetoothDevice d = r.getDevice();
         if (d == null) return;
         String end = d.getAddress();
@@ -313,11 +313,11 @@ public class Bluetooth {
         return s.toString();
     }
 
-    static void aviso(String a) {
+    public static synchronized void aviso(String a) {
         if (!avisos.contains(a) && avisos.size() < 20) avisos.add(a);
     }
 
-    static String causa(Throwable t) {
+    public static String causa(Throwable t) {
         while (t.getCause() != null) t = t.getCause();
         String s = t.getClass().getSimpleName() + (t.getMessage() != null ? ": " + t.getMessage() : "");
         return s.length() > 200 ? s.substring(0, 200) : s;
@@ -332,14 +332,30 @@ public class Bluetooth {
     }
 
     // ------------------------------------------------------------------ JSON (sem dependências)
+    /** Começo de uma busca nova (o app reaproveita o processo entre buscas). */
+    public static synchronized void limpar() {
+        achados.clear();
+        avisos.clear();
+        falhaBusca = 0;
+        lotes = 0;
+    }
+
+    public static synchronized List<Object> proximos() {
+        return new ArrayList<Object>(achados.values());
+    }
+
+    public static synchronized void anexarAvisos(Map<String, Object> saida) {
+        if (!avisos.isEmpty()) saida.put("avisos", new ArrayList<String>(avisos));
+    }
+
     static void fim(Map<String, Object> saida) {
-        if (!avisos.isEmpty()) saida.put("avisos", avisos);
+        anexarAvisos(saida);
         System.out.println(json(saida));
         System.out.flush();
         System.exit(0);
     }
 
-    static String json(Object o) {
+    public static String json(Object o) {
         StringBuilder s = new StringBuilder();
         escrever(s, o);
         return s.toString();

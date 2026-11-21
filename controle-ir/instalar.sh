@@ -2,6 +2,9 @@
 # Instalador do Controle IR para Termux (Android).
 # Pode ser executado de novo para atualizar: mantém aparelhos, catálogo ampliado e segredo.
 DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
+# O ZIP grava todos os arquivos com a mesma data (1980) para sair igual a cada geração. Um fonte novo com o mesmo
+# tamanho do antigo (ex.: só a versão mudou) faria o Python reaproveitar o .pyc da versão anterior: apaga os caches.
+find "$DIR" -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
 
 etapa() { printf '\n\033[1;36m▶ %s\033[0m\n' "$1"; }
 ok() { printf '  \033[32m✔\033[0m %s\n' "$1"; }

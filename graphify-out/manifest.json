@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795267580.2684674,
-    "seen": 1795267593.4010963,
-    "ast_hash": "d8fd16bf0d6e40543934004d5ee162b4",
+    "mtime": 1795267861.01686,
+    "seen": 1795267863.0602837,
+    "ast_hash": "7dbdd4b6f93cbed941c6dc7266c35713",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -102,9 +102,9 @@
     "semantic_hash": "60460a62d7f954e6223f31b43b81e74e"
   },
   "controle-ir/instalar.sh": {
-    "mtime": 1795266209.250615,
-    "seen": 1795267593.4011202,
-    "ast_hash": "0f776bfc13e95d8bc2b69382229eb471",
+    "mtime": 1795267851.8412273,
+    "seen": 1795267863.0603352,
+    "ast_hash": "65937e443bddaa18c589df1d4e053269",
     "semantic_hash": ""
   },
   "ferramentas/construir_catalogo.py": {
@@ -576,9 +576,9 @@
     "semantic_hash": ""
   },
   "testes/test_consistencia.py": {
-    "mtime": 1795267531.2345555,
-    "seen": 1795267593.4011352,
-    "ast_hash": "3f3af0dfc8614d4919bebd6343e6748a",
+    "mtime": 1795267841.7105417,
+    "seen": 1795267863.0603573,
+    "ast_hash": "83d29f06f97c5b5a9048dc253a02fdfc",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

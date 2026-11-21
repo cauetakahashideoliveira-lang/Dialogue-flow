@@ -7,9 +7,11 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -166,6 +168,33 @@ class TestEstadoCelularSemProc(unittest.TestCase):
                       "carga_cpu_1min", "termux_api_disponivel"):
             self.assertIn(campo, dados)
         self.assertIsInstance(dados["ligado_ha_horas"], float)
+
+
+class TestAtualizacaoRecompila(unittest.TestCase):
+    """Os arquivos do ZIP têm data fixa (1980). Sem apagar os __pycache__, um fonte novo do mesmo tamanho (só a
+    versão mudou) reaproveita o .pyc antigo: em 21/11 o POCO rodava o código da 1.0.66 dizendo 1.0.65."""
+
+    @staticmethod
+    def _versao(raiz: str) -> str:
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONDONTWRITEBYTECODE"}
+        r = subprocess.run([sys.executable, "-c", "import pacote_teste; print(pacote_teste.v)"], cwd=raiz,
+                           capture_output=True, text=True, timeout=30, env=env)
+        return r.stdout.strip()
+
+    def test_instalador_apaga_os_caches_antes_de_religar(self):
+        linha = next(ln for ln in (RAIZ / "controle-ir" / "instalar.sh").read_text("utf-8").splitlines()
+                     if ln.startswith("find ") and "__pycache__" in ln)
+        data_do_zip = 315532800  # 01/01/1980, a data que o unzip aplica aos arquivos do pacote
+        with tempfile.TemporaryDirectory() as tmp:
+            ini = Path(tmp) / "pacote_teste" / "__init__.py"
+            ini.parent.mkdir()
+            for versao in ("1.0.65", "1.0.66"):
+                ini.write_text(f'v = "{versao}"\n')
+                os.utime(ini, (data_do_zip, data_do_zip))
+                self.assertEqual(self._versao(tmp), "1.0.65")  # 2ª volta: o .pyc antigo passa por válido
+            subprocess.run(["bash", "-c", linha], env={**os.environ, "DIR": tmp}, check=True, timeout=30)
+            self.assertFalse((ini.parent / "__pycache__").exists())
+            self.assertEqual(self._versao(tmp), "1.0.66")
 
 
 if __name__ == "__main__":

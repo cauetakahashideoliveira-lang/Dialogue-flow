@@ -5,6 +5,7 @@ Rodar na raiz: python3 -m unittest testes.test_capacidades_aparelho
 from __future__ import annotations
 
 import importlib.util
+import json
 import io
 import os
 import shutil
@@ -197,6 +198,65 @@ class TestSonarFrequencia(unittest.TestCase):
 
         self.assertIn("erro", self.m.escolher_e_testar({"acao": "testar"}, testar))
         self.assertEqual(chamadas, [19000])
+
+
+@unittest.skipUnless(shutil.which("javac") and shutil.which("java"), "sem JDK")
+class TestTelaDicaDoCampo(unittest.TestCase):
+    """O leitor (Tela.java) digitava somando o texto atual do campo: no WhatsApp o campo vazio expõe a dica
+    "Mensagem" como texto e a mensagem saiu "MensagemTeste do Claude…" (21/11). Compila o método mostraDica do
+    próprio Tela.java contra uma imitação mínima do AccessibilityNodeInfo e confere os casos."""
+
+    STUB = """package android.view.accessibility;
+public class AccessibilityNodeInfo {
+    public CharSequence texto, dicaTexto; public boolean mostrando, editavel = true, api26 = true;
+    public int sel = -1;
+    public CharSequence getText() { return texto; }
+    public boolean isEditable() { return editavel; }
+    public int getTextSelectionStart() { return sel; }
+    public int getTextSelectionEnd() { return sel; }
+    public boolean isShowingHintText() { if (!api26) throw new UnsupportedOperationException(); return mostrando; }
+    public CharSequence getHintText() { if (!api26) throw new UnsupportedOperationException(); return dicaTexto; }
+}
+"""
+    CASOS = [  # (texto, dica declarada, aviso de dica, seleção, API 26+, é dica?)
+        ("Mensagem", "Mensagem", True, -1, True, True),   # campo padrão do Android
+        ("Mensagem", "Mensagem", False, 0, True, True),   # sem o aviso, mas o texto é a dica declarada
+        ("Mensagem", None, False, -1, True, True),        # sem aviso nem dica declarada, sem cursor no texto
+        ("Oi", "Mensagem", False, 2, True, False),        # texto de verdade: digitar acrescenta
+        ("Mensagem", None, False, 8, True, False),        # alguém escreveu "Mensagem" de verdade
+        ("", "Mensagem", True, -1, True, False),          # vazio
+        ("Oi", None, False, 2, False, False),             # Android antigo
+    ]
+
+    def test_dica_nao_entra_no_texto_digitado(self):
+        fonte = (CAPS / "tela" / "java" / "controleir" / "Tela.java").read_text(encoding="utf-8")
+        i = fonte.index("    static boolean mostraDica(")
+        n, k = 0, fonte.index("{", i)
+        for k in range(k, len(fonte)):
+            n += {"{": 1, "}": -1}.get(fonte[k], 0)
+            if n == 0:
+                break
+        casos = "\n".join(
+            f'        caso({json.dumps(t)}, {json.dumps(d) if d else "null"}, {str(m).lower()}, {s}, '
+            f'{str(a).lower()}, {str(e).lower()});' for t, d, m, s, a, e in self.CASOS)
+        teste = ("import android.view.accessibility.AccessibilityNodeInfo;\npublic class Teste {\n" + fonte[i:k + 1]
+                 + "\n    static void caso(String t, String d, boolean m, int s, boolean a, boolean e) {\n"
+                   "        AccessibilityNodeInfo n = new AccessibilityNodeInfo(); n.texto = t; n.dicaTexto = d;\n"
+                   "        n.mostrando = m; n.sel = s; n.api26 = a;\n"
+                   "        if (mostraDica(n, t) != e) { System.out.println(\"falhou: \" + t + \" \" + s); System.exit(1); }\n"
+                   "    }\n    public static void main(String[] x) {\n" + casos + "\n        System.out.println(\"ok\");\n    }\n}\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            pasta = Path(tmp)
+            stub = pasta / "android" / "view" / "accessibility" / "AccessibilityNodeInfo.java"
+            stub.parent.mkdir(parents=True)
+            stub.write_text(self.STUB, encoding="utf-8")
+            (pasta / "Teste.java").write_text(teste, encoding="utf-8")
+            c = subprocess.run(["javac", "-d", str(pasta / "out"), str(stub), str(pasta / "Teste.java")],
+                               capture_output=True, text=True, timeout=120)
+            self.assertEqual(c.returncode, 0, c.stderr[-800:])
+            r = subprocess.run(["java", "-cp", str(pasta / "out"), "Teste"], capture_output=True, text=True,
+                               timeout=60)
+            self.assertEqual(r.stdout.strip().splitlines()[-1:], ["ok"], r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

@@ -95,6 +95,21 @@ preferências. A configuração pessoal conferida ao final foi nível 20 e tempo
     ("Server is not running") — **refazer T5–T8 e T12 com o Shizuku de pé**. Simulados (`testes/test_objetivo.py`):
     pista, modelo + memória, abrir, notificação, cortina, rolar, toque transitório/estrutural, diálogo, proibidos,
     laço, digitar, app bloqueado.
+- **Otimização, ciclo 2 (1.0.79–1.0.84), testes reais no POCO** (tempos "no celular" = dentro do aparelho; "total" =
+  relógio do container incluindo turnos do Claude):
+  - T5 cortina por cima → recolhe e segue: 8,1 s total (2,25 s no celular). T6 alvo abaixo da dobra → rola e acha
+    (4,5 s; o passo de rolar levou 3,4 s esperando a lista assentar: próximo alvo). T7 app lento (Play Store fria):
+    a 1.0.79 deu **falso sucesso** (apertou voltar no app anterior e o "Pesquisar" da tela inicial "concluiu") →
+    1.0.80 espera o app (1,7 s) e só conclui dentro dele: 2,3 s. T8 toque sem efeito → 2 tentativas e alternativa:
+    2,1 s. T2 sem pistas (modelo do celular): 1.0.80 falhou (o modelo só via rolar/voltar: o título não é clicável,
+    a linha é; e o cérebro lê 1 dígito) → 1.0.81 acerta com 1 consulta (3,3 s) e, aprendido, 1,4 s sem modelo.
+    T4 WhatsApp (ler a conversa Você, sem enviar): ciclo chat↔informações (1.0.81) → corte de ciclo e busca/Meta
+    AI fora das opções (1.0.82); desvio por outra conversa aprendido como rota → memória só do caminho certo e
+    pista fora da tela é procurada antes do modelo (1.0.83–1.0.84): 3,2 s, 0 consultas, "Enviar" nunca tocado.
+  - T12 composto (versão, armazenamento, bateria, rede): passo a passo 13,3 s / 3 chamadas → objetivo +
+    estado_celular num lote 6,4 s (−52%). T10/T11: o cliente do Claude executa as chamadas de um lote **em série**
+    (B começou 0,74 s depois de A): paralelismo real só dentro do celular; cada chamada extra num lote ~0,7 s.
+  - Queda do conector ("Not Found") por ~1–2 min durante o ciclo, voltou sozinha.
 - **Achados sem correção pelo conector:** Termux:Boot não instalado (o início automático fica desligado: instale-o do
   F-Droid, abra uma vez e rode `controle-ir inicio-automatico sim` no Termux); no celular só há os modelos Qwen2.5
   1.5B (o 3B do guia de passagem não está lá); `controle-ir painel …` é recusado pelo conector por ser administrativo

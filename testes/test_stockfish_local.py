@@ -8,7 +8,7 @@ import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +83,49 @@ class TestStockfishLocal(unittest.TestCase):
             estudo_xadrez.estudar(motor)
         self.assertEqual(motor.lance.call_args.args[0], estudo_xadrez.INICIAL)
 
+    def test_configurar_no_terminal_e_no_estudo_preserva_posicao(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(cli, "PASTA", Path(tmp)), redirect_stdout(io.StringIO()):
+            self.assertEqual(estudo_xadrez.ler_preferencias(cli.PASTA), estudo_xadrez.Preferencias())
+            with patch("builtins.input", side_effect=["21", "0", "nan", "0,001", "0,05"]):
+                self.assertEqual(cli.main(["stockfish", "configurar"]), 0)
+            posicao = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+            motor = Mock()
+            motor.fen_apos_lance_legal.return_value = posicao
+            with patch("builtins.input", side_effect=["e2e4", "configurar", "20", "1,5", "", "sair"]):
+                self.assertEqual(estudo_xadrez.estudar(motor), "sair")
+            self.assertEqual(motor.definir_nivel.call_args_list, [call(0), call(20)])
+            self.assertEqual(motor.lance.call_args_list, [call(estudo_xadrez.INICIAL, 50), call(posicao, 1500)])
+            with patch("builtins.input", side_effect=["", ""]):
+                self.assertEqual(estudo_xadrez.configurar(cli.PASTA), estudo_xadrez.Preferencias(20, 1500))
+            with patch("builtins.input", side_effect=["1", "31", "30"]):
+                self.assertEqual(estudo_xadrez.configurar(cli.PASTA), estudo_xadrez.Preferencias(1, 30000))
+            with patch("builtins.input", side_effect=["5", EOFError()]):
+                self.assertEqual(cli.main(["stockfish", "configurar"]), 0)
+            self.assertEqual(estudo_xadrez.ler_preferencias(cli.PASTA), estudo_xadrez.Preferencias(1, 30000))
+            with patch("builtins.input", side_effect=["", "auto"]):
+                self.assertEqual(estudo_xadrez.configurar(cli.PASTA), estudo_xadrez.Preferencias(1))
+
+    def test_nivel_uci_e_tempo_do_piloto_no_fim_da_partida(self):
+        tela = modulo_embutido(ROOT / "controle-ir/capacidades/tela", "tela")
+        m = tela._modulo_piloto()
+        with patch.object(m.Motor, "_mandar") as enviar:
+            m.Motor.definir_nivel(object.__new__(m.Motor), 0)
+            enviar.assert_called_once_with("setoption name Skill Level value 0")
+        casas = {f"{c}{r}": (x, 8-r, m.INICIAL[(8-r)*8+x].replace(".", ""))
+                 for r in range(1, 9) for x, c in enumerate("abcdefgh")}
+        for rodadas, fixo, esperado in [(0, True, 1500), (30, True, 1500), (50, True, 1500),
+                                         (0, False, 1500), (30, False, 750), (50, False, 100)]:
+            with self.subTest(rodadas=rodadas, fixo=fixo), patch.object(m, "Motor") as fabrica:
+                piloto = m.Piloto({"tabuleiro_local": lambda: True, "casas": lambda: casas,
+                                   "aguardar": lambda c, ms: c})
+                piloto.cfg = {"nivel": 0, "ms_lance": 1500, "tempo_fixo": fixo, "tabuleiro_local": True}
+                piloto.rodadas.extend([{}] * rodadas)
+                motor = fabrica.return_value
+                motor.lance.return_value = None
+                piloto._laco_xadrez()
+                motor.definir_nivel.assert_called_once_with(0)
+                motor.lance.assert_called_once_with(estudo_xadrez.INICIAL, esperado)
+
     def test_pedido_cancelado_nao_inicia_e_outro_piloto_nao_e_interrompido(self):
         with tempfile.TemporaryDirectory() as pasta, patch.object(servidor,"ServidorMCP") as mcp:
             srv = servidor.criar_servidor(Mock(pasta=Path(pasta)), "teste", porta=0, token_local="local")
@@ -102,6 +145,12 @@ class TestStockfishLocal(unittest.TestCase):
                 ident = post("preparar")["pedido"]
                 chamada.return_value = {"structuredContent":{"erro":"bloqueado"}}
                 self.assertEqual(post("iniciar",pedido=ident),{"erro":"bloqueado"})
+                (Path(pasta) / estudo_xadrez.ARQUIVO).write_text('{"nivel": 0, "ms_lance": 1250}')
+                chamada.side_effect = [{"structuredContent":{"resultado":{"rodando":False}}},
+                                       {"structuredContent":{"resultado":{"rodando":True}}}]
+                post("iniciar", pedido=ident)
+                cfg = chamada.call_args.args[1]["iniciar"]
+                self.assertEqual((cfg["nivel"], cfg["ms_lance"], cfg["tempo_fixo"]), (0, 1250, True))
             finally:
                 srv.shutdown()
                 srv.server_close()

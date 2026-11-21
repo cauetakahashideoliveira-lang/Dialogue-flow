@@ -1,9 +1,81 @@
 """Estudo local com Stockfish e controle do piloto no tabuleiro do Chess.com."""
+import json
 import shutil
 import time
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 INICIAL = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 PECAS = dict(zip("KQRBNPkqrbnp", "♔♕♖♗♘♙♚♛♜♝♞♟"))
+ARQUIVO = "stockfish.json"
+
+
+@dataclass(frozen=True)
+class Preferencias:
+    nivel: int = 20
+    ms_lance: int | None = None
+
+    def resumo(self):
+        if self.ms_lance is None:
+            tempo = "automático (0,5 s no estudo e de 0,2 a 0,1 s no piloto)"
+        else:
+            tempo = f"{self.ms_lance / 1000:g} s por lance".replace(".", ",")
+        return f"Nível {self.nivel}/20 • tempo {tempo}"
+
+
+def ler_preferencias(pasta):
+    try:
+        dados = json.loads((pasta / ARQUIVO).read_text())
+    except (FileNotFoundError, ValueError):
+        return Preferencias()
+    if not isinstance(dados, dict):
+        return Preferencias()
+    nivel, ms = dados.get("nivel"), dados.get("ms_lance")
+    return Preferencias(nivel if type(nivel) is int and 0 <= nivel <= 20 else 20,
+                        ms if type(ms) is int and 50 <= ms <= 30000 else None)
+
+
+def configurar(pasta):
+    atual = ler_preferencias(pasta)
+    print(atual.resumo())
+    print("Enter mantém o valor atual.")
+    while True:
+        valor = input("Nível de habilidade (0 a 20) › ").strip()
+        if not valor:
+            nivel = atual.nivel
+            break
+        try:
+            nivel = int(valor)
+            if 0 <= nivel <= 20:
+                break
+        except ValueError:
+            pass
+        print("Digite um número inteiro de 0 a 20.")
+    while True:
+        valor = input("Tempo por lance em segundos (0,05 a 30, ou auto) › ").strip().lower()
+        if not valor:
+            ms = atual.ms_lance
+            break
+        if valor == "auto":
+            ms = None
+            break
+        try:
+            segundos = float(valor.replace(",", "."))
+            if 0.05 <= segundos <= 30:
+                ms = round(segundos * 1000)
+                break
+        except ValueError:
+            pass
+        print("Digite o tempo em segundos, por exemplo 0,5, ou auto.")
+    nova = Preferencias(nivel, ms)
+    pasta.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(dir=pasta) as tmp:
+        arquivo = Path(tmp) / ARQUIVO
+        arquivo.write_text(json.dumps(asdict(nova)) + "\n")
+        arquivo.replace(pasta / ARQUIVO)
+    print("Salvo.", nova.resumo())
+    return nova
 
 
 def mostrar(fen):
@@ -16,9 +88,13 @@ def mostrar(fen):
 
 
 def estudar(motor):
+    from .cli import PASTA
     posicoes = [INICIAL]
-    print("Stockfish • estudo no POCO")
-    print("Sugestão inicial:", motor.lance(INICIAL, 500))
+    prefs = ler_preferencias(PASTA)
+    motor.definir_nivel(prefs.nivel)
+    print("Stockfish •", prefs.resumo())
+    print("Digite configurar para escolher o nível e o tempo de pensamento.")
+    print("Sugestão inicial:", motor.lance(INICIAL, prefs.ms_lance or 500))
     print("Digite um lance (e2e4) ou uma sequência (e2e4 e7e5).")
     print("Enter sugere um lance. Digite voltar para desfazer ou sair para encerrar.")
     print("Chess.com: digite piloto para jogar ou parar para desligar. Se precisar indicar sua vez, use piloto agora.")
@@ -29,12 +105,16 @@ def estudar(motor):
         linha = input(f"{vez} › ").strip().lower()
         if linha in ("sair", "piloto", "piloto agora", "parar"):
             return linha
+        if linha == "configurar":
+            prefs = configurar(PASTA)
+            motor.definir_nivel(prefs.nivel)
+            continue
         if linha == "voltar":
             if len(posicoes) > 1:
                 posicoes.pop()
             continue
         if not linha:
-            lance = motor.lance(atual, 500)
+            lance = motor.lance(atual, prefs.ms_lance or 500)
             print("Sugestão:", lance if lance and lance != "0000" else "partida encerrada")
             continue
         novas = []
@@ -77,10 +157,13 @@ def piloto_local(iniciar, minha_vez=False):
         time.sleep(1)
 
 
-def abrir():
-    from .cli import PACOTE
+def abrir(acao=None):
+    from .cli import PACOTE, PASTA
     from .capacidades import modulo_embutido
     try:
+        if acao == "configurar":
+            configurar(PASTA)
+            return 0
         if not shutil.which("stockfish"):
             print("Instale o motor uma vez no Termux com: pkg install stockfish")
             return 1

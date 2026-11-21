@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795267861.01686,
-    "seen": 1795267863.0602837,
-    "ast_hash": "7dbdd4b6f93cbed941c6dc7266c35713",
+    "mtime": 1795268677.2245288,
+    "seen": 1795268679.5870762,
+    "ast_hash": "4e673ce5aa53a716938529ef94e4ff12",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795266209.2637837,
-    "seen": 1795267593.4011552,
-    "ast_hash": "5f41fca7bfff4c43a236258639666b8f",
+    "mtime": 1795267990.678535,
+    "seen": 1795268679.5871408,
+    "ast_hash": "40b2967c210b9bf2d9467bedfea56d23",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -228,9 +228,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/diagnostico_rede/principal.py": {
-    "mtime": 1795266209.2193644,
-    "seen": 1795267593.40108,
-    "ast_hash": "f75c7909a34bb3c64b0962a6906253f3",
+    "mtime": 1795268345.274519,
+    "seen": 1795268679.587057,
+    "ast_hash": "33b2cdb0c45671b960283aa9dd82678d",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/estado_celular/capacidade.json": {
@@ -306,15 +306,15 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/sonar/capacidade.json": {
-    "mtime": 1795266209.2195604,
-    "seen": 1795267593.4010866,
-    "ast_hash": "868d39444356df0bd22b0793b6cbdaf1",
+    "mtime": 1795268601.3465075,
+    "seen": 1795268679.5870647,
+    "ast_hash": "dc706226a20025c5711a65b1973f90a6",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/sonar/principal.py": {
-    "mtime": 1795266209.2196705,
-    "seen": 1795267593.4010873,
-    "ast_hash": "1aa0f3a0b77386898517041841c2f1c5",
+    "mtime": 1795268669.040332,
+    "seen": 1795268679.5870662,
+    "ast_hash": "4e3dce710f7889746cec4eb340668daa",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/sono/capacidade.json": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/termometro/principal.py": {
-    "mtime": 1795266209.220619,
-    "seen": 1795267593.401095,
-    "ast_hash": "d47435509213d69ad13d6984fff1c05f",
+    "mtime": 1795268669.0387228,
+    "seen": 1795268679.587075,
+    "ast_hash": "41b324155dde71b9a68bae08d07b3cfd",
     "semantic_hash": ""
   },
   "artefatos/central-da-casa.html": {
@@ -579,6 +579,12 @@
     "mtime": 1795267841.7105417,
     "seen": 1795267863.0603573,
     "ast_hash": "83d29f06f97c5b5a9048dc253a02fdfc",
+    "semantic_hash": ""
+  },
+  "testes/test_capacidades_aparelho.py": {
+    "mtime": 1795268660.2665048,
+    "seen": 1795268679.5871193,
+    "ast_hash": "1460038a59b5e8700f34cd9392ea4e84",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

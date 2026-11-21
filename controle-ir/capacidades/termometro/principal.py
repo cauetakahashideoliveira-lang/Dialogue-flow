@@ -17,8 +17,13 @@ DIFERENCA_PADRAO = 2.0  # bateria parada fica ~2 °C acima do ar até calibrar
 
 
 def bateria():
-    r = subprocess.run(["termux-battery-status"], capture_output=True, text=True, timeout=15)
-    return json.loads(r.stdout)
+    """Uma leitura do Termux:API, ou None se ele não responder (às vezes trava alguns segundos quando outra
+    chamada do Termux:API está em andamento: em 21/11 uma leitura passou de 15 s e derrubava a medição)."""
+    try:
+        r = subprocess.run(["termux-battery-status"], capture_output=True, text=True, timeout=15)
+        return json.loads(r.stdout)
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        return None
 
 
 def ler_conf():
@@ -87,7 +92,9 @@ def medir(segundos):
     amostras = []
     fim = time.time() + segundos
     while True:
-        amostras.append(bateria())
+        amostra = bateria()
+        if amostra:
+            amostras.append(amostra)
         if time.time() >= fim:
             break
         time.sleep(min(5, max(0.0, fim - time.time())))

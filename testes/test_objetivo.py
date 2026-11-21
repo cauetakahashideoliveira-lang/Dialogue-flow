@@ -255,6 +255,39 @@ class TestExecutorObjetivo(unittest.TestCase):
              "permitir": ["Enviar"]})
         self.assertEqual(r["estado"], "concluido")  # só com autorização explícita
 
+    def test_pista_vale_uma_vez_e_interruptor_nunca_sem_permissao(self):
+        # 21/11, POCO: a pista "Opções do desenvolvedor" foi tocada de novo na tela seguinte, onde o mesmo rótulo é o
+        # interruptor geral — desligou o modo de desenvolvedor (e o Shizuku caiu). Isso não pode se repetir.
+        telas = {
+            "adicionais": ([el("Configurações adicionais", 50, clic=False), el("Opções do desenvolvedor", 300)],
+                           {"Opções do desenvolvedor": "dev"}),
+            "dev": ([el("Opções do desenvolvedor", 50, clic=False), el("Opções do desenvolvedor", 200),
+                     el("", 200, clic=True, marcado=True, classe="Switch"),
+                     el("Lista", 800, clic=False, rolavel=True, a=1500)],
+                    {"Opções do desenvolvedor": "desligado", "<rolar>": "dev_baixo"}),
+            "dev_baixo": ([el("Depuração USB", 300), el("", 300, clic=True, marcado=True, classe="Switch")], {}),
+            "desligado": ([el("Opções do desenvolvedor desativadas", 50, clic=False)], {}),
+        }
+        cel = Celular(telas, "adicionais")
+        r = self.executor(cel, lambda o: 0).executar(
+            {"objetivo": "abrir opções do desenvolvedor", "app": APP, "concluido": {"texto": "Depuração USB"},
+             "pistas": ["Opções do desenvolvedor"]})
+        self.assertNotEqual(cel.atual, "desligado")
+        self.assertEqual(r["estado"], "concluido")
+        self.assertEqual(sum(p.get("alvo") == "Opções do desenvolvedor" for p in r["passos"]), 1)
+        self.assertTrue(all("Opções do desenvolvedor" not in o for o in self.perguntas))  # nem ao modelo
+
+    def test_interruptor_so_com_permitir(self):
+        telas = {"a": ([el("Wi-Fi", 200), el("", 200, marcado=False, classe="Switch")], {"Wi-Fi": "ligado"}),
+                 "ligado": ([el("Wi-Fi ligado", 50, clic=False)], {})}
+        r = self.executor(Celular(telas, "a")).executar(
+            {"objetivo": "ligar wifi", "app": APP, "concluido": {"texto": "ligado"}, "pistas": ["Wi-Fi"]})
+        self.assertEqual(r["estado"], "parado")
+        r = self.executor(Celular(telas, "a")).executar(
+            {"objetivo": "ligar wifi", "app": APP, "concluido": {"texto": "ligado"}, "pistas": ["Wi-Fi"],
+             "permitir": ["Wi-Fi"]})
+        self.assertEqual(r["estado"], "concluido")
+
     def test_sem_laco_infinito(self):
         telas = {"a": ([el("Ir para B", 100)], {"Ir para B": "b"}), "b": ([el("Ir para A", 100)], {"Ir para A": "a"})}
         r = self.executor(Celular(telas, "a"), lambda o: 0).executar(

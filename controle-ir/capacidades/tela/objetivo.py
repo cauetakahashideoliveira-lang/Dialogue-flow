@@ -135,7 +135,7 @@ class Executor:
         usar_modelo = a.get("modelo", True) is not False and self.decidir is not None
         inicio = self.relogio()
         passos, vistos, falhas, novos = [], {}, {}, {}
-        recuperacoes, consultas, digitado = 0, 0, set()
+        recuperacoes, consultas, digitado, usadas = 0, 0, set(), set()
         chave_mem = f"{app or ''}|{norm(objetivo)}"
         memoria = self._memoria().get(chave_mem, {})
 
@@ -216,25 +216,30 @@ class Executor:
             alvos = [e for e in els if rotulo(e) and not e.get("desativado")
                      and (not app or e.get("pacote") in (app, app_atual))]
             t0 = self.relogio()
-            escolha, via = None, None
+            escolha, via, escolhida_pista = None, None, None
 
             # 0. janela que só atrapalha (diálogo pequeno com "Agora não"/"Pular"…) — nunca OK/Permitir/Aceitar
             if len(alvos) <= 8 and not any(norm(p) in norm(rotulo(e)) for p in pistas for e in alvos):
                 d = next((e for e in alvos if e.get("clicavel") and norm(rotulo(e)) in DISPENSAR
-                          and not falhou(sig, rotulo(e))), None)
+                          and not falhou(sig, rotulo(e)) and not interruptor(e, els)), None)
                 if d:
                     escolha, via = d, "dispensar"
-            # 1. pistas do Claude, na ordem
+            # 1. pistas do Claude, na ordem — cada uma vale UMA vez: a tela seguinte costuma repetir o rótulo no
+            # título ou num interruptor ("Opções do desenvolvedor" → interruptor geral: desligou o modo de
+            # desenvolvedor e derrubou o Shizuku no teste de 21/11)
             if not escolha:
                 for p in pistas:
+                    if p in usadas:
+                        continue
                     e = melhor(alvos, p)
-                    if e and not falhou(sig, rotulo(e)) and not proibido(rotulo(e), permitir):
+                    if e and not falhou(sig, rotulo(e)) and seguro(e, els, permitir):
                         escolha, via = e, "pista"
+                        escolhida_pista = p
                         break
             # 2. memória deste objetivo nesta tela
             if not escolha and memoria.get(sig):
                 e = melhor(alvos, memoria[sig])
-                if e and not falhou(sig, rotulo(e)):
+                if e and not falhou(sig, rotulo(e)) and seguro(e, els, permitir):
                     escolha, via = e, "memoria"
             # 3. campo para digitar o texto autorizado (uma vez por tela)
             if not escolha and digitar and sig not in digitado:
@@ -254,7 +259,7 @@ class Executor:
                 for e in alvos:
                     r = rotulo(e)
                     if (e.get("clicavel") and r and r not in opcoes and not falhou(sig, r)
-                            and not proibido(r, permitir)):
+                            and seguro(e, els, permitir)):
                         opcoes.append(r)
                 opcoes = opcoes[:30]
                 extras = [x for x in (ROLAR, VOLTAR) if not falhou(sig, x)]
@@ -264,6 +269,8 @@ class Executor:
                     idx = self.decidir(objetivo, resumo, opcoes + extras)
                     if idx is not None and 0 <= idx < len(opcoes):
                         escolha, via = melhor(alvos, opcoes[idx]), "modelo"
+                        if escolha is not None and not seguro(escolha, els, permitir):
+                            escolha = None
                     elif idx is not None and 0 <= idx - len(opcoes) < len(extras):
                         via = "modelo"
                         escolha = extras[idx - len(opcoes)]
@@ -285,7 +292,7 @@ class Executor:
                 t.injetar("tecla 4")
                 rotulo_acao, acao = VOLTAR, "voltar"
             else:
-                if proibido(rotulo(escolha), permitir):  # dupla checagem (pista/memória)
+                if not seguro(escolha, els, permitir):  # dupla checagem antes de qualquer toque
                     falhas[(sig, rotulo(escolha))] = 2
                     continue
                 t.injetar(f"tocar {escolha['x']} {escolha['y']}")
@@ -303,7 +310,25 @@ class Executor:
                     falhas[(sig, ROLAR)] = 2  # fim da lista
                 if acao == "tocar" and via != "dispensar":
                     novos[sig] = rotulo_acao
+                if escolhida_pista:
+                    usadas.add(escolhida_pista)
                 anotar(acao, rotulo_acao, via, t0)
+
+
+def interruptor(e, els):
+    """Liga/desliga: o próprio elemento é marcável (Switch, CheckBox) ou a linha dele tem um marcável ao lado
+    (nas Configurações, tocar a linha alterna o interruptor). Mudar um ajuste é efeito, não navegação."""
+    if e.get("marcado") is not None or re.search(r"switch|checkbox|toggle|radio", str(e.get("classe", "")), re.I):
+        return True
+    return any(o is not e and o.get("marcado") is not None and o.get("pacote") == e.get("pacote")
+               and abs(int(o.get("y", -9999)) - int(e.get("y", 0))) <= 60 for o in els)
+
+
+def seguro(e, els, permitir=()):
+    """Pode tocar sem autorização: nem rótulo de efeito externo, nem interruptor (salvo se liberado em `permitir`)."""
+    r = rotulo(e)
+    liberado = any(norm(p) and norm(p) in norm(r) for p in permitir)
+    return not proibido(r, permitir) and (liberado or not interruptor(e, els))
 
 
 def sistema(pacote):

@@ -83,6 +83,11 @@ preferências. A configuração pessoal conferida ao final foi nível 20 e tempo
     textos da tela final. 1.0.78: cortina do sistema é recolhida com `cmd statusbar collapse` (o "voltar" injetado
     não fecha no HyperOS — achado no teste real) e texto de outra janela (notificações) nunca volta à nuvem
     (o 1º teste real devolveu texto da cortina: corrigido e coberto por teste).
+  - *Incidente* (1.0.78, T5+T6): a pista "Opções do desenvolvedor" foi tocada de novo dentro da tela de opções do
+    desenvolvedor, onde o mesmo rótulo é o **interruptor geral** → desligou o modo de desenvolvedor, a depuração sem
+    fio e o Shizuku. 1.0.79: cada pista vale uma vez e interruptores (marcáveis, ou linha com marcável ao lado)
+    nunca são tocados sem `permitir` — nem por pista, memória, modelo ou "dispensar"; teste reproduz o caso.
+    Religar: Sobre o telefone → tocar 7× na versão do OS → Opções do desenvolvedor → Depuração sem fio → Shizuku.
   - *Resultados reais* (mesmo estado inicial, Configurações encerrado): T1 Bluetooth passo a passo 19,3 s / 4
     chamadas / 2 imagens → `sequencia` 9,6 s / 1 / 0 → `objetivo` 7,4 s / 1 / 0 (−62%); T2 versão do Android passo
     a passo 10,6 s / 2 / 0 → `objetivo` 7,3 s / 1 / 0 (−31%), resposta já no resultado. T5+T6 (cortina por cima +

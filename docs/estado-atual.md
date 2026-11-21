@@ -68,6 +68,28 @@ preferências. A configuração pessoal conferida ao final foi nível 20 e tempo
   não der. O analisador do próprio Android leu o APK (`getPackageArchiveInfo`: ok). **Instalar pelo shell exige
   “Instalar via USB”** (`INSTALL_FAILED_USER_RESTRICTED`); pelo instalador do Android, o arquivo vindo do Termux,
   da pasta Downloads ou do app Arquivos dava “problema ao analisar o pacote” (entrega do arquivo, não o APK).
+- **Otimização Cloud ↔ Android, ciclo 1 (1.0.76–1.0.78):**
+  - *Medido* (POCO em dados móveis): turno do modelo sozinho ~2,3 s; chamada ao conector fora do celular ~0,5–0,6 s
+    (cliente + Central + canal, 2 amostras); WebSocket do canal ida e volta mediana 157 ms (p95 213, n=4); dentro
+    do celular: `ver` só árvore 0,15–0,17 s, `tocar` 0,85–1,3 s, `abrir` 0,9–1,2 s. Resposta com imagem 64–82 KB
+    contra 1–5 KB só texto. Gargalo = **turnos da nuvem por ação** (~80% do tempo no passo a passo).
+  - *Telemetria* (1.0.76): `consultar → servidor.canal.desempenho` (ms dentro do celular por chamada, só o nome da
+    ferramenta; RTT do canal medido na hora se houver poucas amostras).
+  - *Imagem desnecessária* (1.0.77): `regioes_visuais` contava contêiner vazio de lista como "área visual" e anexava
+    captura nas Configurações; agora só área que a acessibilidade não descreve (≥ 3 textos dentro = descrita).
+  - *Executor de objetivos* (`tela/objetivo.py`, `acao=objetivo`, 1.0.77): laço perceber→decidir (pistas → memória
+    → digitar → modelo do celular → rolar) → agir → conferir no aparelho; erro transitório tenta 1× de novo, depois
+    alternativa; tela repetida/limite/prazo param; rótulos de efeito externo só com `permitir`; devolve passos e os
+    textos da tela final. 1.0.78: cortina do sistema é recolhida com `cmd statusbar collapse` (o "voltar" injetado
+    não fecha no HyperOS — achado no teste real) e texto de outra janela (notificações) nunca volta à nuvem
+    (o 1º teste real devolveu texto da cortina: corrigido e coberto por teste).
+  - *Resultados reais* (mesmo estado inicial, Configurações encerrado): T1 Bluetooth passo a passo 19,3 s / 4
+    chamadas / 2 imagens → `sequencia` 9,6 s / 1 / 0 → `objetivo` 7,4 s / 1 / 0 (−62%); T2 versão do Android passo
+    a passo 10,6 s / 2 / 0 → `objetivo` 7,3 s / 1 / 0 (−31%), resposta já no resultado. T5+T6 (cortina por cima +
+    alvo abaixo da dobra): 1ª tentativa falhou (ver acima); a repetição com a 1.0.78 parou porque o Shizuku caiu
+    ("Server is not running") — **refazer T5–T8 e T12 com o Shizuku de pé**. Simulados (`testes/test_objetivo.py`):
+    pista, modelo + memória, abrir, notificação, cortina, rolar, toque transitório/estrutural, diálogo, proibidos,
+    laço, digitar, app bloqueado.
 - **Achados sem correção pelo conector:** Termux:Boot não instalado (o início automático fica desligado: instale-o do
   F-Droid, abra uma vez e rode `controle-ir inicio-automatico sim` no Termux); no celular só há os modelos Qwen2.5
   1.5B (o 3B do guia de passagem não está lá); `controle-ir painel …` é recusado pelo conector por ser administrativo

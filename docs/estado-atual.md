@@ -2,7 +2,7 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
-## 22/11 — rodada ponta a ponta: agir primeiro e modo reunião (1.0.99, `0389999`)
+## 22/11 — rodada ponta a ponta: agir primeiro e modo reunião (1.0.99 `0389999` → 1.0.101)
 
 **Onde o tempo se perdia (medido):**
 - **Comando conhecido** ("desliga o ar do quarto"): o Claude Code lê só os primeiros **4096 caracteres** das
@@ -35,6 +35,18 @@ A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padr
   separou a causa: o `settings get global mode_ringer` só reflete a mudança na 3ª leitura (~0,6 s), e a 1.0.99
   lia com 0,3 s. Era atraso de leitura, não recusa. **1.0.100:** relê por até ~2,5 s; `versao_metodos` entra nas
   condições, para o falso negativo aprendido com o código antigo ser revalidado sozinho.
+- **Resultado (1.0.100 no POCO):**
+
+  | Medida | Antes | Depois |
+  |---|---|---|
+  | Comando conhecido: chamadas até o envio | 2 (`opcoes` + `controlar`; no claude.ai, 3) | 1 (`controlar`) |
+  | Comando conhecido: pedido entendido → "sinal enviado" | 5,71 s | 1,23 s |
+  | Modo reunião: até o controle funcionar | ~154 s, 4 comandos, nada reutilizável | 3,47 s, 1 chamada (`modos testar`), validado e com atalho |
+  | Modo reunião: uso depois de criado | — | entrar 1,55 s, sair 1,31 s (2 e 6 chamadas ao Android); widget 1,6 s / 1,7 s |
+  | Intervenções do dono | 0 (ar), 0 (modo) | 0 e 0 |
+
+  As instruções reais, montadas no celular com os 4 aparelhos, têm 7.396 caracteres. Os primeiros 4.096 trazem
+  os 4 nomes, as faixas de valores, `x_luz`, o modo reunião e as regras de segurança inteiras.
 - Testes: `testes/test_modos.py` (13, celular falso que imita o POCO, inclusive o atraso) e
   `test_instrucoes_poem_aparelhos_e_regras_no_trecho_lido`. 271 testes OK.
 

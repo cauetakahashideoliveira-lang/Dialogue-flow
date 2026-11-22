@@ -586,6 +586,9 @@ class TestPilotoVisao(unittest.TestCase):
             return {"texto": t, "desc": "", "clicavel": True, "x": x, "y": 2538, "l": 250, "a": 250, "pacote": "g"}
         return [{"texto": "", "desc": "", "clicavel": True, "x": 640, "y": 906, "l": 1100, "a": 560, "pacote": "g"},
                 {"texto": "9", "desc": "", "clicavel": False, "x": 640, "y": 1660, "l": 60, "a": 80, "pacote": "g"},
+                {"texto": "", "desc": "", "clicavel": True, "x": 692, "y": 2265, "l": 700, "a": 180, "pacote": "g"},
+                {"texto": "Parar Cronômetro (10)", "desc": "", "clicavel": False, "x": 692, "y": 2265, "l": 400,
+                 "a": 80, "pacote": "g"},
                 b("19", 239), b("20", 639), b("16", 1040)]
 
     def test_conta_e_escolha(self):

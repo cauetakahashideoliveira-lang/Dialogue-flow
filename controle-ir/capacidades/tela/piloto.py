@@ -83,8 +83,12 @@ def quiz_da_tela(els, ignorar=IGNORAR, sem_pergunta=False):
     g = max(grupos, key=lambda g: (len(g), sum(o["y"] for o in g) / len(g)))
     topo = min(o["y"] - o["a"] / 2 for o in g)
     usados = {norm(o["texto"]) for o in g}
+    def de_botao(t):  # rótulo de botão ("Parar Cronômetro (10)") não é pergunta (Mental Math, 21/11)
+        return any(abs(c["x"] - t["x"]) <= c["l"] / 2 and abs(c["y"] - t["y"]) <= c["a"] / 2
+                   and c["l"] * c["a"] < 400000 for c in clic)
     perg = [t for t in textos if t["y"] < topo and len((t.get("texto") or "").strip()) >= 8
-            and norm(t.get("texto")) not in usados and norm(t.get("texto")) not in ign]
+            and norm(t.get("texto")) not in usados and not any(norm(t.get("texto")).startswith(i) for i in ign)
+            and not de_botao(t)]
     ops = sorted(g, key=lambda o: (round(o["y"] / 40), o["x"]))
     if not perg:
         if not sem_pergunta:

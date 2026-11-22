@@ -20,6 +20,20 @@ VERSOES = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 
 INSTRUCOES = """Você controla o emissor infravermelho do celular do usuário (POCO/Android) por este conector.
 Responda ao usuário em português.
+QUEM FAZ O QUÊ — você é o gestor: entende o pedido, escolhe o agente do celular, entrega o trabalho inteiro numa
+chamada e só volta quando ele termina ou pede ajuda. Cada chamada sua custa ~4 s; o celular decide em 0,3–2 s.
+Decida SOZINHO, sem o dono precisar apontar:
+- Laço rápido e repetitivo (jogo, quiz, contas com cronômetro, responder/tocar sem parar, testes em série num app):
+  executar_capacidade tela acao=piloto, iniciar={modo:"quiz", app, visao:true se a pergunta for desenhada,
+  continuar:[{se:"texto da tela de fim", tocar:[x,y]}] para emendar rodadas, duracao}. Olhe a tela UMA vez para
+  configurar, inicie e deixe rodando; confira estado de vez em quando; pare só quando o dono mandar. NUNCA jogue
+  passo a passo: com cronômetro você perde (10 s não cabem em 2 turnos seus).
+- Várias telas até um resultado (abrir, achar, ler, conferir): acao=objetivo (concluido, app, pistas, digitar).
+- Sequência já conhecida (atalho, teclado de app, coordenadas fixas): acao=sequencia/rotina numa chamada.
+- Trabalho longo de várias etapas no celular (pesquisar, programar, combinar ferramentas): acao=missao.
+- Infravermelho: controlar. Medições demoradas (sono, termômetro, sonar, bluetooth): capacidade em segundo plano.
+- Mais de 3 chamadas passo a passo previstas, ou decisão com prazo < 10 s → delegue. Se o agente parar com
+  "precisa do Claude", resolva o impasse e devolva a ele.
 - Os aparelhos salvos estão resumidos no fim destas instruções (nome exato, valores aceitos, teclas e macros).
   Se o pedido couber no resumo, chame controlar direto, sem opcoes. Chame opcoes(aparelho) quando precisar do
   último estado enviado, de uma tecla que não está no resumo, ou se o aparelho não aparecer nele.

@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795292815.5901225,
-    "seen": 1795292817.831046,
-    "ast_hash": "8bbf44049c2ca40ac7e60cc43f9c8b5c",
+    "mtime": 1795358126.9670699,
+    "seen": 1795358130.6449382,
+    "ast_hash": "ff4c5ebbc54f0c9fd14a00f2feb66780",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -54,9 +54,9 @@
     "semantic_hash": "91ccb5e9b53ecfb24d8263f1b519395a"
   },
   "controle-ir/controle_ir/mcp.py": {
-    "mtime": 1795290594.1505816,
-    "seen": 1795290649.2945979,
-    "ast_hash": "ee693c7c73cbee0e95387192ebb6c1f4",
+    "mtime": 1795358066.7720857,
+    "seen": 1795358130.6449575,
+    "ast_hash": "220a75f589a5ad1f9038c6b0edddf2f9",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/protocolos.py": {
@@ -162,9 +162,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795287983.9808547,
-    "seen": 1795288259.099757,
-    "ast_hash": "bb253c268d0eb51e9f0d4bd534b38d4e",
+    "mtime": 1795358066.7723687,
+    "seen": 1795358130.645016,
+    "ast_hash": "4144c54612b8a332424f4f1d5fb50d76",
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
@@ -330,9 +330,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/capacidade.json": {
-    "mtime": 1795291236.9151042,
-    "seen": 1795291300.6740084,
-    "ast_hash": "7e73ec267211a4ea4e43aa3bbe4b74a7",
+    "mtime": 1795358066.867077,
+    "seen": 1795358130.6449275,
+    "ast_hash": "7a4409d357c4f7e2b66ee0534a770dae",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/principal.py": {
@@ -444,9 +444,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/piloto.py": {
-    "mtime": 1795292738.7362616,
-    "seen": 1795292817.8310406,
-    "ast_hash": "89d7d61dbf5672147b8467a710a839cc",
+    "mtime": 1795292965.6878686,
+    "seen": 1795358130.6449323,
+    "ast_hash": "296e6912440db20dc80b9eb2e030fc78",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/quiz/quiz.html": {
@@ -732,9 +732,9 @@
     "semantic_hash": ""
   },
   "testes/test_objetivo.py": {
-    "mtime": 1795292754.5920317,
-    "seen": 1795292817.8311224,
-    "ast_hash": "68f4dd187b8756ce46dfc26e60f3d08b",
+    "mtime": 1795292965.7002487,
+    "seen": 1795358130.6450143,
+    "ast_hash": "8f1de4f9e63aa9ef579ac6b0ad879886",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

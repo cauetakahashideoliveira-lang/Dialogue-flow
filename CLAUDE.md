@@ -42,6 +42,12 @@
 - **`/god-mode`** (`.claude/skills/god-mode/`, adaptação AGPL do G0DM0D3): AutoTune, notas, STM, `perguntar` e
   `comparar` vários modelos (OpenRouter com `OPENROUTER_API_KEY` ou servidor local) com síntese pelo Claude. Sem
   os prompts de jailbreak nem o Parseltongue do original. Não confundir com `/godmode` (capacidade máxima).
+- **Delegar é obrigação, não opção** (pedido do dono, 22/11): o Claude é o gestor; quem executa é o agente do
+  celular. Laço rápido/repetitivo (jogo, quiz, contas com cronômetro, testes em série) → `tela acao=piloto`
+  (`visao:true` se a pergunta for desenhada, `continuar` para emendar rodadas) numa chamada; várias telas até um
+  resultado → `acao=objetivo`; sequência conhecida → `sequencia`/`rotina`; trabalho longo → `acao=missao`. Nunca
+  operar passo a passo pela nuvem o que tem cronômetro ou passa de 3 chamadas. A mesma regra está nas instruções
+  do conector (`controle_ir/mcp.py`, "QUEM FAZ O QUÊ").
 - **NUNCA, em teste ou automação de tela:** entrar em Opções do desenvolvedor, Depuração (USB/sem fio), Shizuku,
   Termux, Contas/Segurança/Senhas ou Redefinir; nem tocar em interruptor (liga/desliga) ou ajuste do sistema sem
   pedido explícito do dono. Em 21/11 um teste tocou o interruptor geral das Opções do desenvolvedor e derrubou o

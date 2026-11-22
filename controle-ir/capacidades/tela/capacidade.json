@@ -194,7 +194,7 @@
    },
    "iniciar": {
     "type": "object",
-    "description": "piloto: liga o laço rápido no celular {modo:\"quiz\", app:\"pacote\", prazo:s, chutar, conferir, cerebros:[\"memoria\",\"local\",\"api\"], modelos:[\"claude-haiku-5-5\",\"claude-sonnet-5-5\",\"claude-opus-5-5\"] (do mais fraco ao mais forte), confianca:0.95 (certeza do local para não esperar a API), pensar, esforco, local_url, politica, ignorar:[...], duracao:s} | modo:\"xadrez\" (só na partida contra robô): {modo:\"xadrez\", ms_lance:300, elo, minha_vez, duracao} — Stockfish no celular decide, o piloto lê o tabuleiro, percebe a vez e toca."
+    "description": "piloto: liga o laço rápido no celular. Quiz/jogo: {modo:\"quiz\", app, visao:true (pergunta desenhada: recorta, modelo de visão no celular lê, o celular calcula e toca), modelo_visao, continuar:[{se:'texto da tela de fim', tocar:[x,y]}] (emenda rodadas sozinho), duracao}. piloto: liga o laço rápido no celular {modo:\"quiz\", app:\"pacote\", prazo:s, chutar, conferir, cerebros:[\"memoria\",\"local\",\"api\"], modelos:[\"claude-haiku-5-5\",\"claude-sonnet-5-5\",\"claude-opus-5-5\"] (do mais fraco ao mais forte), confianca:0.95 (certeza do local para não esperar a API), pensar, esforco, local_url, politica, ignorar:[...], duracao:s} | modo:\"xadrez\" (só na partida contra robô): {modo:\"xadrez\", ms_lance:300, elo, minha_vez, duracao} — Stockfish no celular decide, o piloto lê o tabuleiro, percebe a vez e toca."
    },
    "parar": {
     "type": "boolean",

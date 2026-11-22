@@ -124,6 +124,14 @@ preferências. A configuração pessoal conferida ao final foi nível 20 e tempo
   pista casava com o próprio campo digitado. Forçar parada/limpar/desativar/desligar entram nos proibidos. Final:
   com `pistas` + `digitar:{texto, depois_de}` o caminho completo sai em **7,5 s, 0 consultas** (antes: 72 s e
   falha); sem pistas, o Opus resolveu sozinho um impasse escolhendo o tamanho do app na mesma linha.
+- **Piloto com visão + delegação (22/11, 1.0.96–1.0.97, `d0ce4c3`):** Mental Math Master
+  (`com.fivedaysweekend.math`) desenha a conta como imagem; o piloto agora recorta a caixa da pergunta, um modelo de
+  visão chamado DO celular (Sonnet) transcreve, o celular calcula (sem eval) e toca; `continuar` aperta ▶ do nível
+  no fim da rodada. 1.0.96 confundia o botão "Parar Cronômetro (10)" com a pergunta (1.0.97 corrige; não instalada
+  ainda: o conector caiu com erro 405 do lado do claude.ai). **Pendente:** `atualizar_sistema(d0ce4c3…)` e iniciar
+  `tela acao=piloto iniciar={modo:"quiz", app:"com.fivedaysweekend.math", visao:true, modelo_visao:
+  "claude-sonnet-5-5", continuar:[{se:"Pontuação Total", tocar:[900,1244]}], continuar_apos:1.2, duracao:3600}`.
+  Regra de delegação ("QUEM FAZ O QUÊ") gravada nas instruções do conector e no CLAUDE.md, após cobrança do dono.
 - **Achados sem correção pelo conector:** Termux:Boot não instalado (o início automático fica desligado: instale-o do
   F-Droid, abra uma vez e rode `controle-ir inicio-automatico sim` no Termux); no celular só há os modelos Qwen2.5
   1.5B (o 3B do guia de passagem não está lá); `controle-ir painel …` é recusado pelo conector por ser administrativo

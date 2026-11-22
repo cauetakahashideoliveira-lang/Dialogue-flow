@@ -40,6 +40,8 @@ PADRAO = {
 }
 
 METODOS = {"toque": ["shell"], "volume": ["termux", "shell"]}
+# sobe quando o jeito de aplicar/conferir muda: o que foi aprendido com o código antigo é revalidado
+VERSAO_METODOS = 2
 
 
 class SemShell(RuntimeError):
@@ -168,9 +170,12 @@ class Android:
     # escrita -----------------------------------------------------------------------------------
     def definir_toque(self, toque):
         """Muda e confere no mesmo comando. Devolve o modo lido depois."""
-        nome, _ = TOQUES[toque]
-        out, err, rc = self.shell(f"cmd audio set-ringer-mode {nome} 2>&1; sleep 0.3; "
-                                  "echo R=$(settings get global mode_ringer)", timeout=15)
+        nome, n = TOQUES[toque]
+        # o Android grava o mode_ringer nas configurações com atraso (0,3 s ainda lia o antigo no POCO, 22/11):
+        # relê até ~2,5 s antes de concluir que o sistema recusou
+        out, err, rc = self.shell(f"cmd audio set-ringer-mode {nome} 2>&1; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do "
+                                  f"r=$(settings get global mode_ringer); [ \"$r\" = \"{n}\" ] && break; sleep 0.2; "
+                                  "done; echo R=$r", timeout=15)
         lido = None
         for l in out.splitlines():
             if l.startswith("R=") and l[2:].strip().isdigit():
@@ -239,7 +244,7 @@ class Memoria:
 
 
 def _cond(leitura, shell_ok):
-    return {"android_sdk": leitura.get("sdk"), "shizuku": bool(shell_ok)}
+    return {"android_sdk": leitura.get("sdk"), "shizuku": bool(shell_ok), "versao_metodos": VERSAO_METODOS}
 
 
 # --------------------------------------------------------------------------- ajustes com diagnóstico
@@ -263,8 +268,8 @@ def aplicar_toque(cel, mem, toque, cond, diag):
             diag.append({"teste": "o comando existe?", "resultado": texto[:160] or f"código {rc}",
                          "conclusao": causa})
         else:
-            causa = f"o sistema não mudou o toque (continua {lido}): Não perturbe ou regra do fabricante"
-            diag.append({"teste": "o valor mudou depois do comando?", "resultado": f"não (lido: {lido})",
+            causa = f"o sistema não mudou o toque (continua {lido} após ~2,5 s): Não perturbe ou regra do fabricante"
+            diag.append({"teste": "o valor mudou em até ~2,5 s?", "resultado": f"não (lido: {lido})",
                          "conclusao": causa})
         mem.falhou("toque", metodo, cond, causa)
     return None

@@ -2,6 +2,42 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 22/11 — rodada ponta a ponta: agir primeiro e modo reunião (1.0.99, `0389999`)
+
+**Onde o tempo se perdia (medido):**
+- **Comando conhecido** ("desliga o ar do quarto"): o Claude Code lê só os primeiros **4096 caracteres** das
+  instruções do conector, e o resumo dos aparelhos ficava depois dos ~7.900 de regras. Nenhum modelo via os
+  aparelhos e as descrições ainda pediam "use primeiro" (`consultar`) e "consulte antes de controlar" (`opcoes`).
+  - Antes: `opcoes` (14 ms no celular) → `controlar` (1.168 ms no celular), **5,7 s** do pedido ao fim do envio,
+    com 1 chamada e 1 turno de modelo a mais (no claude.ai, quase sempre 2: `consultar` de 12,9 KB + `opcoes`).
+  - Dentro do celular, o `controlar` simulado leva 15 ms; o resto é emissão. O `termux-infrared-transmit` custa
+    ~0,3 s (medido com pulso de 1 ms) e o `service call consumer_ir` pelo Shizuku também transmite (Parcel 0), mas o
+    ganho seria ~0,2 s. Fica anotado, sem troca de emissor por agora.
+- **Controle novo** (modo reunião), feito à mão pelo terminal: 4 comandos e ~154 s até o ciclo funcionar, sem nada
+  reutilizável (sem guardar, sem restaurar, sem atalho).
+  - O teste que separou as causas: `cmd media_session volume --set` pelo shell é **ignorado** no HyperOS (nem 0
+    nem 2 pegam: não é regra do volume zero, é o caminho); `termux-volume` escreve; `cmd audio set-ringer-mode
+    VIBRATE/NORMAL` pelo Shizuku muda o toque e, ao voltar ao normal, o volume do toque (1/17) volta sozinho.
+
+**Aplicado:**
+- `mcp.py`: TOPO "AJA PRIMEIRO" → aparelhos → modos → REGRAS essenciais (segurança inclusa) dentro de `VISIVEL`
+  (4060). Com muitos aparelhos, o resumo encolhe (teclas 20 → 8 → compacto → só nomes) sem cortar nenhum nome.
+  `controlar` traz os nomes salvos na própria descrição; `consultar`/`opcoes` não mandam mais chamar antes.
+- Capacidade **`modos`** (embutida, em processo): `entrar|sair|alternar|estado|listar|definir|testar|atalho|remover`.
+  - Guarda o estado antes de mexer, aplica, confere pela leitura e restaura.
+  - Aprende o método que funcionou e as condições (`android_sdk`, `shizuku`) em `~/.controle-ir/modos/aprendido.json`.
+    Um método que falhou nas mesmas condições não é tentado de novo; se a condição muda, revalida.
+  - Shizuku parado conta como condição, não como defeito. Correções do usuário (`definir` num modo existente)
+    ficam registradas como antes/depois e invalidam a validação até um novo `testar`.
+  - Plano B sem Shizuku: silencia pelos volumes (sem vibrar) e avisa. O `testar` grava a validação e cria o
+    atalho "Modo reuniao (liga-desliga)" no Termux:Widget.
+- **1º `testar` real (1.0.99):** validou pelo plano B. O diagnóstico apontou "o toque não mudou", mas um teste
+  separou a causa: o `settings get global mode_ringer` só reflete a mudança na 3ª leitura (~0,6 s), e a 1.0.99
+  lia com 0,3 s. Era atraso de leitura, não recusa. **1.0.100:** relê por até ~2,5 s; `versao_metodos` entra nas
+  condições, para o falso negativo aprendido com o código antigo ser revalidado sozinho.
+- Testes: `testes/test_modos.py` (13, celular falso que imita o POCO, inclusive o atraso) e
+  `test_instrucoes_poem_aparelhos_e_regras_no_trecho_lido`. 271 testes OK.
+
 ## 21/11 — nível e tempo do Stockfish no Termux
 
 O POCO recebeu a versão 1.0.72.1 pelo pacote `9e59cdb`. Com o Stockfish 19, o botão abriu no nível 0

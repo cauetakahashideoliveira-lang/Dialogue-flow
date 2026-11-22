@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795365539.5933506,
-    "seen": 1795365545.1796215,
-    "ast_hash": "25fef3d38c3a6c955686a2e7d1de0847",
+    "mtime": 1795365664.8619316,
+    "seen": 1795365778.9849145,
+    "ast_hash": "57c1898867bef525f2f0cff61b8fb458",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -12,9 +12,9 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/aparelhos.py": {
-    "mtime": 1795365421.3378575,
-    "seen": 1795365545.179624,
-    "ast_hash": "e37009a5251423db4936cbb0103e69a7",
+    "mtime": 1795365646.8421032,
+    "seen": 1795365778.9849174,
+    "ast_hash": "ae3ef3cfb13b66c1282f9cd1dfbf60e5",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/catalogo.py": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795358202.684485,
-    "seen": 1795364273.9916697,
-    "ast_hash": "ca8f357dfc5268c518c968e535b7df53",
+    "mtime": 1795365664.8584273,
+    "seen": 1795365778.9849927,
+    "ast_hash": "efddc8eb6af8e597af1d70aaeccbd674",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -744,15 +744,15 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/modos/principal.py": {
-    "mtime": 1795365312.528684,
-    "seen": 1795365545.1796072,
-    "ast_hash": "f52d3d5e92fa6d1804b591215fcebc47",
+    "mtime": 1795365646.8418617,
+    "seen": 1795365778.9849002,
+    "ast_hash": "102e036acfe0361991e7f5cab3f86ae9",
     "semantic_hash": ""
   },
   "testes/test_modos.py": {
-    "mtime": 1795365226.155232,
-    "seen": 1795365545.1796842,
-    "ast_hash": "28f2df6d24e9a252689dd366d4c466cc",
+    "mtime": 1795365646.8512132,
+    "seen": 1795365778.984973,
+    "ast_hash": "871d3ed497ccb0d8e9642195616bf590",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

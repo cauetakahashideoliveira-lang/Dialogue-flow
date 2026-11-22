@@ -312,7 +312,7 @@ def resumo_compacto(aparelhos: list[dict], limite: int) -> str:
                     f"{c['chave']} ({str(c.get('rotulo') or '').split(' (')[0][:30]})" for c in extras))
             if a.get("macros"):
                 manter.append("  macros: " + "; ".join(a["macros"]))
-            linhas.append("\n".join([completas[0]] + [_curto(l, 200) for l in manter]))
+            linhas.append("\n".join([completas[0]] + ["  " + _curto(l.strip(), 200) for l in manter]))
         except (KeyError, TypeError, ValueError, AttributeError):
             linhas.append(f"- \"{a.get('nome')}\" — use opcoes")
     texto = cab + "\n" + "\n".join(linhas)

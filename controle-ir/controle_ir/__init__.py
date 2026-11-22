@@ -1,2 +1,2 @@
 """Serviço MCP de infravermelho, capacidades e missões para Android com Termux."""
-__version__ = "1.0.99"
+__version__ = "1.0.100"

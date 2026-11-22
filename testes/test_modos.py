@@ -47,9 +47,12 @@ class CelularFalso:
         self.log.append(("shell", cmd))
         m = re.match(r"cmd audio set-ringer-mode (\w+)", cmd)
         if m:
+            antigo = self.ringer
             if self.ringer_ok:
                 self.ringer = {"NORMAL": 2, "VIBRATE": 1, "SILENT": 0}[m.group(1)]
-            return f"R={self.ringer}\n", "", 0
+            # como no POCO: as configurações refletem a mudança com atraso; só quem relê em laço vê o valor novo
+            lido = self.ringer if "for i in" in cmd else antigo
+            return f"R={lido}\n", "", 0
         m = re.match(r"cmd media_session volume --stream (\d) --set (\d+)", cmd)
         if m:
             if not self.shell_set_ignorado:
@@ -123,6 +126,19 @@ class TestModos(unittest.TestCase):
         self.rodar(cel, acao="entrar", modo="cinema")  # agora vai direto pelo método confirmado
         self.assertFalse(any(c[0] == "shell" and "--set" in c[1] for c in cel.log))
 
+    def test_falha_aprendida_com_codigo_antigo_e_revalidada(self):
+        """22/11 no POCO: a 1ª versão leu o toque cedo demais e aprendeu "shell falhou". O código novo (outra
+        versao_metodos) não pode herdar esse falso negativo."""
+        os.makedirs(os.path.join(self.tmp.name, "modos"), exist_ok=True)
+        with open(os.path.join(self.tmp.name, "modos", "aprendido.json"), "w") as f:
+            json.dump({"metodos": {"toque": {"condicoes": {"android_sdk": "36", "shizuku": True},
+                                             "falhou": {"shell": {"causa": "lido cedo demais"}}}}}, f)
+        cel = CelularFalso(self.mod)
+        r = self.rodar(cel, acao="entrar")
+        self.assertEqual(r["metodos"], {"toque": "shell"})
+        self.assertNotIn("plano_b", r["aplicado"])
+        self.assertEqual(cel.ringer, 1)
+
     def test_condicao_mudou_revalida(self):
         cel = CelularFalso(self.mod)
         self.rodar(cel, acao="entrar")
@@ -148,7 +164,7 @@ class TestModos(unittest.TestCase):
     def test_sistema_recusa_o_toque_diagnostico_separa_a_causa(self):
         cel = CelularFalso(self.mod, ringer_ok=False)
         r = self.rodar(cel, acao="entrar")
-        self.assertTrue(any(d["teste"] == "o valor mudou depois do comando?" for d in r["diagnostico"]))
+        self.assertTrue(any(d["teste"] == "o valor mudou em até ~2,5 s?" for d in r["diagnostico"]))
         self.assertIn("plano_b", r["aplicado"])
         self.assertIn("shell", self.rodar(cel, acao="listar")["aprendido"]["toque"]["falhou"])
         self.rodar(cel, acao="sair")

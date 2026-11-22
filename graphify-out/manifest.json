@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795364270.405501,
-    "seen": 1795364273.991577,
-    "ast_hash": "87669b10b0501b22c3347f33e914260f",
+    "mtime": 1795365539.5933506,
+    "seen": 1795365545.1796215,
+    "ast_hash": "25fef3d38c3a6c955686a2e7d1de0847",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -12,9 +12,9 @@
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/aparelhos.py": {
-    "mtime": 1795267565.197843,
-    "seen": 1795267593.4010994,
-    "ast_hash": "1bee98076ed8d20da8f3e4ed798b21fd",
+    "mtime": 1795365421.3378575,
+    "seen": 1795365545.179624,
+    "ast_hash": "e37009a5251423db4936cbb0103e69a7",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/catalogo.py": {
@@ -54,9 +54,9 @@
     "semantic_hash": "91ccb5e9b53ecfb24d8263f1b519395a"
   },
   "controle-ir/controle_ir/mcp.py": {
-    "mtime": 1795358066.7720857,
-    "seen": 1795358130.6449575,
-    "ast_hash": "220a75f589a5ad1f9038c6b0edddf2f9",
+    "mtime": 1795365413.3807108,
+    "seen": 1795365545.179636,
+    "ast_hash": "cbdd25c6c2298076361132b30adc3a72",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/protocolos.py": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "testes/test_controle_ir.py": {
-    "mtime": 1795286853.9164293,
-    "seen": 1795287109.401447,
-    "ast_hash": "790efb7c2ad177c87e980fe135606892",
+    "mtime": 1795365390.5275426,
+    "seen": 1795365545.179682,
+    "ast_hash": "33ac5e8264189a95a36fe786eb304661",
     "semantic_hash": ""
   },
   "README.md": {
@@ -162,9 +162,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795358066.7723687,
-    "seen": 1795358130.645016,
-    "ast_hash": "4144c54612b8a332424f4f1d5fb50d76",
+    "mtime": 1795365539.5904021,
+    "seen": 1795365545.179687,
+    "ast_hash": "7aebec9a41dcbe8be4f400c803bb5d6e",
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
@@ -735,6 +735,24 @@
     "mtime": 1795364209.4725137,
     "seen": 1795364273.991649,
     "ast_hash": "173ec5f5863479334688cd1adee405f7",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/modos/capacidade.json": {
+    "mtime": 1795365186.138576,
+    "seen": 1795365545.1796055,
+    "ast_hash": "a5000c5a8dd09f6e670d736a83054b50",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/modos/principal.py": {
+    "mtime": 1795365312.528684,
+    "seen": 1795365545.1796072,
+    "ast_hash": "f52d3d5e92fa6d1804b591215fcebc47",
+    "semantic_hash": ""
+  },
+  "testes/test_modos.py": {
+    "mtime": 1795365226.155232,
+    "seen": 1795365545.1796842,
+    "ast_hash": "28f2df6d24e9a252689dd366d4c466cc",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

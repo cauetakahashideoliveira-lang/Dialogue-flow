@@ -1080,6 +1080,32 @@ class TestResumoInstrucoes(unittest.TestCase):
         finally:
             del self.s.aparelhos.dados["aparelhos"]["quebrado"]
 
+    def test_instrucoes_poem_aparelhos_e_regras_no_trecho_lido(self):
+        """O Claude Code corta as instruções em 4096 caracteres (22/11): aparelhos, modos e regras essenciais
+        precisam estar antes disso, com todos os nomes, mesmo com muitos aparelhos."""
+        from controle_ir.mcp import ServidorMCP
+        m = ServidorMCP(self.s)
+        extras = [f"aparelho extra {i}" for i in range(12)]
+        for n in extras:
+            self.s.salvar_aparelho(n, perfil=94)
+        try:
+            _, r = m.tratar({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+            lido = r["result"]["instructions"][:4096]
+            for nome in [a["nome"] for a in self.s.aparelhos.listar()]:
+                self.assertIn(f'"{nome}"', lido)
+            for trecho in ("chame controlar direto", "Modos do celular", "reuniao", "autorizar só com o código",
+                           "DESARMADO", "acao=piloto", "Opções do desenvolvedor"):
+                self.assertIn(trecho, lido)
+            self.assertLess(lido.index('"ar do quarto"'), lido.index("REGRAS"))
+            _, r = m.tratar({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+            fs = {f["name"]: f["description"] for f in r["result"]["tools"]}
+            self.assertIn("ar do quarto", fs["controlar"])
+            self.assertNotIn("Use primeiro", fs["consultar"])
+            self.assertNotIn("Consulte antes de controlar", fs["opcoes"])
+        finally:
+            for n in extras:
+                self.s.editar_aparelho(n, excluir=True)
+
 
 
 class TestCapacidades(unittest.TestCase):

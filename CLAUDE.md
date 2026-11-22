@@ -22,7 +22,12 @@
   conferir com `consultar`. Se o conector der "Not Found" após atualizar, peça `controle-ir desligar; pkill ngrok;
   controle-ir ligar` (a 1.0.15+ já limpa o ngrok órfão sozinha).
 - **Capacidades embutidas:** estado_celular, diagnostico_rede, descobrir_rede, ouvir_bipe, foto, termometro, tela,
-  sono, sonar, bluetooth (`controle-ir/capacidades/`, com testes em `testes/`).
+  sono, sonar, bluetooth, modos (`controle-ir/capacidades/`, com testes em `testes/`). **modos** (1.0.99): ajustes do
+  próprio celular direto no Android (toque por `cmd audio set-ringer-mode` via Shizuku; volumes pelo `termux-volume`,
+  porque o `--set` do shell é ignorado no HyperOS); guarda e restaura, aprende método+condições e cria atalho no widget.
+- **Instruções do conector:** o Claude Code lê só os primeiros 4096 caracteres. `mcp.py` monta AJA PRIMEIRO →
+  aparelhos → modos → REGRAS dentro de `VISIVEL`; o resto (DETALHES, capacidades) pode ser cortado. Aparelho do
+  resumo = `controlar` direto, sem `consultar`/`opcoes` antes (teste `test_instrucoes_poem_aparelhos_e_regras_no_trecho_lido`).
 - **Central da Casa** (https://claude.ai/artifact/XSh6ivS8Cc6BsKakes2pCh, fonte `artefatos/central-da-casa.html`):
   app do claude.ai com o Gênio (controla, programa o celular, cria painéis). Republique com o mesmo arquivo;
   os dados (`widgets`, `memoria`, `eventos`) ficam no banco do artefato (ferramenta ArtifactData).

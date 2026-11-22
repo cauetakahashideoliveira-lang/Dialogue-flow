@@ -797,7 +797,7 @@ class Piloto:
         ignorar = tuple(cfg.get("ignorar") or ()) + IGNORAR
         ultima, contador, rasgada_desde = None, 0, None
         parado_desde = None
-        self._ultima_visao = None
+        self._ultima_visao, self._ultimas_opcoes, self._ultima_expr, self._ultimo_toque = None, None, None, 0.0
         fim = time.time() + max(10, min(float(cfg.get("duracao", 600)), 3600))
         self.estado_txt = "olhando"
         while not self.parar.is_set() and time.time() < fim:
@@ -815,7 +815,7 @@ class Piloto:
                         continue
                     els = [e for e in els if e.get("pacote") in (cfg["app"], None, "")]  # sem sobreposições
                 self.estado_txt = "jogando"
-                q = quiz_da_tela(els, ignorar)
+                q = None if cfg.get("so_visao") else quiz_da_tela(els, ignorar)
                 if not q and cfg.get("visao", True) and "capturar" in f:
                     q2v = quiz_da_tela(els, ignorar, sem_pergunta=True)
                     if q2v and q2v[0] is None:
@@ -903,6 +903,9 @@ class Piloto:
         chave = hashlib.md5(b64.encode()).hexdigest() + "|" + "|".join(o["texto"] for o in opcoes)
         if chave == self._ultima_visao:
             return False
+        mesmas = "|".join(o["texto"] for o in opcoes)
+        if mesmas == self._ultimas_opcoes and time.time() - self._ultimo_toque < float(cfg.get("trava_s", 1.5)):
+            return False  # transição/feedback depois do toque: as opções da pergunta respondida ainda estão na tela
         t_lido = time.time()
         erros = []
         try:
@@ -912,11 +915,20 @@ class Piloto:
         idx, fonte = escolher_pela_conta(txt, opcoes)
         t_dec = time.time()
         toque = None
-        if idx is None and cfg.get("chutar", True):
-            idx, fonte = 0, "chute"
-        if idx is not None:
-            f["tocar"](opcoes[idx]["x"], opcoes[idx]["y"])
-            toque = time.time()
+        expr = (txt or "").split("\n")[0].strip()
+        if idx is not None and expr and expr == self._ultima_expr and mesmas == self._ultimas_opcoes:
+            self._ultima_visao = chave  # a mesma pergunta já respondida (tela de feedback): não toca de novo
+            return False
+        # visão sem leitura (tela em transição) NÃO chuta: espera o próximo quadro (chute perdeu a rodada, 22/11)
+        if idx is None:
+            self._sem_leitura = getattr(self, "_sem_leitura", 0) + 1
+            if self._sem_leitura >= 3:
+                self._ultima_visao, self._sem_leitura = chave, 0
+            return False
+        self._sem_leitura = 0
+        f["tocar"](opcoes[idx]["x"], opcoes[idx]["y"])
+        toque = time.time()
+        self._ultimo_toque, self._ultimas_opcoes, self._ultima_expr = toque, mesmas, expr
         self._ultima_visao = chave
         self._registrar((txt or "").split("\n")[0][:80] or "(imagem)", opcoes, idx, fonte, None, t_mud, t_lido, t_dec,
                         toque, erros)
@@ -926,8 +938,14 @@ class Piloto:
         """Fim de rodada: regras do pedido {se: texto na tela, tocar: [x, y]} (ex.: ▶ do próximo nível)."""
         textos = " | ".join(norm(e.get("texto") or e.get("desc") or "") for e in els)
         for r in self.cfg.get("continuar") or []:
-            if isinstance(r, dict) and r.get("se") and norm(r["se"]) in textos and isinstance(r.get("tocar"), list):
-                self.f["tocar"](int(r["tocar"][0]), int(r["tocar"][1]))
+            if not (isinstance(r, dict) and r.get("se") and norm(r["se"]) in textos):
+                continue
+            alvo = r.get("tocar")
+            if isinstance(alvo, str):  # por texto: acha o botão na tela de agora ("Jogar Novamente")
+                e = next((e for e in els if norm(e.get("texto") or e.get("desc") or "") == norm(alvo)), None)
+                alvo = [e["x"], e["y"]] if e else None
+            if isinstance(alvo, list) and len(alvo) == 2:
+                self.f["tocar"](int(alvo[0]), int(alvo[1]))
                 self.rodadas.append({"t": round(time.time(), 3), "continuar": r["se"][:40]})
                 time.sleep(float(self.cfg.get("pausa_continuar", 1.2)))
                 return True

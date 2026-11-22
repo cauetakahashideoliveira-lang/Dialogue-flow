@@ -621,8 +621,30 @@ class TestPilotoVisao(unittest.TestCase):
             def visao(self, b64, opcoes, modelo):
                 return "(5 x 3) + 4\n2"
         p.cerebros = Cer()
-        p._ultima_visao = None
+        p._ultima_visao, p._ultimas_opcoes, p._ultima_expr, p._ultimo_toque = None, None, None, 0.0
         _, ops = m.quiz_da_tela(self.tela(), sem_pergunta=True)
         self.assertTrue(p._responder_por_visao(self.tela(), ops))
         self.assertEqual(toques, [(239, 2538)])  # 19, pela conta (o modelo disse 2, errado)
         self.assertFalse(p._responder_por_visao(self.tela(), ops))  # a mesma pergunta não é respondida 2×
+        f["capturar"] = lambda caixa: "OUTRA"  # tela de feedback (imagem diferente, mesmas opções): não toca
+        self.assertFalse(p._responder_por_visao(self.tela(), ops))
+        self.assertEqual(len(toques), 1)
+
+    def test_visao_sem_leitura_nao_chuta_e_continuar_por_texto(self):
+        m = self.m
+        toques = []
+        f = {"capturar": lambda caixa: "QUJD", "tocar": lambda x, y: toques.append((x, y))}
+        p = m.Piloto(f)
+        p.cfg = {"continuar": [{"se": "Jogar Novamente", "tocar": "Jogar Novamente"}], "pausa_continuar": 0}
+
+        class Cer:
+            def visao(self, b64, opcoes, modelo):
+                return ""  # tela em transição: nada legível
+        p.cerebros = Cer()
+        p._ultima_visao, p._ultimas_opcoes, p._ultima_expr, p._ultimo_toque = None, None, None, 0.0
+        _, ops = m.quiz_da_tela(self.tela(), sem_pergunta=True)
+        self.assertFalse(p._responder_por_visao(self.tela(), ops))
+        self.assertEqual(toques, [])  # sem chute (o chute perdeu a rodada em 22/11)
+        fim = [{"texto": "Recarregar Paradas", "x": 100, "y": 2000}, {"texto": "Jogar Novamente", "x": 640, "y": 2400}]
+        self.assertTrue(p._continuar(fim))
+        self.assertEqual(toques, [(640, 2400)])

@@ -17,6 +17,7 @@
 - Responda ao usuário em português. Testes: `python3 -m unittest discover -s testes`.
 - Pacote do celular: `ferramentas/empacotar.sh` gera `dist/controle-ir.zip` (baixado pelo Termux).
 - Botão novo para ar Gree (oscilação, visor): `ferramentas/gree_variante.py` (parte da captura real do perfil).
+- Ar TCL112 (o Brastemp Clean do quarto 2 é TCL, não Whirlpool): `ferramentas/tcl112.py` gera quadros e o perfil completo.
 - **Publicar no celular:** rode `ferramentas/empacotar.sh` ANTES do commit — o `atualizar_sistema(ref)` baixa o
   `dist/controle-ir.zip` daquele commit, não o código solto. Suba a versão em `controle_ir/__init__.py` para
   conferir com `consultar`. Se o conector der "Not Found" após atualizar, peça `controle-ir desligar; pkill ngrok;

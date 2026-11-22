@@ -992,6 +992,87 @@ class TestGreeVariante(unittest.TestCase):
             self.g.gerar("frio", "baixa", 18, oscilar=True)
 
 
+class TestTcl112(unittest.TestCase):
+    """ferramentas/tcl112.py: “ar condicionado quarto 2” (Brastemp Clean BBV09BBBNA) aceitou o TCL112 em 22/11/2026."""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(RAIZ / "ferramentas"))
+        import tcl112
+        cls.t = tcl112
+        cls.capturas = {}
+        import gzip
+        with gzip.open(BASE, "rt") as f:
+            for linha in f:
+                d = json.loads(linha)
+                if d["chave"] in ("smartir:climate/1900", "smartir:climate/1901"):
+                    cls.capturas[d["chave"]] = d
+
+    @staticmethod
+    def quadros(p):
+        """Durações → quadros de bytes (LSB primeiro), separados pelos cabeçalhos."""
+        out, bits = [], []
+        for i in range(0, len(p) - 1, 2):
+            if p[i] > 2000:
+                if bits:
+                    out.append(bits)
+                bits = []
+            elif p[i + 1] < 3000:
+                bits.append(1 if p[i + 1] > 1.6 * p[i] else 0)
+        out.append(bits)
+        return [[sum(x << k for k, x in enumerate(b[j:j + 8])) for j in range(0, len(b) - 7, 8)] for b in out]
+
+    def test_reproduz_as_capturas_byte_a_byte(self):
+        vent = {"auto_mais_swing": True, "auto_mais_no_swing": False}
+        conferidos = 0
+        for chave, d in self.capturas.items():
+            for e in d["estado_completo"]["estados"]:
+                if chave.endswith("1900") and (e["modo"] != "frio" or e["temperatura"] == 19):
+                    # o calor do XA21I não traz o 0x80 do byte 12 (o do XA71IN traz);
+                    # o "frio 19" do XA21I é cópia do código de 18 °C (erro de captura do SmartIR)
+                    continue
+                _, p = broadlink_para_pulsos(e["sinal"]["broadlink"])
+                cap = self.quadros(p)
+                if sum(cap[-1][:13]) & 0xFF != cap[-1][13]:
+                    continue  # captura com bit corrompido (frio 30 °C do XA21I)
+                gerado = self.t.estado(e["modo"], e["temperatura"], oscilacao=vent.get(e["ventilacao"], False))
+                self.assertEqual(gerado, cap[-1], f"{chave} {e['modo']} {e['temperatura']} {e['ventilacao']}")
+                conferidos += 1
+        self.assertGreater(conferidos, 140)
+
+    def test_desligar_e_quadro_especial_sao_os_capturados(self):
+        off = next(c for c in self.capturas["smartir:climate/1900"]["comandos"] if c["chave"] == "energia_desligar")
+        _, p = broadlink_para_pulsos(off["sinal"]["broadlink"])
+        self.assertEqual(self.quadros(p), [list(self.t.ESPECIAL), list(self.t.DESLIGAR)])
+        _, g = broadlink_para_pulsos(self.t.sinal(self.t.ESPECIAL, self.t.DESLIGAR)["broadlink"])
+        self.assertEqual(len(g), len(p))  # 455 durações, como a captura
+        self.assertEqual(self.quadros(g), self.quadros(p))
+
+    def test_bits_extras_e_soma(self):
+        b = self.t.estado("frio", 23, "alta", oscilacao=True, turbo=True, visor=False)
+        self.assertEqual(" ".join(f"{x:02X}" for x in b), "23 CB 26 01 00 64 43 08 3D 00 00 00 88 89")
+        self.assertEqual(self.t.estado("desumidificar", 23, "alta")[8], 0x02)  # o controle fixa a ventilação baixa
+        with self.assertRaises(self.t.ErroTcl):
+            self.t.estado("frio", 15)
+
+    def test_perfil_importa_e_controla_com_oscilacao(self):
+        s, _ = novo_servico(com_base=False)
+        p = self.t.perfil()
+        self.assertEqual(len(p["estado_completo"]["estados"]), 5 * 4 * 2 * 16)
+        r = s.importar(json.dumps(p), nome="ar condicionado quarto 2", categoria="ar_condicionado",
+                       destino="aparelho")
+        self.assertEqual(r["aparelho"], "ar condicionado quarto 2")
+        res = s.controlar("ar condicionado quarto 2", ligar=True,
+                          definir={"modo": "frio", "temperatura": 23, "ventilacao": "alta", "oscilacao": "ligada"})
+        self.assertEqual(res["status"], "sinal_enviado")
+        self.assertEqual(res["configuracao"]["valores"],
+                         {"modo": "frio", "temperatura": 23, "ventilacao": "alta", "oscilacao": "ligada"})
+        res = s.controlar("ar condicionado quarto 2", definir={"temperatura": 20})  # o resto vem do último envio
+        self.assertEqual(res["configuracao"]["valores"]["oscilacao"], "ligada")
+        res = s.controlar("ar condicionado quarto 2", ligar=False)
+        self.assertEqual(res["enviados"][0]["comando"], "desligar")
+
+
 class TestResumoInstrucoes(unittest.TestCase):
     """Resumo dos aparelhos nas instruções do MCP (economiza a chamada opcoes antes de cada pedido)."""
 

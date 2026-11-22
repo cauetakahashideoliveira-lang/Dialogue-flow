@@ -2,6 +2,18 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 22/11 — ar condicionado quarto 2 (Brastemp Clean)
+- Servidor no POCO: **1.0.101** (canal direto conectado). O conector caiu duas vezes com "Not Found" e voltou
+  depois de religar o serviço no celular.
+- Novo aparelho `ar condicionado quarto 2`: split Brastemp Clean BBV09BBBNA. Apesar da etiqueta Whirlpool, ele
+  **só responde ao protocolo TCL112**: os perfis Consul/Whirlpool não tiveram efeito. Foi identificado com o
+  ar ligado e uma busca de códigos "desligar" (candidato 33, TCL TAC-12CHSD). O perfil completo, nº 9524, foi
+  gerado por `ferramentas/tcl112.py` (640 estados com oscilação) e importado no celular. Detalhes na
+  [ficha](aparelhos/quarto-2/ar-condicionado-quarto-2.md).
+- Diagnóstico útil: `rish -c 'logcat -d -s ConsumerIrHal'` mostra cada transmissão (`Send to driver: Enter/Exit`
+  e a duração). O `sinal_enviado` da API não garante que o emissor transmitiu; o log, sim.
+- Pendente: mapear turbo, apagar painel, dormir e renovar do controle Brastemp Clean.
+
 ## Resumo (fim do dia 19/11)
 - **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.28**, pareado com a
   Central de Controle (só o painel arma, com a digital do POCO ou do iPad), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
@@ -310,6 +322,7 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
 | Quarto | `tv do quarto` | TV **Samsung** (Samsung32, 0x07) | Flipper "Samsung TV Full" (nº 2331) + ligar/desligar diretos + macro `abrir Netflix` | [tv-do-quarto](aparelhos/quarto/tv-do-quarto.md) |
 | Escritório | `ar do escritório` | ar-condicionado **Carrier** | SmartIR Carrier Unknown (nº 94) | [ar-do-escritorio](aparelhos/escritorio/ar-do-escritorio.md) |
 | Laboratório | `ar condicionado laboratório` | ar-condicionado **Midea** | o mesmo Carrier nº 94 + oscilação Ferroli/York | [ar-condicionado-laboratorio](aparelhos/laboratorio/ar-condicionado-laboratorio.md) |
+| Quarto 2 | `ar condicionado quarto 2` | ar-condicionado **Brastemp Clean** BBV09BBBNA (protocolo TCL112) | nº 9524 gerado por `ferramentas/tcl112.py` | [ar-condicionado-quarto-2](aparelhos/quarto-2/ar-condicionado-quarto-2.md) |
 
 - Em 17/11 "escritório" virou `ar do escritório` e "quarto" virou `ar do quarto` (o quarto também tem a TV).
 - Ar do escritório e ar do laboratório usam os mesmos códigos: se os dois estiverem ao alcance, os dois reagem.

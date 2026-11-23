@@ -54,7 +54,8 @@ A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padr
   "1 dólar americano = 5,99 reais (23 de nov., 18:03 UTC, Morningstar)", `valor: 5.99`. Grafo: 7 telas do Chrome,
   3 objetivos.
 - **1.0.108:** o endereço reabre na MESMA guia do Chrome (`com.android.browser.application_id`); antes, cada
-  leitura abria uma guia nova.
+  leitura abria uma guia nova. Conferido no POCO: 4 guias → 5 na 1ª leitura com a identificação → 5 na 2ª. Duas
+  leituras seguidas pelo endereço: 7,4 s e 7,9 s, `valor: 5.99` nas duas.
 - **Vigia ainda não rodou sozinho no POCO:** o vigia "dolar" (30 min, variação ≥ 1%, 3 h) nasceu **pausado**
   porque existe `~/.controle-ir/PARAR`. Esse arquivo é gravado em todo travar (e no desarmar pela Central) e só é
   apagado ao armar pelo terminal sem pareamento (`cli.py`); `destravar` não o remove. Num celular pareado ele fica

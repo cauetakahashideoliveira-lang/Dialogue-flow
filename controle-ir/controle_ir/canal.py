@@ -16,6 +16,7 @@ antiga), tenta de novo a cada 5 min e tudo segue pelo túnel como antes.
 from __future__ import annotations
 
 import base64
+import collections
 import hashlib
 import json
 import os
@@ -144,6 +145,24 @@ class WebSocket:
             pass
 
 
+def nome_da_chamada(corpo: bytes):
+    """(nome da ferramenta, método JSON-RPC) de uma chamada, sem guardar os argumentos."""
+    try:
+        d = json.loads(corpo or b"{}")
+    except ValueError:
+        return None, None
+    if not isinstance(d, dict):
+        return None, None
+    p = d.get("params") if isinstance(d.get("params"), dict) else {}
+    nome = p.get("name") if isinstance(p.get("name"), str) else None
+    if nome == "executar_capacidade" and isinstance(p.get("arguments"), dict):
+        cap = p["arguments"].get("nome")
+        acao = (p["arguments"].get("argumentos") or {}).get("acao") if isinstance(p["arguments"].get("argumentos"), dict) else None
+        if isinstance(cap, str):
+            nome = f"cap:{cap}" + (f".{acao}" if isinstance(acao, str) else "")
+    return nome, d.get("method")
+
+
 class Canal:
     """Mantém o canal aberto (reconecta sozinho) e atende o que a Central manda: chamadas do Claude (repassadas ao
     servidor local) e avisos ("sync": sincronizar agora)."""
@@ -158,14 +177,53 @@ class Canal:
         self.conectado_desde = 0.0
         self.ultimo_erro = ""
         self.atendidas = 0
+        # telemetria (só tempos e nomes de ferramenta, nunca argumentos): onde o tempo de cada chamada é gasto
+        self.chamadas = collections.deque(maxlen=60)
+        self.rtts = collections.deque(maxlen=20)
+        self._ping_em = 0.0
 
     @property
     def conectado(self) -> bool:
         return self.ws is not None
 
     def estado(self) -> dict:
+        if self.ws and len(self.rtts) < 3:  # pouca amostra das batidas de 25 s: mede agora (~0,3 s)
+            self.medir_rtt(3, 1.5)
         return {"conectado": self.conectado, "desde": int(self.conectado_desde) if self.conectado else None,
-                "atendidas": self.atendidas, **({"erro": self.ultimo_erro} if self.ultimo_erro else {})}
+                "atendidas": self.atendidas, **({"erro": self.ultimo_erro} if self.ultimo_erro else {}),
+                **({"desempenho": self.desempenho()} if self.chamadas or self.rtts else {})}
+
+    def desempenho(self) -> dict:
+        """Resumo para o `consultar`: ida e volta do WebSocket (batidas) e o tempo de cada chamada DENTRO do
+        celular (do recebimento pelo canal até a resposta sair). O que passar disso no relógio de quem chamou é
+        Claude + Central + rede."""
+        def resumo(v):
+            v = sorted(v)
+            if not v:
+                return None
+            return {"n": len(v), "mediana": v[len(v) // 2], "p95": v[min(len(v) - 1, int(len(v) * 0.95))],
+                    "max": v[-1]}
+        return {"canal_rtt_ms": resumo(list(self.rtts)), "celular_ms": resumo([c["ms"] for c in self.chamadas]),
+                "ultimas": list(self.chamadas)[-12:]}
+
+    def medir_rtt(self, vezes=5, espera=3.0) -> list:
+        """Ida e volta do canal agora (batida → resposta da Central), sem esperar as batidas de 25 s."""
+        feitas = []
+        for _ in range(vezes):
+            if not self.ws:
+                break
+            antes = len(self.rtts)
+            try:
+                self._ping_em = time.monotonic()
+                self.ws.enviar("ping")
+            except OSError:
+                break
+            fim = time.monotonic() + espera
+            while len(self.rtts) == antes and time.monotonic() < fim:
+                time.sleep(0.005)
+            if len(self.rtts) > antes:
+                feitas.append(self.rtts[-1])
+        return feitas
 
     def iniciar(self):
         threading.Thread(target=self._laco, name="canal", daemon=True).start()
@@ -224,9 +282,14 @@ class Canal:
             except socket.timeout:
                 if time.time() - ultimo > SILENCIO:
                     raise ConnectionError("canal mudo: reconectando")
+                self._ping_em = time.monotonic()
                 ws.enviar("ping")
                 continue
             ultimo = time.time()
+            if op == 1 and dados == b"pong" and self._ping_em:
+                self.rtts.append(round((time.monotonic() - self._ping_em) * 1000, 1))
+                self._ping_em = 0.0
+                continue
             if op != 1 or dados in (b"pong", b"ping"):
                 continue
             try:
@@ -234,15 +297,18 @@ class Canal:
             except ValueError:
                 continue
             if m.get("t") == "req":
+                recebido = time.monotonic()
                 ws.enviar(json.dumps({"t": "ok", "id": m.get("id")}))  # recebido: a Central não cai para o túnel
-                threading.Thread(target=self._repassar, args=(m,), name="canal-req", daemon=True).start()
+                threading.Thread(target=self._repassar, args=(m, recebido), name="canal-req", daemon=True).start()
             elif m.get("t") == "sync" and self.ao_sincronizar:
                 self.ao_sincronizar()
 
-    def _repassar(self, m: dict):
+    def _repassar(self, m: dict, recebido: float | None = None):
         """Entrega a chamada (já assinada pela Central) ao servidor local e devolve a resposta pelo canal."""
+        recebido = recebido or time.monotonic()
         cab = {k: v for k, v in (m.get("h") or {}).items() if k.lower() in CABECALHOS_OK}
         corpo = str(m.get("b") or "").encode()
+        ferramenta, metodo = nome_da_chamada(corpo)
         req = urllib.request.Request(f"http://127.0.0.1:{self.porta}/mcp/{self.segredo}", data=corpo, headers=cab,
                                      method="POST")
         try:
@@ -255,8 +321,13 @@ class Canal:
         self.atendidas += 1
         resp = {"t": "res", "id": m.get("id"), "s": st, "h": {"content-type": tipo},
                 "b": txt.decode("utf-8", errors="replace")}
+        bruto = json.dumps(resp, ensure_ascii=False)
         try:
             if self.ws:
-                self.ws.enviar(json.dumps(resp, ensure_ascii=False))
+                self.ws.enviar(bruto)
         except OSError as e:
             self.ultimo_erro = f"resposta perdida: {e}"[:160]
+        if metodo != "tools/list":
+            self.chamadas.append({"quando": time.strftime("%H:%M:%S"), "ferramenta": ferramenta or metodo,
+                                  "ms": round((time.monotonic() - recebido) * 1000), "status": st,
+                                  "kb": round(len(bruto) / 1024, 1)})

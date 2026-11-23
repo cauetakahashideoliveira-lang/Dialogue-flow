@@ -23,7 +23,12 @@
   conferir com `consultar`. Se o conector der "Not Found" após atualizar, peça `controle-ir desligar; pkill ngrok;
   controle-ir ligar` (a 1.0.15+ já limpa o ngrok órfão sozinha).
 - **Capacidades embutidas:** estado_celular, diagnostico_rede, descobrir_rede, ouvir_bipe, foto, termometro, tela,
-  sono, sonar (`controle-ir/capacidades/`, com testes em `testes/`).
+  sono, sonar, bluetooth, modos (`controle-ir/capacidades/`, com testes em `testes/`). **modos** (1.0.99): ajustes do
+  próprio celular direto no Android (toque por `cmd audio set-ringer-mode` via Shizuku; volumes pelo `termux-volume`,
+  porque o `--set` do shell é ignorado no HyperOS); guarda e restaura, aprende método+condições e cria atalho no widget.
+- **Instruções do conector:** o Claude Code lê só os primeiros 4096 caracteres. `mcp.py` monta AJA PRIMEIRO →
+  aparelhos → modos → REGRAS dentro de `VISIVEL`; o resto (DETALHES, capacidades) pode ser cortado. Aparelho do
+  resumo = `controlar` direto, sem `consultar`/`opcoes` antes (teste `test_instrucoes_poem_aparelhos_e_regras_no_trecho_lido`).
 - **Central da Casa** (https://claude.ai/artifact/XSh6ivS8Cc6BsKakes2pCh, fonte `artefatos/central-da-casa.html`):
   app do claude.ai com o Gênio (controla, programa o celular, cria painéis). Republique com o mesmo arquivo;
   os dados (`widgets`, `memoria`, `eventos`) ficam no banco do artefato (ferramenta ArtifactData).
@@ -43,6 +48,18 @@
 - **`/god-mode`** (`.claude/skills/god-mode/`, adaptação AGPL do G0DM0D3): AutoTune, notas, STM, `perguntar` e
   `comparar` vários modelos (OpenRouter com `OPENROUTER_API_KEY` ou servidor local) com síntese pelo Claude. Sem
   os prompts de jailbreak nem o Parseltongue do original. Não confundir com `/godmode` (capacidade máxima).
+- **Delegar é obrigação, não opção** (pedido do dono, 22/11): o Claude é o gestor; quem executa é o agente do
+  celular. Laço rápido/repetitivo (jogo, quiz, contas com cronômetro, testes em série) → `tela acao=piloto`
+  (`visao:true` se a pergunta for desenhada, `continuar` para emendar rodadas) numa chamada; várias telas até um
+  resultado → `acao=objetivo`; sequência conhecida → `sequencia`/`rotina`; trabalho longo → `acao=missao`. Nunca
+  operar passo a passo pela nuvem o que tem cronômetro ou passa de 3 chamadas. A mesma regra está nas instruções
+  do conector (`controle_ir/mcp.py`, "QUEM FAZ O QUÊ").
+- **NUNCA, em teste ou automação de tela:** entrar em Opções do desenvolvedor, Depuração (USB/sem fio), Shizuku,
+  Termux, Contas/Segurança/Senhas ou Redefinir; nem tocar em interruptor (liga/desliga) ou ajuste do sistema sem
+  pedido explícito do dono. Em 21/11 um teste tocou o interruptor geral das Opções do desenvolvedor e derrubou o
+  Shizuku. Testes de desempenho só em telas de leitura (Sobre o telefone, Bluetooth sem alternar, Armazenamento)
+  e com `modelo:false` quando o caminho não for conhecido. O `acao=objetivo` (1.0.79+) já recusa interruptores
+  sem `permitir` e usa cada pista uma vez.
 - **Piloto** (1.0.51+, `capacidades/tela/piloto.py`, `acao=piloto`): laço rápido NO celular (o Claude fica fora do
   laço, como treinador): corrida memória/modelo local/Haiku, alvo semântico, gravador. Modelo local e quiz de teste:
   `docs/estado-atual.md` (19/11 noite). Para o estudo e o piloto do botão Stockfish no POCO, veja o README. Apps bloqueados (banco/senha) não

@@ -108,19 +108,25 @@ def regioes_visuais(xml_texto, fracao=0.15):
         raiz = ET.fromstring(xml_texto)
     except ET.ParseError:
         return []
-    caixas, folhas = [], []
+    caixas, folhas, textos = [], [], []
     for n in raiz.iter("node"):
         b = ler_bounds(n.attrib.get("bounds"))
         if not b or b[2] <= b[0] or b[3] <= b[1]:
             continue
         caixas.append(b)
-        if n.find("node") is None and not (n.attrib.get("text") or n.attrib.get("content-desc")):
+        if n.attrib.get("text") or n.attrib.get("content-desc"):
+            textos.append(((b[0] + b[2]) // 2, (b[1] + b[3]) // 2))
+        elif n.find("node") is None and n.attrib.get("scrollable") != "true":
             folhas.append(b)
     if not caixas:
         return []
     tela = max(c[2] for c in caixas) * max(c[3] for c in caixas)
+
+    def descrita(b):  # lista cujas linhas são irmãs do contêiner vazio (Configurações do HyperOS, 21/11): a
+        return sum(b[0] <= x <= b[2] and b[1] <= y <= b[3] for x, y in textos) >= 3  # acessibilidade já descreve
+
     out = [[b[0], b[1], b[2] - b[0], b[3] - b[1]] for b in folhas
-           if (b[2] - b[0]) * (b[3] - b[1]) >= fracao * tela and (b[2] - b[0]) * (b[3] - b[1]) < 0.9 * tela]
+           if fracao * tela <= (b[2] - b[0]) * (b[3] - b[1]) < 0.9 * tela and not descrita(b)]
     return sorted(out, key=lambda r: -r[2] * r[3])[:2]
 
 
@@ -2136,7 +2142,8 @@ def _ferramentas_piloto():
     return {"aguardar": aguardar, "elementos": lambda: elementos(dump_ui(), limite=300), "tocar": tocar,
             "tabuleiro_local": tabuleiro_local, "vez": lambda: vez_no_historico(tela_chess()),
             "bloqueado": lambda app: bool(app) and bloqueado(app, bloqueados()),
-            "casas": lambda: casas_xadrez(elementos(dump_ui(), limite=300)), "contra_robo": partida_contra_robo}
+            "casas": lambda: casas_xadrez(elementos(dump_ui(), limite=300)), "contra_robo": partida_contra_robo,
+            "capturar": lambda caixa: foto_rapida(560, caixa)[0]}  # pergunta desenhada: recorte para a visão
 
 
 def partida_contra_robo(app=None):
@@ -2366,6 +2373,82 @@ def navegar_etapas(a):
     return medidas[0] if len(passos) == 1 else {"etapas": medidas}
 
 
+_OBJETIVO = {}
+POLITICA_NAVEGAR = ("Você opera um celular Android para cumprir um objetivo. Escolha a opção da tela que mais "
+                    "aproxima do objetivo (um item com o nome do assunto costuma ser o caminho). Só escolha rolar se "
+                    "nenhum item servir, e voltar se a tela for errada. Responda APENAS com o número da opção.")
+
+
+def objetivo(a):
+    """acao=objetivo: o laço perceber → decidir → agir → conferir roda no celular (capacidades/tela/objetivo.py)."""
+    import importlib.util
+    if not _ajudante():
+        return {"erro": "o executor de objetivos precisa do leitor rápido (Shizuku em execução, dentro do serviço)"}
+    if "mod" not in _OBJETIVO:
+        spec = importlib.util.spec_from_file_location(
+            "tela_objetivo", os.path.join(os.path.dirname(os.path.abspath(__file__)), "objetivo.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _OBJETIVO["mod"] = mod
+    mod = _OBJETIVO["mod"]
+
+    class Ferramentas:
+        foco = staticmethod(foco)
+        dump_ui = staticmethod(dump_ui)
+        calma = staticmethod(calma)
+        em_anuncio = staticmethod(em_anuncio)
+        fechar_anuncio = staticmethod(fechar_anuncio)
+
+        @staticmethod
+        def elementos(xml, limite=300):
+            return elementos(xml, limite=limite)
+
+        @staticmethod
+        def injetar(cmd):
+            return _injetar(cmd)
+
+        @staticmethod
+        def abrir(pac):
+            return "feito" in agir({"acao": "abrir", "pacote": pac, "ver_depois": "nada"})
+
+        @staticmethod
+        def bloqueado(pac):
+            return bool(pac) and bloqueado(pac, bloqueados())
+
+        @staticmethod
+        def aplicar_regras(app, els):
+            return aplicar_regras(app, els)
+
+        @staticmethod
+        def recolher():
+            rish("cmd statusbar collapse", timeout=10)
+
+    def decidir(objetivo_, contexto, opcoes, nivel="padrao"):
+        m = _modulo_piloto()
+        pergunta = (f"Objetivo no celular: {objetivo_}\n{contexto or '(tela só com botões)'}\n"
+                    "Qual opção leva ao objetivo? (rolar ou voltar se nenhuma servir)")
+        from controle_ir import ambiente_missao
+        if ambiente_missao.ATUAL.get() is not None:
+            return ambiente_missao.escolher(m, pergunta, opcoes)
+        modelos, pensar, prazo = mod.NIVEIS.get(nivel, mod.NIVEIS["padrao"])
+        chave = f"cerebro:{nivel}"
+        if chave not in _OBJETIVO:  # conexões ficam abertas entre as chamadas (sem novo TLS a cada decisão)
+            _OBJETIVO[chave] = m.Cerebros({"cerebros": ["api"], "modelos": modelos, "pensar": pensar,
+                                           "politica": POLITICA_NAVEGAR, "esforco": "high" if pensar else "low"})
+        idx, fonte, seg, erros = _OBJETIVO[chave].decidir(pergunta, [{"texto": o} for o in opcoes], prazo)
+        return idx, fonte or ("; ".join(erros)[:80] if erros else None), seg
+
+    ex = mod.Executor(Ferramentas, decidir, os.path.join(TMP, "objetivos.json"))
+    r = ex.executar(a)
+    try:  # se a chamada for cortada (limite de 60 s do cliente), acao=objetivo_resultado devolve isto
+        os.makedirs(TMP, exist_ok=True)
+        with open(os.path.join(TMP, "ultimo_objetivo.json"), "w") as f:
+            json.dump({"quando": time.strftime("%H:%M:%S"), "objetivo": a.get("objetivo"), **r}, f, ensure_ascii=False)
+    except OSError:
+        pass
+    return r
+
+
 def _executar(a):
     acao = a.get("acao")
     try:
@@ -2391,6 +2474,14 @@ def _executar(a):
             r = missao.executar(a, navegar_etapas, escolher)
         elif acao == "navegar":
             r = navegar_etapas(a)
+        elif acao == "objetivo":
+            r = objetivo(a)
+        elif acao == "objetivo_resultado":
+            try:
+                with open(os.path.join(TMP, "ultimo_objetivo.json")) as f:
+                    r = json.load(f)
+            except (OSError, ValueError):
+                r = {"erro": "nenhum objetivo executado ainda"}
         elif acao == "rotina":
             r = rotina(a)
         elif acao == "fechar_anuncio":

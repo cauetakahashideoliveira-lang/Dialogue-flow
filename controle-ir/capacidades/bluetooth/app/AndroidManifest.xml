@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App auxiliar da capacidade bluetooth: no HyperOS a busca BLE do shell é recusada (pacote do sistema sem tela
+     própria), mas a de um app comum passa. Só ESCUTA anúncios e grava o resultado; nunca conecta nem pareia. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="br.controleir.bluetooth">
+
+    <!-- Android 12+: busca sem localização (o app não estima onde a pessoa está) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Android 11 ou anterior -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+
+    <application
+        android:label="Controle IR Bluetooth"
+        android:allowBackup="false"
+        android:hasCode="true">
+        <!-- Só quem tem a permissão DUMP (o shell do Shizuku, o sistema) abre a busca: outros apps não. -->
+        <activity
+            android:name=".Busca"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:theme="@android:style/Theme.DeviceDefault.Dialog.NoActionBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:launchMode="singleTask" />
+    </application>
+</manifest>

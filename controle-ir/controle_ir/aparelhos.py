@@ -196,8 +196,11 @@ def resumo_aparelho(a: dict) -> dict:
         "nome": a["nome"], "categoria": a.get("categoria"),
         "perfil": a["perfil"].get("nome"), "tipo_controle": cap["tipo_controle"],
         "comandos": len(a["perfil"].get("comandos", [])),
-        "parametros": sorted(cap["parametros"]) + (sorted(cap["estado_completo"]["parametros"])
-                                                   if "estado_completo" in cap else []),
+        # teclas avulsas primeiro, depois o que só o estado completo controla (sem repetir: um perfil misto
+        # pode ter "modo" nos dois, como o Gree do quarto com o turbo)
+        "parametros": sorted(cap["parametros"]) + [p for p in sorted((cap.get("estado_completo") or {})
+                                                                     .get("parametros", {}))
+                                                   if p not in cap["parametros"]],
         "macros": sorted(a.get("macros", {})),
     }
     if a.get("observacao"):
@@ -287,6 +290,36 @@ def _linhas_aparelho(a: dict, mesmos_codigos: list[str], limite_teclas: int) -> 
     if a.get("observacao"):
         linhas.append(f"  observação: {_curto(a['observacao'], 400)}")
     return linhas
+
+
+def resumo_compacto(aparelhos: list[dict], limite: int) -> str:
+    """Versão curta para caber no trecho das instruções que o cliente lê: todos os nomes SEMPRE aparecem.
+    Nível 1: nome, categoria, valores da configuração completa e parâmetros; nível 2: só os nomes."""
+    if not aparelhos:
+        return resumo_para_instrucoes(aparelhos)
+    cab = (f"Aparelhos salvos ({len(aparelhos)}; use o nome exato entre aspas; definir={{parâmetro: valor}}, "
+           "ajustar={parâmetro: passos}; teclas e macros em opcoes):")
+    linhas = []
+    for a in sorted(aparelhos, key=lambda x: normalizar(x["nome"])):
+        try:
+            completas = _linhas_aparelho(a, [], 0)
+            manter = [l.replace("config. completa (definir={...}, um envio): ", "definir: ")
+                      for l in completas[1:] if l.lstrip().startswith(("config.", "parâmetros"))]
+            extras = [c for c in a["perfil"].get("comandos", [])
+                      if c.get("adicionado_pelo_usuario") and not c.get("risco")]
+            if extras:  # botões que o usuário criou (ex.: visor do ar): chave + rótulo curto
+                manter.append("  teclas=[chave] criadas por você: " + "; ".join(
+                    f"{c['chave']} ({str(c.get('rotulo') or '').split(' (')[0][:30]})" for c in extras))
+            if a.get("macros"):
+                manter.append("  macros: " + "; ".join(a["macros"]))
+            linhas.append("\n".join([completas[0]] + ["  " + _curto(l.strip(), 200) for l in manter]))
+        except (KeyError, TypeError, ValueError, AttributeError):
+            linhas.append(f"- \"{a.get('nome')}\" — use opcoes")
+    texto = cab + "\n" + "\n".join(linhas)
+    if len(texto) <= limite:
+        return texto
+    return (f"Aparelhos salvos ({len(aparelhos)}; nome exato entre aspas; valores aceitos em opcoes): "
+            + "; ".join(f"\"{a.get('nome')}\"" for a in sorted(aparelhos, key=lambda x: normalizar(x["nome"]))))
 
 
 def resumo_para_instrucoes(aparelhos: list[dict], limite_teclas: int = LIMITE_TECLAS_RESUMO,

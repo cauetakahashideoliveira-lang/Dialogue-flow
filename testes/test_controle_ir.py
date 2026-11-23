@@ -547,6 +547,22 @@ class TestCanal(unittest.TestCase):
         self.assertEqual((r["t"], r["id"], r["s"]), ("res", "r1", 200))
         self.assertIn("tools/call", json.loads(r["b"])["result"]["eco"])
         self.assertEqual(cn.atendidas, 1)
+        fim = time.time() + 3
+        while not cn.chamadas and time.time() < fim:
+            time.sleep(0.02)
+        d = cn.desempenho()  # telemetria: tempo dentro do celular, sem argumentos
+        self.assertEqual(d["celular_ms"]["n"], 1)
+        self.assertEqual(d["ultimas"][0]["ferramenta"], "tools/call")
+        self.assertEqual(d["ultimas"][0]["status"], 200)
+
+    def test_nome_da_chamada_sem_argumentos(self):
+        from controle_ir.canal import nome_da_chamada
+        corpo = json.dumps({"method": "tools/call", "params": {"name": "executar_capacidade", "arguments": {
+            "nome": "tela", "argumentos": {"acao": "ver", "texto": "segredo"}}}}).encode()
+        self.assertEqual(nome_da_chamada(corpo), ("cap:tela.ver", "tools/call"))
+        self.assertEqual(nome_da_chamada(b'{"method":"tools/call","params":{"name":"consultar"}}'),
+                         ("consultar", "tools/call"))
+        self.assertEqual(nome_da_chamada(b"lixo"), (None, None))
 
 
 class TestServidorMCP(unittest.TestCase):
@@ -1144,6 +1160,32 @@ class TestResumoInstrucoes(unittest.TestCase):
             self.assertIn("instructions", r["result"])
         finally:
             del self.s.aparelhos.dados["aparelhos"]["quebrado"]
+
+    def test_instrucoes_poem_aparelhos_e_regras_no_trecho_lido(self):
+        """O Claude Code corta as instruções em 4096 caracteres (22/11): aparelhos, modos e regras essenciais
+        precisam estar antes disso, com todos os nomes, mesmo com muitos aparelhos."""
+        from controle_ir.mcp import ServidorMCP
+        m = ServidorMCP(self.s)
+        extras = [f"aparelho extra {i}" for i in range(12)]
+        for n in extras:
+            self.s.salvar_aparelho(n, perfil=94)
+        try:
+            _, r = m.tratar({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+            lido = r["result"]["instructions"][:4096]
+            for nome in [a["nome"] for a in self.s.aparelhos.listar()]:
+                self.assertIn(f'"{nome}"', lido)
+            for trecho in ("chame controlar direto", "Modos do celular", "reuniao", "autorizar só com o código",
+                           "DESARMADO", "acao=piloto", "Opções do desenvolvedor"):
+                self.assertIn(trecho, lido)
+            self.assertLess(lido.index('"ar do quarto"'), lido.index("REGRAS"))
+            _, r = m.tratar({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+            fs = {f["name"]: f["description"] for f in r["result"]["tools"]}
+            self.assertIn("ar do quarto", fs["controlar"])
+            self.assertNotIn("Use primeiro", fs["consultar"])
+            self.assertNotIn("Consulte antes de controlar", fs["opcoes"])
+        finally:
+            for n in extras:
+                self.s.editar_aparelho(n, excluir=True)
 
 
 
@@ -2232,6 +2274,12 @@ for linha in sys.stdin:
                '<node bounds="[0,1300][500,1400]" text="Desfazer" content-desc=""/></node></hierarchy>')
         self.assertEqual(self.m.regioes_visuais(xml), [[0, 200, 1000, 1000]])
         self.assertEqual(self.m.regioes_visuais(TestTela.XML), [])  # tela só de texto: nada de imagem
+        linhas = "".join(f'<node bounds="[0,{y}][1000,{y + 150}]" text="Opção {y}" content-desc=""/>'
+                         for y in range(300, 1800, 200))
+        lista = ('<?xml version="1.0"?><hierarchy><node bounds="[0,0][1000,2000]" text="" content-desc="">'
+                 '<node bounds="[0,250][1000,1900]" text="" content-desc="" class="FrameLayout"/>' + linhas +
+                 '</node></hierarchy>')
+        self.assertEqual(self.m.regioes_visuais(lista), [])  # contêiner vazio com as linhas por cima: não é imagem
         self.assertTrue(self.m.dentro([500, 700], [0, 200, 1000, 1000]))
         self._leitor_falso()
         self.m.ver(imagem=False)

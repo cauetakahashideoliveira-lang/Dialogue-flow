@@ -6,9 +6,34 @@ Instalação no Termux: veja `DEPENDENCIAS`.
 """
 import asyncio
 import base64
+import collections
+import logging
 import os
 import threading
 import time
+
+LOG = collections.deque(maxlen=400)  # últimas linhas do log da pyremoteplay (para diagnosticar no celular)
+
+
+class _Memoria(logging.Handler):
+    def emit(self, r):
+        try:
+            LOG.append(f"{time.strftime('%H:%M:%S')} {r.levelname[0]} {r.name.split('.')[-1]}: {r.getMessage()}"[:300])
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _ligar_log(nivel=logging.DEBUG):
+    lg = logging.getLogger("pyremoteplay")
+    if not any(isinstance(h, _Memoria) for h in lg.handlers):
+        lg.addHandler(_Memoria())
+    lg.setLevel(nivel)
+    lg.propagate = False
+
+
+def ultimas_linhas(n=60, filtro=None):
+    linhas = [l for l in LOG if not filtro or filtro.lower() in l.lower()]
+    return linhas[-max(1, int(n)):]
 
 DEPENDENCIAS = ("pkg install -y python-cryptography ffmpeg clang && "
                 "pip install 'pyee<9' async_timeout netifaces av pyremoteplay==0.7.6")
@@ -39,6 +64,7 @@ class Conexao:
 
     # ------------------------------------------------------------ bibliotecas
     def _rp(self):
+        _ligar_log()
         import pyremoteplay  # noqa: F401
         from pyremoteplay.profile import Profiles
         Profiles.set_default_path(self.perfis_arq)
@@ -53,6 +79,9 @@ class Conexao:
         if self.loop and self.th and self.th.is_alive():
             return self.loop
         self.loop = asyncio.new_event_loop()
+        self.loop.set_exception_handler(
+            lambda _l, ctx: LOG.append(f"{time.strftime('%H:%M:%S')} E asyncio: {ctx.get('message')} "
+                                       f"{repr(ctx.get('exception'))[:200]}"))
         self.th = threading.Thread(target=self.loop.run_forever, name="ps4-remoteplay", daemon=True)
         self.th.start()
         return self.loop
@@ -165,6 +194,8 @@ class Conexao:
     def conectar(self, ip, usuario=None, resolucao="720p", fps="high", espera=30):
         if self.conectado:
             return {"ja_conectado": True}
+        if self.device:  # sessão anterior que não ficou pronta
+            self.desconectar()
         from pyremoteplay.receiver import QueueReceiver
         d = self._dispositivo(ip)
         if not d.is_on:
@@ -176,10 +207,14 @@ class Conexao:
                              receiver=self.receptor, resolution=resolucao, fps=fps)
         if not s:
             raise RuntimeError("não consegui criar a sessão (conta pareada?)")
+        self.device = d  # guarda já: se não ficar pronta, estado/log mostram onde parou e desconectar limpa
+        LOG.append(f"{time.strftime('%H:%M:%S')} I ps4: conectando {ip} {resolucao}/{fps}")
         if not self._rodar(d.connect(), espera + 10):
-            raise RuntimeError(f"sessão recusada: {getattr(s, 'error', '') or 'sem detalhe'}")
+            raise RuntimeError(f"sessão recusada: {getattr(s, 'error', '') or 'sem detalhe'} | "
+                               + " / ".join(ultimas_linhas(8)))
         if not self._rodar(s.async_wait(espera), espera + 10):
-            raise RuntimeError("o vídeo não começou a tempo")
+            raise RuntimeError(f"o vídeo não começou a tempo (sessão: {self._estado_sessao()}) | "
+                               + " / ".join(ultimas_linhas(12)))
         d.controller.start()
         self.device, self.desde = d, time.time()
         return {"conectado": True, "console": d.host_name, "resolucao": resolucao, "fps": fps}
@@ -196,9 +231,17 @@ class Conexao:
         self.device, self.receptor, self.desde = None, None, None
         return {"desconectado": True}
 
+    def _estado_sessao(self):
+        s = self.device.session if self.device else None
+        if not s:
+            return None
+        st = getattr(s, "state", None)
+        return {"estado": getattr(st, "name", str(st)), "erro": getattr(s, "error", None),
+                "stream": type(getattr(s, "_stream", None)).__name__}
+
     def estado(self):
         d = self.device
-        return {"conectado": self.conectado, "console": d.host_name if d else None,
+        return {"conectado": self.conectado, "sessao": self._estado_sessao(), "console": d.host_name if d else None,
                 "jogo": d.app_name if d else None,
                 "conectado_ha_s": int(time.time() - self.desde) if self.desde else None}
 

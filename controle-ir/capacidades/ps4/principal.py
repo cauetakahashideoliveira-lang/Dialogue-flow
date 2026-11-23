@@ -379,6 +379,9 @@ def executar(a):
             faltam = _mod("conexao").disponivel()
             return {"pronto": not faltam, "faltam": faltam, "instalar": _mod("conexao").DEPENDENCIAS,
                     "config": _ler(CONF, {})}
+        if acao == "log":
+            cx = _mod("conexao")
+            return {"linhas": cx.ultimas_linhas(int(a.get("n", 60)), a.get("filtro"))}
         if acao == "botoes":
             return {"botoes": controle.BOTOES, "apelidos": controle.APELIDOS,
                     "analogicos": "esquerdo | direito (x,y de -1 a 1; y -1 = cima) ou angulo/forca"}

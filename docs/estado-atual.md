@@ -49,6 +49,18 @@ A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padr
   Investing.com cita 5,9575)".
 - **1.0.106:** `url=` abre o endereço direto no app (o caminho não depende de onde o app parou; ideal para vigias)
   e a visão pode rolar para cima (a barra de endereço some quando a página é rolada).
+- **1.0.107:** o objetivo devolve `valor` (o número que responde à pergunta, separado pelo modelo): "1 dólar ≈
+  R$ 6,00" fazia o vigia ler 1. Teste com `url`: abrir endereço → rolar para cima (visão) → concluir em **9,2 s**,
+  "1 dólar americano = 5,99 reais (23 de nov., 18:03 UTC, Morningstar)", `valor: 5.99`. Grafo: 7 telas do Chrome,
+  3 objetivos.
+- **1.0.108:** o endereço reabre na MESMA guia do Chrome (`com.android.browser.application_id`); antes, cada
+  leitura abria uma guia nova.
+- **Vigia ainda não rodou sozinho no POCO:** o vigia "dolar" (30 min, variação ≥ 1%, 3 h) nasceu **pausado**
+  porque existe `~/.controle-ir/PARAR`. Esse arquivo é gravado em todo travar (e no desarmar pela Central) e só é
+  apagado ao armar pelo terminal sem pareamento (`cli.py`); `destravar` não o remove. Num celular pareado ele fica
+  para sempre e também para os laços do termômetro e do sono. Uma mudança para comparar a hora do travar com a do
+  vigia foi recusada nesta sessão por mexer no freio — decisão do dono. Para rodar: o dono apaga o arquivo no
+  Termux (`rm ~/.controle-ir/PARAR`) e pede `vigia={nome:"dolar", retomar:true}`.
 
 ## 22/11 — ar condicionado quarto 2 (Brastemp Clean)
 - Servidor no POCO: **1.0.101** (canal direto conectado). O conector caiu duas vezes com "Not Found" e voltou

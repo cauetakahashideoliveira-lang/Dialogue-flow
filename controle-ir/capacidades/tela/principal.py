@@ -2635,7 +2635,10 @@ def _objetivo(a):
         def abrir_url(url, pacote=None):
             """Abre o endereço no app (intenção VIEW; com o pacote, no próprio app da tarefa)."""
             alvo = f" -p {shlex.quote(pacote)}" if pacote else ""
-            out, err, _ = rish(f"am start -a android.intent.action.VIEW -d {shlex.quote(url)}{alvo}", timeout=15)
+            # mesma identificação a cada vez: o Chrome reabre na MESMA guia (sem isso, cada leitura do vigia abria
+            # uma guia nova — 4 guias em 4 testes, 23/11); outros apps ignoram o extra
+            out, err, _ = rish(f"am start -a android.intent.action.VIEW -d {shlex.quote(url)}"
+                               f" --es com.android.browser.application_id controle-ir{alvo}", timeout=15)
             return "Error" not in (out or "") + (err or "")
 
         @staticmethod

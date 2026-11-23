@@ -22,7 +22,7 @@
   conferir com `consultar`. Se o conector der "Not Found" após atualizar, peça `controle-ir desligar; pkill ngrok;
   controle-ir ligar` (a 1.0.15+ já limpa o ngrok órfão sozinha).
 - **Capacidades embutidas:** estado_celular, diagnostico_rede, descobrir_rede, ouvir_bipe, foto, termometro, tela,
-  sono, sonar (`controle-ir/capacidades/`, com testes em `testes/`).
+  sono, sonar, ps4 (`controle-ir/capacidades/`, com testes em `testes/`).
 - **Central da Casa** (https://claude.ai/artifact/XSh6ivS8Cc6BsKakes2pCh, fonte `artefatos/central-da-casa.html`):
   app do claude.ai com o Gênio (controla, programa o celular, cria painéis). Republique com o mesmo arquivo;
   os dados (`widgets`, `memoria`, `eventos`) ficam no banco do artefato (ferramenta ArtifactData).
@@ -42,6 +42,8 @@
 - **`/god-mode`** (`.claude/skills/god-mode/`, adaptação AGPL do G0DM0D3): AutoTune, notas, STM, `perguntar` e
   `comparar` vários modelos (OpenRouter com `OPENROUTER_API_KEY` ou servidor local) com síntese pelo Claude. Sem
   os prompts de jailbreak nem o Parseltongue do original. Não confundir com `/godmode` (capacidade máxima).
+- **PS4** (1.0.66+, `controle-ir/capacidades/ps4/`, `docs/ps4.md`): DualShock virtual pelo Remote Play (pyremoteplay),
+  habilidades e jogador que aprende (Q-learning sobre a tela; o Claude é o técnico). Só jogo offline.
 - **Piloto** (1.0.51+, `capacidades/tela/piloto.py`, `acao=piloto`): laço rápido NO celular (o Claude fica fora do
   laço, como treinador): corrida memória/modelo local/Haiku, alvo semântico, gravador. Modelo local e quiz de teste:
   `docs/estado-atual.md` (19/11 noite). Para o estudo e o piloto do botão Stockfish no POCO, veja o README. Apps bloqueados (banco/senha) não

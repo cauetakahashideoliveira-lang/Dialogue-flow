@@ -24,8 +24,8 @@ import unicodedata
 
 MIN_INTERVALO, MAX_INTERVALO, MAX_DURACAO_H, MAX_VIGIAS = 5, 1440, 72, 10
 ADIAR_S, VOLTA_S, HISTORICO = 120, 20, 30
-CAMPOS = ("nome", "objetivo", "app", "pistas", "digitar", "pergunta", "concluido", "a_cada", "condicao", "duracao",
-          "quando", "cerebro", "max_passos")
+CAMPOS = ("nome", "objetivo", "app", "url", "pistas", "digitar", "pergunta", "concluido", "a_cada", "condicao",
+          "duracao", "quando", "cerebro", "max_passos")
 
 
 def norm(t):
@@ -106,6 +106,8 @@ def validar(cfg):
         return "objetivo: o que ler (ex.: 'ver a cotação do dólar no Google')"
     if cfg.get("permitir"):
         return "vigia só lê: permitir não é aceito"
+    if cfg.get("url") is not None and not re.match(r"^https?://[^\s\"'<>]{3,500}$", str(cfg["url"])):
+        return "url: endereço http(s)"
     try:
         a = float(cfg.get("a_cada", 30))
     except (TypeError, ValueError):

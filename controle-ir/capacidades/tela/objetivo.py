@@ -37,7 +37,7 @@ PROIBIDOS = ("enviar", "excluir", "apagar", "deletar", "comprar", "pagar", "paga
              "sair", "cancelar assinatura", "apagar dados", "resetar")
 DISPENSAR = ("agora nao", "mais tarde", "pular", "fechar", "dispensar", "nao, obrigado", "nao obrigado", "entendi",
              "ignorar", "x")  # janelas que só atrapalham (nunca "OK", "Permitir", "Aceitar")
-ROLAR, VOLTAR = "↓ rolar para baixo", "← voltar"
+ROLAR, VOLTAR, SUBIR = "↓ rolar para baixo", "← voltar", "↑ rolar para cima"
 CUMPRIDO = "✓ objetivo cumprido (a resposta já está na tela)"
 # Visão: no Chrome (22/11) a página inteira chega como um nó "Visualização na Web" sem texto; o executor rolava às
 # cegas e desistia com o valor na tela. Cada olhada custa ~2–4 s (captura + modelo de visão): limite por chamada.
@@ -119,6 +119,8 @@ def validar(a):
             return f"{k} deve ser uma lista de textos"
     if a.get("app") is not None and not re.match(r"^[A-Za-z][\w.]{2,120}$", str(a["app"])):
         return "app deve ser o nome do pacote"
+    if a.get("url") is not None and not re.match(r"^https?://[^\s\"'<>]{3,500}$", str(a["url"])):
+        return "url deve ser um endereço http(s) (abre direto no app, ex.: uma busca do Google)"
     return None
 
 
@@ -446,6 +448,19 @@ class Executor:
             t.calma(150, 3000)
             anotar("abrir", app, "inicio", t0)
 
+        if a.get("url") and hasattr(t, "abrir_url"):
+            # endereço direto (busca, página do produto): o caminho não depende de onde o app parou — o vigia
+            # da cotação começava no artigo de notícia aberto na rodada anterior (23/11)
+            t0 = self.relogio()
+            if t.abrir_url(a["url"], app):
+                if app:
+                    self._esperar_app(app, 8)
+                t.calma(150, 3000)
+                anotar("abrir_url", a["url"][:80], "url", t0)
+                digitado.add("url")  # a busca já está no endereço: não digita de novo
+            else:
+                return fim("parado", "não consegui abrir o endereço")
+
         els, app_atual = [], None
         while True:
             if self.relogio() > prazo:
@@ -695,6 +710,9 @@ class Executor:
                                     escolha = {"texto": rot, "x": rx, "y": ry, "clicavel": True,
                                                "pacote": app_atual, "visao": True}
                                     via = via_v
+                        elif ac == "rolar" and str(res.get("direcao", "")).lower().startswith(("cima", "up")):
+                            if not falhou(sig, SUBIR):
+                                escolha, via = SUBIR, via_v  # página rolada: a barra de endereço volta
                         elif ac == "rolar" and not falhou(sig, ROLAR):
                             escolha, via = ROLAR, via_v
                         elif ac == "voltar" and not falhou(sig, VOLTAR):
@@ -746,6 +764,11 @@ class Executor:
                 y1 = (lista["y"] - lista.get("a", 1200) // 3) if lista else 700
                 t.injetar(f"deslizar {x} {y0} {x} {y1} 700")  # gesto lento: sem "patinar" (a lista assenta logo)
                 rotulo_acao, acao = ROLAR, "rolar"
+            elif escolha == SUBIR:
+                r_ = cega or [0, 400, 1080, 1600]
+                x, y0, y1 = r_[0] + r_[2] // 2, r_[1] + r_[3] // 4, r_[1] + r_[3] * 3 // 4
+                t.injetar(f"deslizar {x} {y0} {x} {y1} 700")
+                rotulo_acao, acao = SUBIR, "rolar"
             elif escolha == VOLTAR:
                 t.injetar("tecla 4")
                 rotulo_acao, acao = VOLTAR, "voltar"

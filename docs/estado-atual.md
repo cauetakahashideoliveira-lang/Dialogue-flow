@@ -41,6 +41,14 @@ A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padr
   ÁRVORE da tela (`principal.regioes_web`): só contam descendentes do nó da página; uma lista que cobre ≥ 40% da página
   (sugestões da busca, diálogo) continua sendo lida pelo texto. Teste no POCO com a 1.0.103: "1 dólar americano =
   5,99 reais (conversor do Google)", concluído pela visão em 14,6 s (3 consultas, 1 olhada).
+- **1.0.105:** a árvore real do Chrome (`acao=arvore`, nova: o `uiautomator dump` volta vazio com o leitor ligado)
+  mostrou a página como `FrameLayout (Visualização na Web)` sem filhos com texto e a barra (`#control_container`)
+  como IRMÃ dela. Na guia nova a visão queria buscar de novo: agora pode pedir `digitar` (o mesmo texto autorizado,
+  uma vez a mais), e o diagnóstico traz as respostas recusadas. Teste no POCO partindo de um artigo de notícia:
+  digitar → rolar (visão) → concluir (visão) em **7,5 s**, resposta "1 dólar ≈ R$ 6,00 (conversor do Google;
+  Investing.com cita 5,9575)".
+- **1.0.106:** `url=` abre o endereço direto no app (o caminho não depende de onde o app parou; ideal para vigias)
+  e a visão pode rolar para cima (a barra de endereço some quando a página é rolada).
 
 ## 22/11 — ar condicionado quarto 2 (Brastemp Clean)
 - Servidor no POCO: **1.0.101** (canal direto conectado). O conector caiu duas vezes com "Not Found" e voltou

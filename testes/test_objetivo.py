@@ -862,6 +862,37 @@ class TestObjetivoVisaoEGrafo(unittest.TestCase):
         self.assertEqual(sum(p["acao"] == "digitar" for p in r["passos"]), 2)
         self.assertIn("visao_recusada", r["visao_diag"])
 
+    def test_url_abre_direto_e_a_visao_sobe_a_pagina(self):
+        telas = {"artigo": ([BARRA, web()], {}), "res": ([BARRA, web()], {})}
+        cel = CelularWeb(telas, "artigo")
+        abertos = []
+
+        def abrir_url(url, pacote=None):
+            abertos.append((url, pacote))
+            cel.atual, cel.rolado = "res", 2  # a busca abre já rolada (página guardada)
+            return True
+        cel.abrir_url = abrir_url
+        cel.fundo = {"res": 2}
+        orig = cel.injetar
+
+        def injetar(cmd):  # rolar para cima: o gesto desce o dedo (y0 < y1)
+            p_ = cmd.split()
+            if p_[0] == "deslizar" and int(p_[2]) < int(p_[4]):
+                cel.injetados.append(cmd)
+                cel.rolado = max(0, cel.rolado - 2)
+                return True
+            return orig(cmd)
+        cel.injetar = injetar
+        r = self.executor(cel, lambda e, o: {"acao": "rolar", "direcao": "cima"} if e[1] else
+                          {"feito": True, "resposta": "R$ 5,99"}).executar(
+            {"objetivo": "ler a cotação", "app": CHROME, "url": "https://www.google.com/search?q=dolar",
+             "digitar": "dolar", "pergunta": "quanto?"})
+        self.assertEqual(abertos, [("https://www.google.com/search?q=dolar", CHROME)])
+        self.assertEqual([p["acao"] for p in r["passos"]], ["abrir_url", "rolar", "concluir"])
+        self.assertEqual(r["passos"][1]["alvo"], self.m.SUBIR)
+        self.assertEqual(cel.digitado, "")  # com o endereço, não digita a busca
+        self.assertIn("erro", self.m.Executor(cel).executar({"objetivo": "x", "url": "javascript:alert(1)"}))
+
     def test_area_cega(self):
         self.assertIsNotNone(self.m.area_cega([BARRA, web()]))
         cheia = [BARRA, web()] + [el(f"linha {k}", 600 + k * 100, pacote=CHROME) for k in range(5)]

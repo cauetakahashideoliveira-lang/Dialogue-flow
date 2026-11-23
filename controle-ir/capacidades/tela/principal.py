@@ -2539,7 +2539,7 @@ def _olhar(mod):
             'Senão, o próximo passo: {"acao": "tocar", "x": <px>, "y": <px>, "rotulo": "<texto do que vai tocar>"}'
             ' | {"acao": "digitar", "x": <px>, "y": <px>, "rotulo": "<campo>"} (só se houver texto autorizado; '
             'digita esse texto e aperta Enter) | {"acao": "opcao", "opcao": <n>} | {"acao": "rolar"} | '
-            '{"acao": "voltar"}.') if x)
+            '{"acao": "rolar", "direcao": "cima"} | {"acao": "voltar"}.') if x)
         conteudo = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
                     {"type": "text", "text": texto}]
         d = _json_da_resposta(_perguntar_api(modelo, POLITICA_VISAO, conteudo, 300, pensar))
@@ -2631,6 +2631,13 @@ def _objetivo(a):
             return regioes_web(xml) + regioes_visuais(xml)
 
         @staticmethod
+        def abrir_url(url, pacote=None):
+            """Abre o endereço no app (intenção VIEW; com o pacote, no próprio app da tarefa)."""
+            alvo = f" -p {shlex.quote(pacote)}" if pacote else ""
+            out, err, _ = rish(f"am start -a android.intent.action.VIEW -d {shlex.quote(url)}{alvo}", timeout=15)
+            return "Error" not in (out or "") + (err or "")
+
+        @staticmethod
         def web_motivo():
             return _ULTIMA_WEB.get("analise") or None
 
@@ -2703,8 +2710,8 @@ def _vigias():
         spec.loader.exec_module(mod)
 
         def rodar(v):
-            args = {k: v[k] for k in ("objetivo", "app", "pistas", "digitar", "concluido", "cerebro", "max_passos")
-                    if v.get(k) is not None}
+            args = {k: v[k] for k in ("objetivo", "app", "url", "pistas", "digitar", "concluido", "cerebro",
+                                      "max_passos") if v.get(k) is not None}
             args.update(acao="objetivo", pergunta=v.get("pergunta") or v["objetivo"], prazo=40 if v.get("agora") else 45)
             return objetivo(args, esperar=True)  # nunca com permitir: vigia só lê
 

@@ -53,8 +53,27 @@ def fracao_cor(rgb, r, cor, tol=60):
     return float((d <= float(tol)).mean())
 
 
+def mascara_cor(pedaco, spec):
+    """spec: {cor:[r,g,b], tolerancia} (distância RGB) ou {matiz:[min,max] graus, sat_min, val_min} (HSV)."""
+    a = np.asarray(pedaco, dtype=np.float32)[..., :3]
+    if "matiz" in spec:
+        r, g, b = a[..., 0] / 255, a[..., 1] / 255, a[..., 2] / 255
+        mx, mn = np.maximum(np.maximum(r, g), b), np.minimum(np.minimum(r, g), b)
+        d = mx - mn + 1e-6
+        h = np.where(mx == r, ((g - b) / d) % 6, np.where(mx == g, (b - r) / d + 2, (r - g) / d + 4)) * 60
+        sat = np.where(mx > 0, (mx - mn) / (mx + 1e-6), 0)
+        h0, h1 = [float(x) for x in spec["matiz"]]
+        dentro = (h >= h0) & (h <= h1) if h0 <= h1 else (h >= h0) | (h <= h1)
+        return dentro & (sat >= float(spec.get("sat_min", 0.4))) & (mx >= float(spec.get("val_min", 0.3)))
+    dist = np.sqrt(((a - np.asarray(spec.get("cor", [255, 255, 255]), dtype=np.float32)) ** 2).sum(axis=2))
+    return dist <= float(spec.get("tolerancia", 60))
+
+
 def medir(rgb, det):
     t = det.get("tipo", "barra")
+    if t == "vida":  # fração acesa da barra (qualquer cor: amarela, vermelha, branca); perdida = escura
+        pedaco = regiao(rgb, det["regiao"])
+        return float((pedaco.max(axis=2) >= float(det.get("limiar_brilho", 110))).mean())
     if t in ("barra", "cor_aparece"):
         return fracao_cor(rgb, det["regiao"], det.get("cor", [255, 255, 255]), det.get("tolerancia", 60))
     if t == "brilho":
@@ -78,9 +97,51 @@ def recompensa(antes, depois, detectores):
             v = 1.0 if (a < limiar <= b) else 0.0
         else:
             v = b - a
+        limite = d.get("limite")
+        if limite is not None and abs(v) > float(limite):
+            v = 0.0  # salto grande = troca de round/tela, não foi a jogada
         det_out[nome] = round(peso * v, 4)
         total += peso * v
     return total, det_out
+
+
+# --------------------------------------------------------------------------- percepção da luta
+def centro_x(rgb, area, spec, minimo=0.002):
+    """Centro horizontal (0–1 da tela) dos pixels da cor `spec` dentro de `area`; None se quase não aparece."""
+    pedaco = regiao(rgb, area)
+    m = mascara_cor(pedaco, spec)
+    frac = float(m.mean())
+    if frac < minimo:
+        return None, frac, None
+    ys, xs = np.nonzero(m)
+    x0, y0, w, h = [float(v) for v in area]
+    cx = x0 + (xs.mean() + 0.5) / m.shape[1] * w
+    topo = y0 + np.percentile(ys, 5) / m.shape[0] * h  # topo do lutador (pulo = topo alto)
+    return float(cx), frac, float(topo)
+
+
+def perceber(rgb, cfg):
+    """cfg: {area, eu:{spec}, rival:{spec}, distancias:[perto, medio], topo_pulo}. Devolve contexto + chave."""
+    area = cfg.get("area", [0.0, 0.15, 1.0, 0.8])
+    eu, fe, te = centro_x(rgb, area, cfg["eu"], cfg.get("minimo", 0.002))
+    rv, fr, tr = centro_x(rgb, area, cfg["rival"], cfg.get("minimo", 0.002))
+    ctx = {"eu_x": None if eu is None else round(eu, 3), "rival_x": None if rv is None else round(rv, 3),
+           "eu_frac": round(fe, 4), "rival_frac": round(fr, 4)}
+    if eu is None or rv is None:
+        ctx.update({"frente": cfg.get("_ultimo_frente", "RIGHT"), "chave": "sem_lutador"})
+        return ctx
+    dist = abs(rv - eu)
+    p, m = cfg.get("distancias", [0.16, 0.32])
+    faixa = "perto" if dist < p else ("medio" if dist < m else "longe")
+    frente = "RIGHT" if rv >= eu else "LEFT"
+    cfg["_ultimo_frente"] = frente
+    pulo_lim = float(cfg.get("topo_pulo", 0.25))
+    rival_alto = tr is not None and tr < pulo_lim
+    canto = "canto" if min(eu, 1 - eu) < float(cfg.get("canto", 0.12)) else "meio"
+    ctx.update({"distancia": round(dist, 3), "faixa": faixa, "frente": frente, "rival_no_ar": bool(rival_alto),
+                "eu_topo": None if te is None else round(te, 3), "rival_topo": None if tr is None else round(tr, 3),
+                "chave": f"{faixa}|{'ar' if rival_alto else 'chao'}|{canto}"})
+    return ctx
 
 
 # --------------------------------------------------------------------------- estados
@@ -189,7 +250,8 @@ class Jogador:
     """Junta visão, cérebro, memória em disco e gravador. Não sabe nada do PS4: recebe
     `olhar()` → quadro RGB e `agir(nome_habilidade)` → executa (para testar com um jogo de mentira)."""
 
-    def __init__(self, pasta, jogo, habilidades, detectores, limiar=0.08, estados_max=48, **cerebro_cfg):
+    def __init__(self, pasta, jogo, habilidades, detectores, limiar=0.08, estados_max=48, percepcao=None,
+                 **cerebro_cfg):
         self.pasta = os.path.join(pasta, _seguro(jogo))
         self.jogo = jogo
         self.detectores = list(detectores or [])
@@ -200,6 +262,9 @@ class Jogador:
                         else Cerebro(habilidades, **cerebro_cfg))
         for k, v in cerebro_cfg.items():
             setattr(self.cerebro, k, v)
+        self.percepcao = percepcao if percepcao is not None else mem.get("percepcao")
+        self.chaves = dict(mem.get("chaves", {}))  # chave da percepção → número do estado
+        self.ultimo_ctx = {}
         self.historico = list(mem.get("historico", []))  # recompensa média por bloco de passos
         self.passos_total = int(mem.get("passos_total", 0))
         self.ultimos = []  # (estado, habilidade, recompensa) dos passos recentes (para notas)
@@ -219,7 +284,9 @@ class Jogador:
     def salvar(self):
         d = {"jogo": self.jogo, "estados": self.estados.dump(), "cerebro": self.cerebro.dump(),
              "historico": self.historico[-500:], "passos_total": self.passos_total,
-             "detectores": self.detectores, "salvo": time.strftime("%Y-%m-%d %H:%M:%S")}
+             "detectores": self.detectores, "percepcao": {k: v for k, v in (self.percepcao or {}).items()
+                                                          if not k.startswith("_")} or None,
+             "chaves": self.chaves, "salvo": time.strftime("%Y-%m-%d %H:%M:%S")}
         tmp = self._arq() + ".tmp"
         with open(tmp, "w") as f:
             json.dump(d, f)
@@ -229,20 +296,44 @@ class Jogador:
         with open(os.path.join(self.pasta, "gravacao.jsonl"), "a") as f:
             f.write(json.dumps(reg, ensure_ascii=False) + "\n")
 
+    # ---- situação
+    def situacao(self, quadro, aprender=True):
+        """Estado (número) + contexto. Com percepção: chave legível (perto|chao|meio...); sem: protótipos."""
+        if not self.percepcao:
+            return self.estados.atribuir(reduzir(quadro), aprender), {}
+        ctx = perceber(quadro, self.percepcao)
+        k = ctx["chave"]
+        if k not in self.chaves:
+            if not aprender:
+                return -1, ctx
+            self.chaves[k] = len(self.chaves)
+        return self.chaves[k], ctx
+
+    def nome_estado(self, s):
+        for k, v in self.chaves.items():
+            if v == s:
+                return k
+        return str(s)
+
     # ---- um passo
     def passo(self, olhar, agir, explorar=True, guardar_quadro=None):
         q0 = olhar()
         if q0 is None:
             return {"erro": "sem imagem do jogo"}
-        s = self.estados.atribuir(reduzir(q0))
+        s, ctx = self.situacao(q0)
+        self.ultimo_ctx = ctx
         h = self.cerebro.escolher(s, explorar)
         t0 = time.monotonic()
-        agir(h)
+        try:
+            agir(h, ctx)
+        except TypeError:
+            agir(h)
         q1 = olhar()
         if q1 is None:
             return {"erro": "sem imagem do jogo"}
         r, det = recompensa(q0, q1, self.detectores)
-        s2 = self.estados.atribuir(reduzir(q1), aprender=False)
+        s2, _ = self.situacao(q1, aprender=False)
+        s2 = None if s2 < 0 else s2
         self.cerebro.aprender(s, h, r, s2)
         self.passos_total += 1
         self.ultimos = (self.ultimos + [(s, h, r)])[-20:]
@@ -250,7 +341,8 @@ class Jogador:
         if len(self.bloco) >= 25:
             self.historico.append(round(sum(self.bloco) / len(self.bloco), 4))
             self.bloco = []
-        reg = {"t": round(time.time(), 2), "passo": self.passos_total, "estado": s, "habilidade": h,
+        reg = {"t": round(time.time(), 2), "passo": self.passos_total, "estado": s,
+               "situacao": ctx.get("chave"), "frente": ctx.get("frente"), "habilidade": h,
                "recompensa": round(r, 4), "detalhes": det, "proximo": s2, "ms": int((time.monotonic() - t0) * 1000)}
         if guardar_quadro and (abs(r) >= 0.05 or self.passos_total % 50 == 1):
             reg["quadro"] = guardar_quadro(q1, f"p{self.passos_total:06d}")
@@ -258,7 +350,7 @@ class Jogador:
         return reg
 
     def demonstrar(self, quadro, habilidade):
-        s = self.estados.atribuir(reduzir(quadro))
+        s, _ = self.situacao(quadro)
         self.cerebro.demonstrar(s, habilidade)
         self.gravar({"t": round(time.time(), 2), "demo": True, "estado": s, "habilidade": habilidade})
         return s
@@ -272,7 +364,10 @@ class Jogador:
         return len(alvo)
 
     def relatorio(self):
-        pol = self.cerebro.politica(len(self.estados.prot))
+        n = len(self.chaves) if self.percepcao else len(self.estados.prot)
+        pol = self.cerebro.politica(n)
+        if self.percepcao:
+            pol = {self.nome_estado(s): v for s, v in pol.items()}
         hist = self.historico[-40:]
         meio = len(hist) // 2
         tendencia = (round(sum(hist[meio:]) / max(1, len(hist) - meio) - sum(hist[:meio]) / max(1, meio), 4)
@@ -283,7 +378,8 @@ class Jogador:
             por_hab.setdefault(h, [0, 0.0])
             por_hab[h][0] += n
             por_hab[h][1] += self.cerebro.q.get(k, 0.0) * n
-        return {"jogo": self.jogo, "passos": self.passos_total, "estados": len(self.estados.prot),
+        return {"jogo": self.jogo, "passos": self.passos_total, "estados": n,
+                "ultima_percepcao": self.ultimo_ctx or None,
                 "habilidades": {h: {"usos": v[0], "valor_medio": round(v[1] / max(1, v[0]), 3)}
                                 for h, v in sorted(por_hab.items(), key=lambda x: -x[1][0])},
                 "politica": pol, "recompensa_por_bloco": hist, "melhorando": tendencia,

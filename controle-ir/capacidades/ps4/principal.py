@@ -151,8 +151,12 @@ def _ip(a):
 
 
 # --------------------------------------------------------------------------- comandos
-def rodar_comando(passos, origem="comando"):
-    atom = controle.normalizar(passos, habilidades())
+def _frente(v):
+    return "LEFT" if str(v or "").lower() in ("left", "esquerda") else "RIGHT"
+
+
+def rodar_comando(passos, frente=None):
+    atom = controle.normalizar(passos, habilidades(), frente=_frente(frente))
     t0 = time.time()
     with E.trava:
         return controle.executar(atom, E.conexao(),
@@ -168,7 +172,7 @@ def cmd_comando(a):
     passos = a.get("passos")
     if passos is None:
         return {"erro": "informe passos (lista ou texto: 'x x r2:600 esperar:300')"}
-    atom = controle.normalizar(passos, habilidades())
+    atom = controle.normalizar(passos, habilidades(), frente=_frente(a.get("frente")))
     dur = controle.duracao(atom)
     E.parar_tarefa.clear()
     demo = None
@@ -183,7 +187,7 @@ def cmd_comando(a):
         def fundo():
             E.tarefa_info = {"inicio": time.time(), "duracao_prevista_s": dur}
             try:
-                E.tarefa_info["resultado"] = rodar_comando(passos)
+                E.tarefa_info["resultado"] = rodar_comando(passos, a.get("frente"))
             except Exception as e:  # noqa: BLE001
                 E.tarefa_info["erro"] = str(e)
         E.tarefa = threading.Thread(target=fundo, name="ps4-comando", daemon=True)
@@ -191,7 +195,7 @@ def cmd_comando(a):
         return {"em_segundo_plano": True, "duracao_prevista_s": dur, "passos_atomicos": len(atom),
                 "dica": "acao=estado acompanha; acao=parar interrompe", "demonstracao": demo}
     t0 = time.monotonic()
-    r = rodar_comando(passos)
+    r = rodar_comando(passos, a.get("frente"))
     r.update({"segundos": round(time.monotonic() - t0, 2), "demonstracao": demo})
     if a.get("ver_depois"):
         time.sleep(max(0, float(a.get("esperar_ms", 300))) / 1000)
@@ -252,8 +256,8 @@ def _laco_jogador(cfg):
     guardar = _guardar_quadro(j.pasta)
     E.jog_info.update({"inicio": time.time(), "passos": 0, "recompensa": 0.0, "estado_txt": "jogando"})
 
-    def agir(h):
-        rodar_comando([{"habilidade": h}])
+    def agir(h, ctx=None):
+        rodar_comando([{"habilidade": h}], (ctx or {}).get("frente"))
     try:
         while time.time() < fim and not E.jog_parar.is_set() and not _parar_global(t0):
             if not con.conectado:
@@ -301,8 +305,11 @@ def cmd_jogador(a):
         for d in det:
             jog.medir(__import__("numpy").zeros((90, 160, 3), dtype="uint8"), d)  # valida
         extra = {k: float(a[k]) for k in ("curiosidade", "alfa", "gama") if a.get(k) is not None}
+        if a.get("percepcao") is not None:
+            jog.perceber(__import__("numpy").zeros((90, 160, 3), dtype="uint8"), dict(a["percepcao"]))  # valida
         E.jogador = jog.Jogador(os.path.join(PASTA, "jogadores"), jogo, nomes, det,
                                 limiar=float(a.get("limiar", 0.08)), estados_max=int(a.get("estados_max", 48)),
+                                percepcao=dict(a["percepcao"]) if a.get("percepcao") is not None else None,
                                 **extra)
         conf = _ler(CONF, {})
         conf["jogo"] = jogo
@@ -338,6 +345,30 @@ def cmd_jogador(a):
         n = j.nota(float(a.get("valor", 1)), int(a.get("ultimos", 5)))
         j.salvar()
         return {"nota": float(a.get("valor", 1)), "jogadas_afetadas": n}
+    if modo == "perceber":
+        cfg = dict(a.get("percepcao") or j.percepcao or {})
+        if not cfg:
+            return {"erro": "informe percepcao={area, eu:{cor|matiz}, rival:{cor|matiz}, distancias}"}
+        q = E.conexao().quadro() if E.con else None
+        if q is None:
+            return {"erro": "sem imagem do jogo"}
+        ctx = jog.perceber(q, cfg)
+        marc = q.copy()
+        H, W = marc.shape[:2]
+        x0, y0, w, h = [float(v) for v in cfg.get("area", [0, 0.15, 1, 0.8])]
+        for chave, cor in (("eu_x", (255, 255, 0)), ("rival_x", (0, 200, 255))):
+            if ctx.get(chave) is not None:
+                cx = min(W - 3, max(0, int(ctx[chave] * W)))
+                marc[int(y0 * H):int((y0 + h) * H), cx:cx + 3] = cor
+        for lado_ in ("eu", "rival"):  # pinta de magenta o que a cor pegou (para calibrar)
+            pedaco = jog.regiao(q, [x0, y0, w, h])
+            m = jog.mascara_cor(pedaco, cfg[lado_])
+            ys, xs = __import__("numpy").nonzero(m)
+            marc[int(y0 * H) + ys[::7], int(x0 * W) + xs[::7]] = (255, 0, 255) if lado_ == "eu" else (0, 255, 0)
+        if a.get("percepcao") is not None and a.get("salvar"):
+            j.percepcao = cfg
+            j.salvar()
+        return {"percepcao": ctx, "_imagem": imagem_json(marc, a.get("largura", 640))}
     if modo == "detectores":
         if a.get("detectores") is not None:
             for d in a["detectores"]:
@@ -371,13 +402,16 @@ def cmd_jogador(a):
             except OSError:
                 continue
         return {"jogadas": escolha, "ultimas": regs[-15:], "relatorio": j.relatorio(), "_imagens": imgs}
+    if modo == "politica":  # só jogar o melhor aprendido (sem testar o desconhecido)
+        return {"erro": "use modo=iniciar com explorar=false"}
     if modo == "esquecer":
         E.jogador = None
         arq = os.path.join(PASTA, "jogadores", jog._seguro(jogo), "memoria.json")
         if os.path.exists(arq):
             os.replace(arq, arq + f".{int(time.time())}.bak")
         return {"esquecido": jogo, "copia": True}
-    return {"erro": "modo: preparar | iniciar | parar | estado | relatorio | revisar | nota | detectores | esquecer"}
+    return {"erro": "modo: preparar | iniciar | parar | estado | relatorio | revisar | nota | detectores | perceber "
+                    "| esquecer"}
 
 
 # --------------------------------------------------------------------------- entrada

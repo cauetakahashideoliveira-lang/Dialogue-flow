@@ -42,8 +42,16 @@ class ErroComando(ValueError):
     pass
 
 
-def botao(nome):
+OPOSTO = {"RIGHT": "LEFT", "LEFT": "RIGHT"}
+
+
+def botao(nome, frente="RIGHT"):
+    """frente/tras viram direita/esquerda conforme o lado para onde o lutador olha (frente="RIGHT" ou "LEFT")."""
     n = str(nome).strip()
+    if n.lower() in ("frente", "avancar", "avançar"):
+        return frente
+    if n.lower() in ("tras", "trás", "recuar"):
+        return OPOSTO.get(frente, "LEFT")
     if n.upper() in BOTOES:
         return n.upper()
     b = APELIDOS.get(n.lower())
@@ -51,6 +59,9 @@ def botao(nome):
         raise ErroComando(f"botão desconhecido: {nome!r} (use x, bola, quadrado, triangulo, l1..r3, cima, "
                           f"baixo, esquerda, direita, opcoes, share, ps, touchpad)")
     return b
+
+
+_botao = botao
 
 
 def lado(nome):
@@ -87,9 +98,14 @@ def texto_para_passos(txt):
     return passos
 
 
-def normalizar(passos, habilidades=None, _prof=0):
+def normalizar(passos, habilidades=None, _prof=0, frente="RIGHT"):
     """Valida e expande (repetir, habilidade, texto) em passos atômicos:
-    ("apertar", B) ("soltar", B) ("analogico", lado, x, y) ("esperar", s)."""
+    ("apertar", B) ("soltar", B) ("analogico", lado, x, y) ("esperar", s).
+    frente: "RIGHT"/"LEFT" — para onde o lutador olha; resolve os botões frente/tras das habilidades."""
+    frente = "LEFT" if str(frente).upper() in ("LEFT", "ESQUERDA") else "RIGHT"
+
+    def botao(n):  # noqa: F811 — versão com o lado já resolvido
+        return _botao(n, frente)
     if isinstance(passos, str):
         passos = texto_para_passos(passos)
     if _prof > MAX_PROFUNDIDADE:
@@ -97,7 +113,7 @@ def normalizar(passos, habilidades=None, _prof=0):
     out = []
     for p in passos or []:
         if isinstance(p, str):
-            out += normalizar(p, habilidades, _prof)
+            out += normalizar(p, habilidades, _prof, frente)
             continue
         if not isinstance(p, dict):
             raise ErroComando(f"passo inválido: {p!r}")
@@ -123,7 +139,7 @@ def normalizar(passos, habilidades=None, _prof=0):
             out.append(("esperar", max(0, min(int(p["esperar"]), 60000)) / 1000))
         elif "repetir" in p:
             n = max(1, min(int(p["repetir"]), 500))
-            corpo = normalizar(p.get("passos", []), habilidades, _prof + 1)
+            corpo = normalizar(p.get("passos", []), habilidades, _prof + 1, frente)
             for _ in range(n):
                 out += corpo
                 if len(out) > MAX_PASSOS:
@@ -132,7 +148,7 @@ def normalizar(passos, habilidades=None, _prof=0):
             h = (habilidades or {}).get(p["habilidade"])
             if not h:
                 raise ErroComando(f"habilidade não encontrada: {p['habilidade']!r}")
-            out += normalizar(h["passos"], habilidades, _prof + 1)
+            out += normalizar(h["passos"], habilidades, _prof + 1, frente)
         else:
             raise ErroComando(f"passo sem tipo conhecido: {p!r}")
         if len(out) > MAX_PASSOS:

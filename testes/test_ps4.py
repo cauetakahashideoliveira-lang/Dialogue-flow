@@ -67,6 +67,13 @@ class TestComandos(unittest.TestCase):
         with self.assertRaises(controle.ErroComando):
             controle.normalizar([{"habilidade": "voar"}], hs)
 
+    def test_frente_e_tras_pelo_lado(self):
+        hs = {"lanca": {"passos": "tras:40 frente:40 quadrado:50"}}
+        dir_ = [x[1] for x in controle.normalizar([{"habilidade": "lanca"}], hs, frente="RIGHT") if x[0] == "apertar"]
+        esq = [x[1] for x in controle.normalizar([{"habilidade": "lanca"}], hs, frente="LEFT") if x[0] == "apertar"]
+        self.assertEqual(dir_, ["LEFT", "RIGHT", "SQUARE"])
+        self.assertEqual(esq, ["RIGHT", "LEFT", "SQUARE"])
+
     def test_executar_segura_e_solta(self):
         g = Gravador()
         atom = controle.normalizar([{"segurar": "r2"}, {"analogico": "esquerdo", "x": 1, "y": 0, "ms": 10},
@@ -139,6 +146,46 @@ class TestJogador(unittest.TestCase):
         j2 = self.jog.Jogador(self.pasta, "teste", ["atacar", "defender"], None)
         self.assertEqual(j2.passos_total, j.passos_total)
         self.assertEqual(j2.cerebro.politica(len(j2.estados.prot))[s_verm]["melhor"], "atacar")
+
+    def test_percepcao_da_luta_e_vida(self):
+        cfg = {"area": [0, 0.2, 1, 0.8], "eu": {"matiz": [40, 65], "sat_min": 0.5, "val_min": 0.4},
+               "rival": {"cor": [40, 90, 210], "tolerancia": 50}, "distancias": [0.16, 0.32]}
+        q = np.full((180, 320, 3), 30, dtype=np.uint8)
+        q[60:170, 60:80] = [220, 190, 30]    # "Scorpion" amarelo à esquerda
+        q[60:170, 230:250] = [40, 90, 210]   # "Sub-Zero" azul à direita
+        ctx = self.jog.perceber(q, cfg)
+        self.assertEqual(ctx["frente"], "RIGHT")
+        self.assertEqual(ctx["faixa"], "longe")
+        self.assertFalse(ctx["rival_no_ar"])
+        q2 = np.full((180, 320, 3), 30, dtype=np.uint8)
+        q2[60:170, 180:200] = [220, 190, 30]
+        q2[40:120, 150:170] = [40, 90, 210]  # rival colado, do outro lado e no alto (pulando)
+        ctx2 = self.jog.perceber(q2, dict(cfg, topo_pulo=0.3))
+        self.assertEqual((ctx2["frente"], ctx2["faixa"], ctx2["rival_no_ar"]), ("LEFT", "perto", True))
+        self.assertEqual(self.jog.perceber(np.zeros((90, 160, 3), np.uint8), cfg)["chave"], "sem_lutador")
+        # vida: fração acesa; salto grande (round novo) é ignorado com limite
+        a = np.zeros((90, 160, 3), np.uint8)
+        a[0:9, 0:80] = [220, 40, 40]  # meia barra vermelha
+        b = a.copy()
+        b[0:9, 60:80] = 0             # perdeu 1/8
+        det = [{"tipo": "vida", "regiao": [0, 0, 1, 0.1], "peso": 1, "limite": 0.3, "nome": "v"}]
+        r, _ = self.jog.recompensa(a, b, det)
+        self.assertAlmostEqual(r, -0.125, places=2)
+        cheio = np.full((90, 160, 3), 220, np.uint8)
+        self.assertEqual(self.jog.recompensa(b, cheio, det)[0], 0.0)  # recarga do round não conta
+
+    def test_jogador_com_percepcao_passa_o_lado(self):
+        cfg = {"area": [0, 0.2, 1, 0.8], "eu": {"cor": [220, 190, 30], "tolerancia": 40},
+               "rival": {"cor": [40, 90, 210], "tolerancia": 40}}
+        j = self.jog.Jogador(self.pasta, "luta", ["lanca"], [], percepcao=cfg)
+        q = np.full((180, 320, 3), 30, dtype=np.uint8)
+        q[60:170, 250:270] = [220, 190, 30]
+        q[60:170, 40:60] = [40, 90, 210]
+        visto = []
+        r = j.passo(lambda: q, lambda h, ctx: visto.append(ctx["frente"]))
+        self.assertEqual(visto, ["LEFT"])
+        self.assertEqual(r["situacao"], "longe|chao|meio")
+        self.assertIn("longe|chao|meio", j.relatorio()["politica"])
 
     def test_demonstracao_e_nota(self):
         j = self.jog.Jogador(self.pasta, "demo", ["a", "b"], [])

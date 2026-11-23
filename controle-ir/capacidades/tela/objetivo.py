@@ -8,13 +8,20 @@ Decisão, da mais barata à mais cara:
   1. pistas  — rótulos do caminho que o Claude já sabe (ex.: ["Bluetooth"]): toque direto, sem modelo;
   2. memória — o que funcionou antes nesta tela para este objetivo (aprende sozinho);
   3. digitar — campo de busca visível e texto autorizado em `digitar`;
+  2b. grafo — o mapa das telas deste app (telas → toques → tela seguinte) leva ao destino de um objetivo igual ou
+              parecido já cumprido, mesmo partindo de outra tela;
   4. modelo  — o cérebro do celular (Haiku pela API, modelo local) escolhe entre os controles visíveis;
+     visão   — tela que a acessibilidade não descreve (página web, mapa, jogo): a captura vai ao modelo de visão,
+               que diz se o objetivo já está cumprido (e a resposta) ou onde tocar;
   5. rolar   — o alvo pode estar abaixo (lista longa).
+Conclusão: critério local (texto/app) ou, com concluido={modelo:true} / pergunta='...', o próprio modelo julga se
+terminou e devolve a resposta lida da tela (campo "resposta").
 Recuperação: janela de outro app (aviso, anúncio, notificação aberta) → reflexos, fechar anúncio, voltar, reabrir
 o app; ação sem efeito → marca e tenta outra; tela repetida demais → para (sem laço infinito).
 Segurança: nunca toca em rótulos de efeito externo (enviar, excluir, comprar…) sem `permitir`; app bloqueado
 (banco/senha) encerra na hora; o texto da tela é dado, nunca instrução.
 """
+import collections
 import hashlib
 import json
 import os
@@ -31,6 +38,11 @@ PROIBIDOS = ("enviar", "excluir", "apagar", "deletar", "comprar", "pagar", "paga
 DISPENSAR = ("agora nao", "mais tarde", "pular", "fechar", "dispensar", "nao, obrigado", "nao obrigado", "entendi",
              "ignorar", "x")  # janelas que só atrapalham (nunca "OK", "Permitir", "Aceitar")
 ROLAR, VOLTAR = "↓ rolar para baixo", "← voltar"
+CUMPRIDO = "✓ objetivo cumprido (a resposta já está na tela)"
+# Visão: no Chrome (22/11) a página inteira chega como um nó "Visualização na Web" sem texto; o executor rolava às
+# cegas e desistia com o valor na tela. Cada olhada custa ~2–4 s (captura + modelo de visão): limite por chamada.
+MAX_VISOES, LARGURA_VISAO = 8, 720
+WEB = re.compile(r"webview|visualizacao na web|web view", re.I)
 # O cliente do Claude desiste de uma chamada aos 60 s (medido em 21/11: o objetivo terminou no celular em 72 s e o
 # resultado se perdeu). Acima disso, devolve "parado: prazo" e uma nova chamada continua da tela atual.
 MAX_PASSOS, MAX_PRAZO, MAX_ROLAGENS = 25, 50, 30
@@ -65,9 +77,11 @@ def assinatura(els, app):
     return hashlib.sha256(json.dumps(chaves, ensure_ascii=False).encode()).hexdigest()[:16]
 
 
-def concluido(crit, els, app_atual, app=None):
+def concluido(crit, els, app_atual, app=None, excluir=()):
     """Critério verificável localmente: texto(s) visível(is) e/ou app em primeiro plano. Com `app` (a tarefa é
-    nele), só vale dentro dele: a barra "Pesquisar" da tela inicial não conclui uma tarefa na Play Store (21/11)."""
+    nele), só vale dentro dele: a barra "Pesquisar" da tela inicial não conclui uma tarefa na Play Store (21/11).
+    `excluir`: textos digitados — o campo e as sugestões da busca (que COMEÇAM com o texto digitado) não valem:
+    "cotação do dólar hoje em real" concluía {qualquer:["Real"]} antes de a página de resultado abrir (22/11)."""
     if not crit:
         return False
     if crit.get("app") and app_atual != crit["app"]:
@@ -75,7 +89,9 @@ def concluido(crit, els, app_atual, app=None):
     apps = {app} if isinstance(app, str) else set(app or ())
     if apps and app_atual not in apps:
         return False
-    textos = [norm(rotulo(e)) for e in els if not apps or e.get("pacote") in apps | {""}]
+    fora = [norm(x) for x in excluir if norm(x)]
+    textos = [norm(rotulo(e)) for e in els if (not apps or e.get("pacote") in apps | {""})
+              and not (fora and (e.get("editavel") or any(norm(rotulo(e)).startswith(f) for f in fora)))]
     if crit.get("texto") and not any(norm(crit["texto"]) in t for t in textos):
         return False
     if crit.get("qualquer") and not any(norm(q) in t for q in crit["qualquer"] for t in textos):
@@ -90,8 +106,13 @@ def validar(a):
     if not isinstance(obj, str) or not obj.strip():
         return "informe objetivo (o que alcançar)"
     crit = a.get("concluido")
-    if not isinstance(crit, dict) or not any(crit.get(k) for k in ("texto", "qualquer", "todos", "app")):
-        return "informe concluido: {texto} | {qualquer:[...]} | {todos:[...]} | {app} (como saber que terminou)"
+    if crit is not None and (not isinstance(crit, dict) or not any(
+            crit.get(k) for k in ("texto", "qualquer", "todos", "app", "modelo", "pergunta"))):
+        return ("informe concluido: {texto} | {qualquer:[...]} | {todos:[...]} | {app} | {modelo:true} (como saber "
+                "que terminou; sem concluido, o modelo do celular julga)")
+    perg = a.get("pergunta")
+    if perg is not None and (not isinstance(perg, str) or not perg.strip() or len(perg) > 300):
+        return "pergunta deve ser um texto curto (o que ler na tela final)"
     for k in ("pistas", "permitir"):
         v = a.get(k)
         if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) for x in v) or len(v) > 30):
@@ -101,13 +122,147 @@ def validar(a):
     return None
 
 
+def palavras(t):
+    return set(re.findall(r"\w{3,}", norm(t))) - IGNORADAS
+
+
+def titulo(els, app=None):
+    return " / ".join(textos_da_tela(els, app, 2))[:60]
+
+
+class Grafo:
+    """Mapa das telas de cada app: nó = assinatura da tela, aresta = rótulo tocado (ou rolar) → tela seguinte, com
+    quantas vezes deu certo. Guarda também o destino de cada objetivo cumprido. Um objetivo IGUAL ou PARECIDO
+    ("ver o Bluetooth" ≈ "abrir o Bluetooth") acha o caminho por busca em largura a partir da tela atual, mesmo
+    que o caminho tenha sido aprendido em pedaços, por objetivos diferentes."""
+    MAX_TELAS, MAX_OBJETIVOS, PARECIDO = 400, 300, 0.6
+
+    def __init__(self, arq):
+        self.arq = arq
+        self.d = self._ler()
+
+    def _ler(self):
+        try:
+            with open(self.arq) as f:
+                d = json.load(f)
+            if isinstance(d, dict) and isinstance(d.get("telas"), dict) and isinstance(d.get("objetivos"), dict):
+                return d
+        except (OSError, ValueError, TypeError):
+            pass
+        return {"telas": {}, "objetivos": {}}
+
+    def _gravar(self):
+        try:
+            os.makedirs(os.path.dirname(self.arq) or ".", exist_ok=True)
+            tmp = self.arq + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(self.d, f, ensure_ascii=False)
+            os.replace(tmp, self.arq)
+        except OSError:
+            pass
+
+    def registrar(self, app, trilha, destino, objetivo, titulo_destino=""):
+        """trilha: [(tela, rótulo, tela_seguinte)] do caminho que deu certo (sem desvios)."""
+        agora = int(time.time())
+        telas = self.d["telas"].setdefault(app or "", {})
+        for s_, r, d in trilha:
+            if not (s_ and r and d) or s_ == d:
+                continue
+            no = telas.setdefault(s_, {"arestas": {}})
+            no["v"] = agora
+            ar = no["arestas"].setdefault(r, {"para": d, "ok": 0})
+            ar.update(para=d, ok=ar.get("ok", 0) + 1, v=agora)
+        if destino:
+            fim = telas.setdefault(destino, {"arestas": {}})
+            fim.update(v=agora, **({"titulo": titulo_destino} if titulo_destino else {}))
+            o = self.d["objetivos"].setdefault(norm(objetivo), {"ok": 0})
+            o.update(app=app or "", destino=destino, v=agora, ok=o.get("ok", 0) + 1)
+        if len(telas) > self.MAX_TELAS:  # esquece as telas vistas há mais tempo
+            for k in sorted(telas, key=lambda k: telas[k].get("v", 0))[:len(telas) - self.MAX_TELAS]:
+                del telas[k]
+        obj = self.d["objetivos"]
+        if len(obj) > self.MAX_OBJETIVOS:
+            for k in sorted(obj, key=lambda k: obj[k].get("v", 0))[:len(obj) - self.MAX_OBJETIVOS]:
+                del obj[k]
+        self._gravar()
+
+    def destinos(self, app, objetivo):
+        """Destinos de objetivos iguais ou parecidos (palavras em comum ≥ 60%) no mesmo app, do mais parecido."""
+        alvo, exato, cands = palavras(objetivo), norm(objetivo), []
+        for k, o in self.d["objetivos"].items():
+            if o.get("app", "") != (app or "") or not o.get("destino"):
+                continue
+            p = palavras(k)
+            sim = 2.0 if k == exato else (len(alvo & p) / len(alvo | p) if alvo and p else 0)
+            if sim >= self.PARECIDO:
+                cands.append((sim, o.get("ok", 0), o["destino"]))
+        return [d for *_, d in sorted(cands, reverse=True)]
+
+    def proximo(self, app, tela, destinos):
+        """1º rótulo do caminho mais curto da tela atual até um dos destinos (None se não houver caminho)."""
+        telas = self.d["telas"].get(app or "", {})
+        for dest in destinos:
+            if tela == dest:
+                return None
+            vistos, fila = {tela}, collections.deque([(tela, None)])
+            while fila:
+                s_, primeiro = fila.popleft()
+                arestas = telas.get(s_, {}).get("arestas", {})
+                for r, ar in sorted(arestas.items(), key=lambda kv: -kv[1].get("ok", 0)):
+                    d = ar.get("para")
+                    if not d or d in vistos:
+                        continue
+                    if d == dest:
+                        return primeiro or r
+                    vistos.add(d)
+                    fila.append((d, primeiro or r))
+        return None
+
+    def resumo(self, n=20):
+        obj = sorted(self.d["objetivos"].items(), key=lambda kv: -kv[1].get("v", 0))[:n]
+        return {"apps": {a or "(qualquer)": len(t) for a, t in self.d["telas"].items()},
+                "arestas": sum(len(no.get("arestas", {})) for t in self.d["telas"].values() for no in t.values()),
+                "objetivos": [{"objetivo": k, "app": o.get("app"), "vezes": o.get("ok", 0)} for k, o in obj]}
+
+
+def area_cega(els, regioes=()):
+    """Região [x, y, l, a] que a acessibilidade não descreve: página web (o Chrome mostra só o nó "Visualização na
+    Web", 22/11), mapa, vídeo, jogo. Só a imagem mostra o conteúdo dali. None se a tela é toda descrita."""
+    if not els:
+        return list(regioes[0]) if regioes else None
+    larg = max(e.get("x", 0) + e.get("l", 0) // 2 for e in els) or 1
+    alt = max(e.get("y", 0) + e.get("a", 0) // 2 for e in els) or 1
+    for e in els:
+        if not (WEB.search(str(e.get("classe", ""))) or WEB.search(norm(e.get("desc")))):
+            continue
+        l, a_ = e.get("l", 0), e.get("a", 0)
+        if l * a_ < 0.15 * larg * alt:
+            continue
+        x0, y0 = e.get("x", 0) - l // 2, e.get("y", 0) - a_ // 2
+        dentro_ = sum(1 for o in els if o is not e and rotulo(o) and x0 <= o.get("x", 0) <= x0 + l
+                      and y0 <= o.get("y", 0) <= y0 + a_)
+        if dentro_ < 3:  # o Chrome às vezes expõe a página; com texto dentro, a acessibilidade já descreve
+            return [x0, y0, l, a_]
+    return list(regioes[0]) if regioes else None
+
+
+def no_retangulo(x, y, r, folga=0):
+    return r[0] - folga <= x <= r[0] + r[2] + folga and r[1] - folga <= y <= r[1] + r[3] + folga
+
+
 class Executor:
     """`t` é o módulo da tela (ou uma imitação nos testes): foco, dump_ui, elementos, injetar, calma, abrir,
-    bloqueado, aplicar_regras, em_anuncio, fechar_anuncio. `decidir(objetivo, resumo, opcoes)` → índice ou None."""
+    bloqueado, aplicar_regras, em_anuncio, fechar_anuncio (opcionais: regioes(xml), capturar(largura, recorte) →
+    (base64, fator real/imagem), recolher). `decidir(objetivo, resumo, opcoes, nivel)` → índice ou None.
+    `olhar(objetivo, pergunta, contexto, b64, opcoes, nivel)` → {feito, resposta, acao: tocar|opcao|rolar|voltar,
+    x, y, opcao, rotulo, fonte} (visão). `julgar(objetivo, pergunta, textos, b64|None, nivel)` → {feito, resposta}."""
 
-    def __init__(self, t, decidir=None, memoria_arq=None, relogio=time.monotonic):
+    def __init__(self, t, decidir=None, memoria_arq=None, relogio=time.monotonic, olhar=None, julgar=None,
+                 grafo_arq=None):
         self.t, self.decidir, self.relogio = t, decidir, relogio
         self.memoria_arq = memoria_arq
+        self.olhar, self.julgar = olhar, julgar
+        self.grafo = Grafo(grafo_arq) if grafo_arq else None
 
     # ----------------------------------------------------------- memória de caminhos que funcionaram
     def _memoria(self):
@@ -152,7 +307,8 @@ class Executor:
             return {"erro": erro}
         t = self.t
         objetivo = a.get("objetivo") or a.get("texto")
-        app, crit = a.get("app"), a["concluido"]
+        app, crit = a.get("app"), a.get("concluido") or {"modelo": True}
+        pergunta = (a.get("pergunta") or crit.get("pergunta") or "").strip() or None
         pistas = list(a.get("pistas") or [])
         permitir = list(a.get("permitir") or [])
         # digitar: "texto" ou {"texto", "depois_de": "pista"} (só depois de usar essa pista: nas Configurações há
@@ -166,13 +322,22 @@ class Executor:
         nivel_base = ORDEM_NIVEIS.index(a.get("cerebro")) if a.get("cerebro") in NIVEIS else 2
         prazo = self.relogio() + max(5, min(float(a.get("prazo", 45)), MAX_PRAZO))
         usar_modelo = a.get("modelo", True) is not False and self.decidir is not None
+        usar_visao = (a.get("visao", True) is not False and a.get("modelo", True) is not False
+                      and self.olhar is not None and hasattr(t, "capturar"))
+        # o modelo julga o fim: sem critério local, ou pedido explícito (modelo/pergunta)
+        julga = bool(crit.get("modelo") or crit.get("pergunta") or pergunta
+                     or not any(crit.get(k) for k in ("texto", "qualquer", "todos", "app")))
         inicio = self.relogio()
         passos, vistos, falhas, novos = [], {}, {}, {}
         recuperacoes, consultas, digitado, usadas = 0, 0, set(), set()
         chave_mem = f"{app or ''}|{norm(objetivo)}"
         memoria = self._memoria().get(chave_mem, {})
+        app_grafo = app or ""
+        destinos = self.grafo.destinos(app_grafo, objetivo) if self.grafo else []
+        resposta, conclusao, extraido, visoes = [None], ["criterio"], [False], [0]
+        xml_atual, nivel_atual = [""], [ORDEM_NIVEIS[nivel_base]]
 
-        caminho = []  # [(tela, rótulo)] do caminho que deu certo; desvios (voltar a uma tela) são cortados
+        caminho = []  # [(tela, rótulo, tela seguinte)] do caminho que deu certo; desvios são cortados
         # apps da tarefa: o pedido + os que um toque NOSSO abriu (no HyperOS, Configurações → Apps abre a Central de
         # Segurança, outro pacote: o executor reabria as Configurações e desfazia o caminho — 21/11)
         apps_ok = {app} if app else set()
@@ -180,12 +345,23 @@ class Executor:
 
         def fim(estado, motivo=None, els=None, app_atual=None):
             if estado == "concluido":
-                self._lembrar(chave_mem, dict(caminho))
+                self._lembrar(chave_mem, {s_: r_ for s_, r_, _ in caminho})
+                if self.grafo and els is not None:
+                    self.grafo.registrar(app_grafo, caminho, assinar(els, app_atual, xml_atual[0]), objetivo,
+                                         titulo(els, app_atual))
+                if pergunta and not extraido[0] and els is not None and self.julgar is not None:
+                    ler_resposta(els, app_atual)
             if estado == "parado" and motivo == "prazo esgotado":
                 motivo = "prazo esgotado (chame de novo para continuar desta tela)"
             r = {"estado": estado, **({"motivo": motivo} if motivo else {}), "passos": passos,
                  "consultas_modelo": consultas, "recuperacoes": recuperacoes,
                  "ms": round((self.relogio() - inicio) * 1000)}
+            if estado == "concluido":
+                r["conclusao"] = conclusao[0]
+                if resposta[0] is not None:
+                    r["resposta"] = resposta[0]
+            if visoes[0]:
+                r["visoes"] = visoes[0]
             if a.get("ler", True) and els is not None:
                 if (app and app_atual not in apps_ok) or sistema(app_atual):
                     # outra janela na frente (notificações, outro app): o conteúdo dela não sai do celular
@@ -193,6 +369,47 @@ class Executor:
                 else:
                     r["tela"] = {"app": app_atual, "textos": textos_da_tela(els, app_atual, int(a.get("ler_max", 60)))}
             return r
+
+        def regioes(xml_):
+            try:
+                return t.regioes(xml_) if hasattr(t, "regioes") and xml_ else ()
+            except Exception:  # noqa: BLE001 — sem regiões, só o heurístico do WebView
+                return ()
+
+        def cega_de(els_, xml_):
+            return area_cega(els_, regioes(xml_)) if usar_visao or self.julgar else None
+
+        def assinar(els_, app_, xml_):
+            """Assinatura da tela; numa área cega (página web), soma um resumo da IMAGEM dela: rolar a página ou
+            abrir um link não muda a acessibilidade, e sem isso o executor achava que nada tinha mudado."""
+            s_ = assinatura(els_, app_)
+            cg = cega_de(els_, xml_) if usar_visao else None
+            if cg:
+                try:
+                    b, _ = t.capturar(96, cg)
+                except Exception:  # noqa: BLE001
+                    b = None
+                if b:
+                    s_ += ":" + hashlib.sha256(b.encode()).hexdigest()[:8]
+            return s_
+
+        def ler_resposta(els_, app_):
+            """A tela final responde à pergunta: o modelo lê (texto; imagem se a área é cega)."""
+            extraido[0] = True
+            b64 = None
+            cg = cega_de(els_, xml_atual[0])
+            if cg and hasattr(t, "capturar"):
+                try:
+                    b64, _ = t.capturar(LARGURA_VISAO)
+                except Exception:  # noqa: BLE001
+                    b64 = None
+            try:
+                j = self.julgar(objetivo, pergunta, textos_da_tela(els_, app_, 80), b64, nivel_atual[0]) or {}
+            except Exception:  # noqa: BLE001 — sem leitura, o resultado ainda traz os textos da tela
+                j = {}
+            if j.get("resposta") not in (None, ""):
+                resposta[0] = str(j["resposta"])[:500]
+            return j
 
         feitas = set()  # (tela, ação) que já mudou a tela: se voltamos aqui, ela não leva ao objetivo
 
@@ -220,8 +437,9 @@ class Executor:
             app_atual = t.foco()
             if t.bloqueado(app_atual):
                 return fim("parado", "app bloqueado em primeiro plano (banco, pagamento ou senha)")
-            els = t.elementos(t.dump_ui(), 300)
-            if concluido(crit, els, app_atual, apps_ok):
+            xml_atual[0] = t.dump_ui()
+            els = t.elementos(xml_atual[0], 300)
+            if concluido(crit, els, app_atual, apps_ok, [digitar] if digitar and digitado else ()):
                 return fim("concluido", None, els, app_atual)
             rolagens = sum(p["via"] == "rolagem contínua" for p in passos)
             if len(passos) - rolagens >= max_passos or rolagens >= MAX_ROLAGENS:
@@ -263,8 +481,9 @@ class Executor:
                     anotar("reabrir", app, "recuperacao", t0)
                 continue
 
-            sig = assinatura(els, app_atual)
-            for k, (s_, _) in enumerate(caminho):
+            cega = cega_de(els, xml_atual[0])
+            sig = assinar(els, app_atual, xml_atual[0])
+            for k, (s_, _, _) in enumerate(caminho):
                 if s_ == sig:  # voltamos a uma tela do caminho: o trecho depois dela foi desvio
                     del caminho[k:]
                     break
@@ -300,6 +519,16 @@ class Executor:
                 e = melhor(alvos, memoria[sig])
                 if e and not falhou(sig, rotulo(e)) and seguro(e, els, permitir):
                     escolha, via = e, "memoria"
+            # 2b. grafo: caminho até o destino de um objetivo igual/parecido já cumprido (partindo desta tela)
+            if not escolha and destinos:
+                r_ = self.grafo.proximo(app_grafo, sig, destinos)
+                if r_ == ROLAR:
+                    if not falhou(sig, ROLAR) and (cega or any(e.get("rolavel") for e in els)):
+                        escolha, via = ROLAR, "grafo"
+                elif r_:
+                    e = melhor(alvos, r_)
+                    if e and not falhou(sig, rotulo(e)) and seguro(e, els, permitir):
+                        escolha, via = e, "grafo"
             # 3. campo para digitar o texto autorizado (uma vez por tela)
             ja_escrito = any(e.get("editavel") and norm(digitar or "") in norm(e.get("texto")) for e in els)
             if (not escolha and digitar and not digitado and not ja_escrito
@@ -332,15 +561,19 @@ class Executor:
                 escolha, via = ROLAR, "procurando pista"
             # 3c. o modelo mandou rolar esta lista e nada visível lembra o objetivo: continua rolando sem perguntar
             # de novo (no teste dos Apps, 7 consultas seguidas de ~1,5 s só para dizer "rolar" — 21/11)
-            if (not escolha and passos and passos[-1]["acao"] == "rolar" and passos[-1]["via"].startswith(("modelo",
-                    "rolagem contínua")) and not falhou(sig, ROLAR) and any(e.get("rolavel") for e in els)
+            if (not escolha and not cega and passos and passos[-1]["acao"] == "rolar"
+                    and passos[-1]["via"].startswith(("modelo", "rolagem contínua"))
+                    and not falhou(sig, ROLAR) and any(e.get("rolavel") for e in els)
                     and not any(ranquear([rotulo(e)], objetivo, 0, pontos=True) for e in alvos if rotulo(e))):
                 escolha, via = ROLAR, "rolagem contínua"
-            # 4. o cérebro do celular escolhe entre os controles visíveis
-            if not escolha and usar_modelo:
+            # 4. o cérebro do celular escolhe entre os controles visíveis; numa área cega (página web, mapa, jogo)
+            # quem decide é a visão, olhando a captura — o texto sozinho não mostra o conteúdo dali
+            if not escolha and (usar_modelo or (usar_visao and cega)):
                 opcoes = []
                 for e in alvos:
                     r = rotulo(e)
+                    if cega and WEB.search(norm(r)):
+                        continue  # o nó "Visualização na Web" não é um destino
                     # tocável: o próprio elemento ou a linha clicável que o contém (nas Configurações o título
                     # "Sobre o telefone" não é clicável, a linha sem texto é — 21/11, o modelo só via rolar/voltar)
                     if (r and r not in opcoes and tocavel(e, els) and not falhou(sig, r)
@@ -348,15 +581,64 @@ class Executor:
                         opcoes.append(r)
                 opcoes = ranquear(opcoes, objetivo, 7)  # o cérebro responde 1 dígito: até 7 + rolar + voltar
                 extras = [x for x in (ROLAR, VOLTAR) if not falhou(sig, x)]
-                if opcoes or extras:
+                if julga and not falhou(sig, CUMPRIDO):
+                    extras = [CUMPRIDO] + extras  # o modelo também diz quando o objetivo já está na tela
+                dificil = any(k[0] == sig for k in falhas) or vistos[sig] >= 2 or recuperacoes > 1
+                nivel = ORDEM_NIVEIS[min(len(ORDEM_NIVEIS) - 1, nivel_base + (1 if dificil else 0))]
+                nivel_atual[0] = nivel
+                contexto = ("Tela atual (" + str(app_atual) + "): " + " | ".join(textos_da_tela(alvos, None, 80))
+                            )[:1800]
+                if passos:
+                    contexto += "\nJá feito: " + "; ".join(
+                        f"{p['acao']} {p.get('alvo', '')} ({p['via']})" for p in passos[-6:])
+                visto = False
+                if usar_visao and cega and visoes[0] < MAX_VISOES:
+                    try:
+                        b64, fator = t.capturar(LARGURA_VISAO)
+                    except Exception:  # noqa: BLE001 — sem captura, decide pelo texto
+                        b64, fator = None, 1.0
+                    if b64:
+                        visto = True
+                        visoes[0] += 1
+                        consultas += 1
+                        t_dec = self.relogio()
+                        try:
+                            res = self.olhar(objetivo, pergunta, contexto, b64, opcoes, nivel) or {}
+                        except Exception as erro_v:  # noqa: BLE001
+                            res = {"fonte": "erro: " + str(erro_v)[:60]}
+                        via_v = f"visao:{res.get('fonte') or '?'} ({nivel}, {round((self.relogio() - t_dec) * 1000)} ms)"
+                        if res.get("feito"):
+                            if res.get("resposta") not in (None, ""):
+                                resposta[0] = str(res["resposta"])[:500]
+                                extraido[0] = True
+                            conclusao[0] = "visao"
+                            anotar("concluir", None, via_v, t0)
+                            return fim("concluido", None, els, app_atual)
+                        ac = res.get("acao")
+                        if ac == "opcao":
+                            k_ = inteiro(res.get("opcao"))
+                            if k_ is not None and 1 <= k_ <= len(opcoes):
+                                e = melhor(alvos, opcoes[k_ - 1])
+                                if e is not None and seguro(e, els, permitir):
+                                    escolha, via = e, via_v
+                        elif ac == "tocar":
+                            rot = str(res.get("rotulo") or "").strip()[:60]
+                            x_, y_ = inteiro(res.get("x")), inteiro(res.get("y"))
+                            if rot and x_ is not None and y_ is not None:
+                                rx, ry = round(x_ * (fator or 1.0)), round(y_ * (fator or 1.0))
+                                # toque por coordenada só DENTRO da área cega, e o rótulo passa pela mesma lista de
+                                # efeitos externos (comprar, enviar…): o texto da página nunca é ordem
+                                if (no_retangulo(rx, ry, cega, 8) and not proibido(rot, permitir)
+                                        and not falhou(sig, rot)):
+                                    escolha = {"texto": rot, "x": rx, "y": ry, "clicavel": True,
+                                               "pacote": app_atual, "visao": True}
+                                    via = via_v
+                        elif ac == "rolar" and not falhou(sig, ROLAR):
+                            escolha, via = ROLAR, via_v
+                        elif ac == "voltar" and not falhou(sig, VOLTAR):
+                            escolha, via = VOLTAR, via_v
+                if not visto and usar_modelo and (opcoes or extras):
                     consultas += 1
-                    dificil = any(k[0] == sig for k in falhas) or vistos[sig] >= 2 or recuperacoes > 1
-                    nivel = ORDEM_NIVEIS[min(len(ORDEM_NIVEIS) - 1, nivel_base + (1 if dificil else 0))]
-                    contexto = ("Tela atual (" + str(app_atual) + "): " + " | ".join(textos_da_tela(alvos, None, 80))
-                                )[:1800]
-                    if passos:
-                        contexto += "\nJá feito: " + "; ".join(
-                            f"{p['acao']} {p.get('alvo', '')} ({p['via']})" for p in passos[-6:])
                     t_dec = self.relogio()
                     res = self.decidir(objetivo, contexto, opcoes + extras, nivel)
                     idx, fonte = (res[0], res[1]) if isinstance(res, tuple) else (res, None)
@@ -368,8 +650,19 @@ class Executor:
                     elif idx is not None and 0 <= idx - len(opcoes) < len(extras):
                         via = via_modelo
                         escolha = extras[idx - len(opcoes)]
+                        if escolha == CUMPRIDO:
+                            escolha = None
+                            j = ler_resposta(els, app_atual) if pergunta and self.julgar is not None else {}
+                            if j.get("feito") is False:  # a leitura discorda: não está na tela ainda
+                                falhas[(sig, CUMPRIDO)] = 2
+                                resposta[0] = None
+                                anotar("conferir", "não cumprido", via_modelo, t0)
+                                continue
+                            conclusao[0] = "modelo"
+                            anotar("concluir", None, via_modelo, t0)
+                            return fim("concluido", None, els, app_atual)
             # 5. sem decisão: o alvo pode estar mais abaixo
-            if not escolha and not falhou(sig, ROLAR) and any(e.get("rolavel") for e in els):
+            if not escolha and not falhou(sig, ROLAR) and (cega or any(e.get("rolavel") for e in els)):
                 escolha, via = ROLAR, "rolagem"
             if not escolha:
                 return fim("parado", "não sei o próximo passo (preciso do Claude)", els, app_atual)
@@ -377,6 +670,8 @@ class Executor:
             # ---- agir
             if escolha == ROLAR:
                 lista = max((e for e in els if e.get("rolavel")), key=lambda e: e.get("a", 0), default=None)
+                if lista is None and cega:  # página web: a lista é a própria área cega
+                    lista = {"x": cega[0] + cega[2] // 2, "y": cega[1] + cega[3] // 2, "a": cega[3]}
                 x = lista["x"] if lista else 540
                 y0 = (lista["y"] + lista.get("a", 1200) // 3) if lista else 1700
                 y1 = (lista["y"] - lista.get("a", 1200) // 3) if lista else 700
@@ -394,27 +689,37 @@ class Executor:
                 rotulo_acao, acao = rotulo(escolha), "tocar"
             t.calma(150, 1200 if acao == "rolar" else 2500)
             # ---- conferir: a tela mudou?
-            depois = t.elementos(t.dump_ui(), 300)
+            xml_d = t.dump_ui()
+            depois = t.elementos(xml_d, 300)
             app_depois = t.foco()
+            sig_depois = assinar(depois, app_depois, xml_d)
             if (acao == "tocar" and app and app_depois and app_depois != app_atual and not sistema(app_depois)
                     and not t.bloqueado(app_depois)):
                 apps_ok.add(app_depois)  # o nosso toque abriu este app: faz parte do caminho
-            if assinatura(depois, app_depois) == sig and app_depois == app_atual and acao != "rolar":
+            if sig_depois == sig and app_depois == app_atual and acao != "rolar":
                 falhas[(sig, rotulo_acao)] = falhas.get((sig, rotulo_acao), 0) + 1  # sem efeito: 1ª vez repete,
                 anotar(acao, rotulo_acao, via + " (sem efeito)", t0)                # 2ª tenta outra coisa
                 vistos[sig] -= 1  # tela igual por falha da ação não conta como volta em círculo
             else:
-                if acao == "rolar" and assinatura(depois, app_depois) == sig:
+                if acao == "rolar" and sig_depois == sig:
                     falhas[(sig, ROLAR)] = 2  # fim da lista
                 if acao != "rolar":
                     feitas.add((sig, rotulo_acao))  # voltar a esta tela e repetir = ciclo (chat ↔ info, 21/11)
-                if acao in ("tocar", "rolar") and via != "dispensar":
-                    caminho.append((sig, rotulo_acao))
+                if acao in ("tocar", "rolar") and via != "dispensar" and not (
+                        isinstance(escolha, dict) and escolha.get("visao")):  # toque por coordenada não se repete
+                    caminho.append((sig, rotulo_acao, sig_depois))
                 elif acao == "voltar" and caminho:
                     caminho.pop()  # voltar desfaz o último passo: ele foi desvio
                 if escolhida_pista:
                     usadas.add(escolhida_pista)
                 anotar(acao, rotulo_acao, via, t0)
+
+
+def inteiro(v):
+    try:
+        return int(round(float(v)))
+    except (TypeError, ValueError):
+        return None
 
 
 def busca(e):

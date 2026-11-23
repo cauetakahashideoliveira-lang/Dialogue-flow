@@ -563,7 +563,9 @@ class TestExecutorObjetivo(unittest.TestCase):
 
     def test_validacao(self):
         ex = self.executor(Celular(TELAS, "inicio"))
-        self.assertIn("erro", ex.executar({"objetivo": "x"}))  # sem critério de conclusão
+        self.assertNotIn("erro", ex.executar({"objetivo": "x"}))  # sem critério: o modelo julga (1.0.102)
+        self.assertIn("erro", ex.executar({"objetivo": "x", "concluido": {"nada": 1}}))
+        self.assertIn("erro", ex.executar({"objetivo": "x", "pergunta": ""}))
         self.assertIn("erro", ex.executar({"concluido": {"texto": "x"}}))
         self.assertIn("erro", ex.executar({"objetivo": "x", "concluido": {"texto": "y"}, "pistas": "nao-lista"}))
 
@@ -648,3 +650,195 @@ class TestPilotoVisao(unittest.TestCase):
         fim = [{"texto": "Recarregar Paradas", "x": 100, "y": 2000}, {"texto": "Jogar Novamente", "x": 640, "y": 2400}]
         self.assertTrue(p._continuar(fim))
         self.assertEqual(toques, [(640, 2400)])
+
+
+CHROME = "com.android.chrome"
+
+
+def web(y=1400, a=2200):
+    """O nó que o Chrome expõe para a página inteira (22/11): sem texto dentro, só a descrição."""
+    return {"texto": "", "desc": "Visualização na Web", "id": "", "classe": "WebView", "clicavel": False,
+            "x": 640, "y": y, "l": 1280, "a": a, "pacote": CHROME, "editavel": False, "rolavel": False}
+
+
+class CelularWeb(Celular):
+    """Celular com páginas web: a acessibilidade só mostra a barra e o nó da página; a captura mostra o conteúdo
+    (aqui, o nome da tela e quanto rolou, em base64). Links da página: tela → [(x, y, próxima)]."""
+
+    def __init__(self, telas, inicio, links=None, fundo=None):
+        super().__init__(telas, inicio, app=CHROME)
+        self.links, self.fundo = links or {}, fundo or {}
+        self.rolado = 0
+        self.capturas = []
+
+    def capturar(self, largura, recorte=None):
+        import base64
+        self.capturas.append((largura, recorte))
+        return base64.b64encode(f"{self.atual}:{self.rolado}".encode()).decode(), 1280 / largura
+
+    def injetar(self, cmd):
+        partes = cmd.split()
+        if partes[0] == "deslizar" and any(e.get("classe") == "WebView" for e in self.telas[self.atual][0]):
+            self.injetados.append(cmd)
+            if self.rolado < self.fundo.get(self.atual, 0):
+                self.rolado += 1
+            return True
+        if partes[0] == "tocar":
+            x, y = int(partes[1]), int(partes[2])
+            for lx, ly, prox in self.links.get(self.atual, []):
+                if abs(lx - x) <= 40 and abs(ly - y) <= 40:
+                    self.injetados.append(cmd)
+                    self.pilha.append(self.atual)
+                    self.atual, self.rolado = prox, 0
+                    return True
+        return super().injetar(cmd)
+
+
+def estado_da_captura(b64):
+    import base64
+    tela, rolado = base64.b64decode(b64).decode().split(":")
+    return tela, int(rolado)
+
+
+BARRA = el("google.com/search?q=dolar", 243, pacote=CHROME, editavel=False)
+
+
+class TestObjetivoVisaoEGrafo(unittest.TestCase):
+    def setUp(self):
+        self.m = _carregar()
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.olhadas, self.julgados, self.decisoes = [], [], []
+
+    def executor(self, cel, olhar=None, julgar=None, decidir=None, grafo=True):
+        def dec(objetivo, resumo, opcoes, nivel="padrao"):
+            self.decisoes.append(list(opcoes))
+            return decidir(opcoes) if decidir else None
+
+        def olh(objetivo, pergunta, contexto, b64, opcoes, nivel):
+            self.olhadas.append((estado_da_captura(b64), list(opcoes)))
+            return olhar(estado_da_captura(b64), opcoes) if olhar else {}
+
+        def jul(objetivo, pergunta, textos, b64, nivel):
+            self.julgados.append((pergunta, list(textos), b64 is not None))
+            return julgar(textos, b64) if julgar else {}
+        return self.m.Executor(cel, dec, os.path.join(self.tmp, "objetivos.json"), olhar=olh, julgar=jul,
+                               grafo_arq=os.path.join(self.tmp, "grafo.json") if grafo else None)
+
+    def test_sugestoes_da_busca_nao_concluem(self):
+        # 22/11, POCO: "cotação do dólar hoje em real" (sugestão) concluía {qualquer:["Real"]} antes do resultado
+        telas = {"busca": ([el("", 100, editavel=True, pacote=CHROME)], {"<enter>": "sugestoes"}),
+                 "sugestoes": ([el("cotação do dólar hoje", 100, editavel=True, pacote=CHROME),
+                                el("cotação do dólar hoje em real", 300, pacote=CHROME)], {"<rolar>": "res"}),
+                 "res": ([el("1 Dólar americano igual a 5,99 Real brasileiro", 400, pacote=CHROME)], {})}
+        telas["sugestoes"][0].append(el("Lista", 800, clic=False, rolavel=True, a=1500, pacote=CHROME))
+        cel = Celular(telas, "busca", app=CHROME)
+        r = self.m.Executor(cel, None, None).executar(
+            {"objetivo": "cotação do dólar", "app": CHROME, "digitar": "cotação do dólar hoje",
+             "concluido": {"qualquer": ["Real"]}, "modelo": False})
+        self.assertEqual(r["estado"], "concluido")
+        self.assertEqual(cel.atual, "res")  # só concluiu na página de resultado
+
+    def test_pagina_web_cega_a_visao_toca_rola_e_le_a_resposta(self):
+        telas = {"busca": ([BARRA, web()], {}), "pagina": ([BARRA, web()], {})}
+        links = {"busca": [(640, 900, "pagina")]}
+        cel = CelularWeb(telas, "busca", links, fundo={"pagina": 2})
+
+        def olhar(estado, opcoes):
+            tela, rolado = estado
+            if tela == "busca":
+                return {"acao": "tocar", "x": 360, "y": 506, "rotulo": "Cotação do dólar - resultado", "fonte": "v"}
+            if rolado < 2:
+                return {"acao": "rolar", "fonte": "v"}
+            return {"feito": True, "resposta": "US$ 1 = R$ 5,99", "fonte": "v"}
+        r = self.executor(cel, olhar).executar({"objetivo": "ler a cotação do dólar", "app": CHROME,
+                                                "pergunta": "quanto vale 1 dólar em reais?"})
+        self.assertEqual((r["estado"], r["conclusao"], r["resposta"]), ("concluido", "visao", "US$ 1 = R$ 5,99"))
+        self.assertEqual([p["acao"] for p in r["passos"]], ["tocar", "rolar", "rolar", "concluir"])
+        self.assertIn("tocar 640 900", cel.injetados)  # 360×(1280/720) = 640: coordenada da imagem → tela
+        self.assertEqual(r["visoes"], 4)
+        self.assertTrue(all(o[1] == [] or "Visualização na Web" not in o[1] for o in self.olhadas))
+
+    def test_visao_nao_toca_em_efeito_externo_nem_fora_da_pagina(self):
+        telas = {"loja": ([BARRA, web()], {})}
+        cel = CelularWeb(telas, "loja", {"loja": [(640, 900, "comprado"), (640, 243, "barra")]})
+        cel.telas["comprado"] = ([el("Pedido feito", 300, pacote=CHROME)], {})
+        respostas = iter([{"acao": "tocar", "x": 360, "y": 506, "rotulo": "Comprar agora"},
+                          {"acao": "tocar", "x": 360, "y": 136, "rotulo": "barra de endereço"}])
+        r = self.executor(cel, lambda e, o: next(respostas, {})).executar(
+            {"objetivo": "ver o produto", "app": CHROME, "concluido": {"texto": "Pedido feito"}, "max_passos": 4})
+        self.assertNotEqual(cel.atual, "comprado")
+        self.assertFalse(any(c.startswith("tocar") for c in cel.injetados))
+        self.assertNotEqual(r["estado"], "concluido")
+
+    def test_modelo_diz_cumprido_e_a_leitura_extrai_a_resposta(self):
+        telas = {"inicio": ([el("Bateria", 100), el("85% — cerca de 1 dia", 200, clic=False)], {})}
+
+        def decidir(opcoes):
+            return opcoes.index(self.m.CUMPRIDO)
+        r = self.executor(Celular(telas, "inicio"), decidir=decidir,
+                          julgar=lambda textos, b64: {"feito": True, "resposta": "85%"}).executar(
+            {"objetivo": "ver a bateria", "app": APP, "pergunta": "qual a porcentagem da bateria?"})
+        self.assertEqual((r["estado"], r["conclusao"], r["resposta"]), ("concluido", "modelo", "85%"))
+        self.assertIn(self.m.CUMPRIDO, self.decisoes[0])
+        self.assertEqual(self.julgados[0][0], "qual a porcentagem da bateria?")
+        self.assertIn("85% — cerca de 1 dia", self.julgados[0][1])
+
+    def test_leitura_que_discorda_nao_conclui(self):
+        telas = {"inicio": ([el("Bateria", 100), el("Lista", 800, clic=False, rolavel=True, a=1500)],
+                            {"<rolar>": "baixo"}),
+                 "baixo": ([el("Uso: 85%", 200, clic=False)], {})}
+        def decidir(opcoes):  # modelo apressado: diz "cumprido" sempre que pode; senão rola
+            return opcoes.index(self.m.CUMPRIDO if self.m.CUMPRIDO in opcoes else self.m.ROLAR)
+        r = self.executor(Celular(telas, "inicio"), decidir=decidir,
+                          julgar=lambda textos, b64: ({"feito": True, "resposta": "85%"}
+                                                      if any("85%" in t for t in textos) else {"feito": False})
+                          ).executar({"objetivo": "ver o uso da bateria", "app": APP, "pergunta": "qual o uso?"})
+        self.assertEqual((r["estado"], r.get("resposta")), ("concluido", "85%"))
+        self.assertIn("conferir", [p["acao"] for p in r["passos"]])  # 1ª vez: "cumprido" recusado pela leitura
+
+    def test_criterio_local_com_pergunta_le_a_resposta_no_fim(self):
+        r = self.executor(Celular(TELAS, "inicio"), julgar=lambda textos, b64: {"feito": True, "resposta": "POCO"}
+                          ).executar({"objetivo": "ver o modelo", "app": APP, "concluido": {"texto": "Modelo:"},
+                                      "pistas": ["Sobre o telefone"], "pergunta": "qual o modelo?", "modelo": False})
+        self.assertEqual((r["estado"], r["conclusao"], r["resposta"]), ("concluido", "criterio", "POCO"))
+        self.assertEqual(len(self.julgados), 1)
+
+    def test_grafo_leva_objetivo_parecido_ao_destino_sem_modelo(self):
+        def escolher(opcoes):
+            for alvo in ("Atualizações", "Sistema"):
+                if alvo in opcoes:
+                    return opcoes.index(alvo)
+            return None
+        ex = self.executor(Celular(TELAS, "inicio"), decidir=escolher)
+        r = ex.executar({"objetivo": "ver a versão do sistema", "app": APP, "concluido": {"texto": "Versão"}})
+        self.assertEqual(r["estado"], "concluido")
+        self.decisoes.clear()
+        # outras palavras, mesmo destino: o grafo acha o caminho sem perguntar ao modelo
+        r2 = self.executor(Celular(TELAS, "inicio"), decidir=escolher).executar(
+            {"objetivo": "versão do sistema", "app": APP, "concluido": {"texto": "Versão"}})
+        self.assertEqual((r2["estado"], r2["consultas_modelo"]), ("concluido", 0))
+        self.assertEqual([p["via"] for p in r2["passos"]], ["grafo", "grafo"])
+        resumo = self.m.Grafo(os.path.join(self.tmp, "grafo.json")).resumo()
+        self.assertEqual(resumo["apps"][APP], 3)
+        self.assertEqual(resumo["arestas"], 2)
+
+    def test_grafo_parte_de_outra_tela_e_inclui_rolagem(self):
+        ex = self.executor(Celular(TELAS, "inicio"))
+        r = ex.executar({"objetivo": "ver o modelo do celular", "app": APP, "concluido": {"texto": "Modelo:"},
+                         "pistas": ["Sobre o telefone"], "modelo": False})
+        self.assertEqual([p["acao"] for p in r["passos"]], ["rolar", "tocar"])
+        g = self.m.Grafo(os.path.join(self.tmp, "grafo.json"))
+        inicio = self.m.assinatura(Celular(TELAS, "inicio").elementos("inicio"), APP)
+        baixo = self.m.assinatura(Celular(TELAS, "inicio").elementos("inicio_baixo"), APP)
+        destinos = g.destinos(APP, "modelo do celular")
+        self.assertEqual(g.proximo(APP, inicio, destinos), self.m.ROLAR)
+        self.assertEqual(g.proximo(APP, baixo, destinos), "Sobre o telefone")  # já no meio do caminho
+        self.assertEqual(g.destinos(APP, "ligar o wi-fi"), [])  # nada parecido
+
+    def test_area_cega(self):
+        self.assertIsNotNone(self.m.area_cega([BARRA, web()]))
+        cheia = [BARRA, web()] + [el(f"linha {k}", 600 + k * 100, pacote=CHROME) for k in range(5)]
+        self.assertIsNone(self.m.area_cega(cheia))  # o Chrome expôs o texto da página: não precisa de imagem
+        self.assertIsNone(self.m.area_cega([el("Wi-Fi", 200), el("Bluetooth", 300)]))
+        self.assertEqual(self.m.area_cega([el("x", 10)], [[0, 0, 10, 10]]), [0, 0, 10, 10])

@@ -2,6 +2,36 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 23/11 — agente de tela: visão em páginas web, resposta, grafo de telas e vigias (1.0.102)
+
+**Teste real que motivou (POCO, Chrome):** objetivo "pesquisar a cotação do dólar e ler o valor".
+- A navegação funcionou (abrir, digitar, pesquisar em < 2 s), mas a página de resultado chega à acessibilidade como
+  **um nó só, "Visualização na Web", sem texto**. O executor ficou cego: rolou, voltou e parou com "preciso do
+  Claude", com **US$ 1 = R$ 5,99** visível na captura.
+- Falso "concluído": `concluido={qualquer:["Real"]}` casou com a **sugestão** "cotação do dólar hoje em real", antes de
+  o resultado abrir.
+
+**Aplicado (`capacidades/tela/objetivo.py`, `principal.py`, `vigia.py`):**
+- **Visão automática:** área que a acessibilidade não descreve (WebView sem texto dentro, ou as `regioes_visuais`)
+  → a captura (720 px) vai ao modelo de visão do nível (`forte` = Opus), que responde `feito`/`resposta` ou o próximo
+  passo (tocar x,y da imagem → convertido para a tela, opção pelo número, rolar, voltar). Segurança: toque por
+  coordenada só dentro da área cega e com o rótulo passando pela lista de efeitos externos; a página é dado, nunca
+  ordem (na política do modelo). Até 8 olhadas por chamada. Rolar funciona na página (gesto na área cega) e a
+  assinatura da tela soma um resumo da imagem (senão rolar parecia "sem efeito").
+- **Conclusão pelo modelo e resposta:** `concluido` virou opcional (sem ele, o modelo julga) e `pergunta='...'` devolve
+  `resposta` lida da tela final (texto pelo Sonnet; imagem pelo modelo do nível). Na decisão por texto o modelo tem a
+  opção "✓ objetivo cumprido", conferida pela leitura. O texto digitado e as sugestões que começam com ele não
+  concluem mais.
+- **Grafo de telas** (`~/.controle-ir/tela/grafo_telas.json`): nó = tela, aresta = toque/rolagem → tela seguinte, e o
+  destino de cada objetivo cumprido. Objetivo igual ou parecido (≥ 60% das palavras) acha o caminho por busca em
+  largura a partir da tela atual, sem modelo (`via: "grafo"`). `acao=grafo` mostra o resumo.
+- **Vigias** (missões de horas): `acao=vigiar, vigia={nome, objetivo, app, pergunta, a_cada (min), condicao:
+  muda|abaixo|acima|contem|variacao, duracao (h), quando}` faz a 1ª leitura na hora e depois roda sozinho numa
+  thread do serviço, avisando por notificação com som. Só lê (sem `permitir`), adia com a tela apagada ou o dono em
+  outro app (modo `livre`), pausa com travar, sobrevive a reiniciar o serviço. Limites: 10 vigias, 5 min–24 h, até 72 h.
+- Descrição da ferramenta: o conector só mostra os primeiros **800 caracteres** de cada `cap_*`; o começo da
+  descrição da tela agora traz objetivo/pergunta/visão/vigiar.
+
 ## 22/11 — ar condicionado quarto 2 (Brastemp Clean)
 - Servidor no POCO: **1.0.101** (canal direto conectado). O conector caiu duas vezes com "Not Found" e voltou
   depois de religar o serviço no celular.

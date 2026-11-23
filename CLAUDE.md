@@ -18,6 +18,9 @@
 - Pacote do celular: `ferramentas/empacotar.sh` gera `dist/controle-ir.zip` (baixado pelo Termux).
 - Botão novo para ar Gree (oscilação, visor): `ferramentas/gree_variante.py` (parte da captura real do perfil).
 - Ar TCL112 (o Brastemp Clean do quarto 2 é TCL, não Whirlpool): `ferramentas/tcl112.py` gera quadros e o perfil completo.
+- **Agente de tela (1.0.102):** `acao=objetivo` com `pergunta=` devolve `resposta`; `concluido` é opcional (o modelo
+  julga); página web/área sem texto vai sozinha para a visão; grafo de telas (`acao=grafo`). Valor a acompanhar por
+  horas: `acao=vigiar` (`capacidades/tela/vigia.py`, só leitura, avisa por notificação). Medições em `docs/estado-atual.md` (23/11).
 - **Publicar no celular:** rode `ferramentas/empacotar.sh` ANTES do commit — o `atualizar_sistema(ref)` baixa o
   `dist/controle-ir.zip` daquele commit, não o código solto. Suba a versão em `controle_ir/__init__.py` para
   conferir com `consultar`. Se o conector der "Not Found" após atualizar, peça `controle-ir desligar; pkill ngrok;

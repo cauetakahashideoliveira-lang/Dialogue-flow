@@ -12,6 +12,7 @@ sinais extras e ressalvas. Atualizado em 17/11/2026.
 | Quarto | `tv do quarto` | TV **Samsung** (Samsung32, endereço 0x07) | Flipper-IRDB "Samsung TV Full" (catálogo nº 2331) + ligar/desligar diretos + macro Netflix | [quarto/tv-do-quarto.md](quarto/tv-do-quarto.md) |
 | Escritório | `ar do escritório` | Ar-condicionado **Carrier** | SmartIR "Carrier Unknown" (catálogo nº 94) | [escritorio/ar-do-escritorio.md](escritorio/ar-do-escritorio.md) |
 | Laboratório | `ar condicionado laboratório` | Ar-condicionado **Midea** | o mesmo "Carrier Unknown" (nº 94) + oscilação do perfil Ferroli/York | [laboratorio/ar-condicionado-laboratorio.md](laboratorio/ar-condicionado-laboratorio.md) |
+| Quarto 2 | `ar condicionado quarto 2` | Ar-condicionado **Brastemp Clean** BBV09BBBNA (feito pela TCL) | nº 9524 gerado por `ferramentas/tcl112.py` (protocolo TCL112): modo, 16–31 °C, ventilação e oscilação | [quarto-2/ar-condicionado-quarto-2.md](quarto-2/ar-condicionado-quarto-2.md) |
 
 Os arquivos `.ir` ao lado de cada ficha guardam, no formato Flipper, os sinais **adicionados pelo usuário**
 (o resto vem do perfil do catálogo). Servem para restaurar um aparelho com `importar` ou
@@ -43,6 +44,12 @@ Os arquivos `.ir` ao lado de cada ficha guardam, no formato Flipper, os sinais *
   só os bits: `python3 ferramentas/gree_variante.py --modo frio --ventilacao automatica --temperatura 16 --oscilar`
   (ou `--visor-desligado`). Envie com `enviar_sinal(sinal={frequencia, pulsos})`, pergunte se funcionou e só
   então salve com `editar_aparelho(adicionar_comando={nome, funcao, sinal})`.
+- **Ar-condicionado TCL112** (Brastemp Clean do quarto 2): cada envio leva o estado inteiro. Gere o quadro com
+  `python3 ferramentas/tcl112.py quadro --modo frio --temperatura 23 [--oscilacao|--turbo|--visor-desligado]`,
+  envie com `enviar_sinal` e, se funcionar, regenere o perfil completo (veja a ficha).
+- **Marca que não responde aos perfis da própria marca:** ligue o aparelho pelo botão da unidade e rode
+  `buscar(comando_teste="desligar", apenas_marca=false)`; o código certo desliga. Depois retestar um a um
+  (`retestar([n])`) para separar os suspeitos. Foi assim que o Brastemp revelou ser TCL.
 - **TV Samsung:** códigos Samsung32 no endereço 0x07 (`enviar_sinal(sinal={protocolo:"Samsung32", endereco:7,
   comando:N})`). Teste um por vez, pergunte, e salve o que funcionou. Não varra códigos desconhecidos às cegas:
   a faixa contém comandos ocultos (menu de serviço).

@@ -1,4 +1,4 @@
-# PS4: controle completo e jogador que aprende (capacidade `ps4`, 1.0.66+)
+# PS4: controle completo e jogador que aprende (capacidade `ps4`, 1.0.109+)
 
 O celular vira um DualShock 4 virtual pela rede (Remote Play, biblioteca `pyremoteplay` 0.7.6, base no Chiaki),
 com todos os botões, os dois analógicos e a imagem do jogo. Sem hardware extra e sem custo.

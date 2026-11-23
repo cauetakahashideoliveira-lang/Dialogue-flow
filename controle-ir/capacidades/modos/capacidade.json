@@ -1,0 +1,28 @@
+{
+ "nome": "modos",
+ "titulo": "Modos do celular (reunião e outros)",
+ "descricao": "Modos do próprio celular, direto no Android (sem tela): guarda o toque e os volumes atuais, aplica o modo e restaura tudo ao sair. Padrão: reuniao = toque e notificações no vibrar. acao=entrar|sair|alternar (modo, avisar=true mostra um aviso) · estado · listar (modos, validações, métodos aprendidos e correções) · definir (modo, nome, toque normal|vibrar|silencioso, volumes {ring|notification|music|alarm|system|call: n, null remove}) cria ou corrige um modo · testar (ciclo completo entrar→conferir→sair→conferir; grava a validação e cria o atalho “Modo <nome> (liga-desliga)” no Termux:Widget) · atalho · remover. Aprende o método que funciona e as condições (Android, Shizuku); só revalida quando uma condição muda. Falha vem com o teste que separa as causas. Toque precisa do Shizuku; sem ele silencia pelos volumes (Termux:API).",
+ "executar": "principal.py",
+ "efeito": "acao",
+ "em_processo": true,
+ "acessos": [
+  "Shizuku/rish (shell do adb): cmd audio set-ringer-mode, cmd media_session volume --get, settings get global mode_ringer",
+  "Termux:API: termux-volume (escrita dos volumes), termux-toast",
+  "grava ~/.controle-ir/modos/ (modos.json, estado.json, aprendido.json) e ~/.shortcuts/tasks/Modo <nome> (liga-desliga)"
+ ],
+ "tempo_limite": 60,
+ "entrada": {
+  "type": "object",
+  "properties": {
+   "acao": {"type": "string", "description": "entrar | sair | alternar | estado | listar | definir | testar | atalho | remover"},
+   "modo": {"type": "string", "description": "nome curto do modo (padrão: reuniao)"},
+   "nome": {"type": "string", "description": "definir: nome para mostrar (ex.: Modo cinema)"},
+   "toque": {"type": "string", "description": "definir: normal | vibrar | silencioso (\"\" = não mexe)"},
+   "volumes": {"type": "object", "description": "definir: {fluxo: volume}; fluxos ring, notification, music, alarm, system, call; null remove"},
+   "descricao": {"type": "string"},
+   "avisar": {"type": "boolean", "description": "mostra um aviso (toast) no celular"},
+   "criar_atalho": {"type": "boolean", "description": "testar: cria o atalho do widget se validar (padrão true)"}
+  },
+  "additionalProperties": false
+ }
+}

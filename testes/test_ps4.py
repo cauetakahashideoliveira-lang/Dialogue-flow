@@ -172,6 +172,31 @@ class TestConexaoLaco(unittest.TestCase):
         con.loop.call_soon_threadsafe(con.loop.stop)
 
 
+class TestCompatPyAV(unittest.TestCase):
+    def test_decodifica_h264_com_pyav_novo(self):
+        """A pyremoteplay usa Flags.LOW_DELAY (PyAV antigo); no PyAV 14+ isso quebrava a abertura do vídeo."""
+        try:
+            import av
+            from pyremoteplay.receiver import AVReceiver
+        except Exception:  # noqa: BLE001
+            raise unittest.SkipTest("pyremoteplay/av ausentes")
+        _mod("ps4_conexao_compat", "conexao.py").compat_av()
+        try:
+            enc = av.CodecContext.create("libx264", "w")
+        except Exception:  # noqa: BLE001
+            raise unittest.SkipTest("sem codificador H.264")
+        enc.width, enc.height, enc.pix_fmt = 160, 96, "yuv420p"
+        pacotes = []
+        for i in range(6):
+            img = np.zeros((96, 160, 3), np.uint8)
+            img[:, :20 * (i + 1)] = [200, 50, 50]
+            pacotes += enc.encode(av.VideoFrame.from_ndarray(img, format="rgb24").reformat(format="yuv420p"))
+        pacotes += enc.encode(None)
+        dec = AVReceiver.video_codec("h264")
+        quadros = [q for q in (AVReceiver.video_frame(bytes(p), dec, "rgb24") for p in pacotes) if q is not None]
+        self.assertGreaterEqual(len(quadros), 5)
+
+
 class ConexaoFalsa(Gravador):
     conectado = True
 

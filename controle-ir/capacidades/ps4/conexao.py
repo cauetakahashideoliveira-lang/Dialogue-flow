@@ -49,6 +49,51 @@ def disponivel():
     return faltam
 
 
+def compat_av():
+    """A pyremoteplay 0.7.6 foi escrita para o PyAV antigo (Flags.LOW_DELAY, Flags2.FAST); no PyAV 14+ os nomes
+    são minúsculos e a abertura do decodificador quebrava em silêncio (sessão autentica, vídeo nunca começa).
+    Troca o video_codec da biblioteca por um que aceita os dois jeitos. Idempotente."""
+    import av
+    from pyremoteplay.receiver import AVReceiver
+    if getattr(AVReceiver, "_compat_controle_ir", False):
+        return
+    if not hasattr(av.error, "ValueError"):
+        av.error.ValueError = ValueError
+    ctxmod = av.codec.context
+
+    def _flag(enum, *nomes):
+        for n in nomes:
+            if hasattr(enum, n):
+                return getattr(enum, n)
+        return None
+
+    def video_codec(codec_name):
+        try:
+            cc = av.codec.Codec(codec_name, "r").create()
+        except Exception as e:  # noqa: BLE001
+            LOG.append(f"{time.strftime('%H:%M:%S')} E ps4: decodificador {codec_name} indisponível: {e}")
+            raise
+        LOG.append(f"{time.strftime('%H:%M:%S')} I ps4: decodificador {codec_name} (compat PyAV {av.__version__})")
+        if codec_name.startswith("h264"):
+            cc.options = AVReceiver.AV_CODEC_OPTIONS_H264
+        elif codec_name.startswith("hevc"):
+            cc.options = AVReceiver.AV_CODEC_OPTIONS_HEVC
+        cc.pix_fmt = "yuv420p"
+        f1 = _flag(ctxmod.Flags, "low_delay", "LOW_DELAY")
+        f2 = _flag(ctxmod.Flags2, "fast", "FAST")
+        tt = _flag(getattr(ctxmod, "ThreadType", None), "AUTO", "auto", "SLICE")
+        if f1 is not None:
+            cc.flags = f1
+        if f2 is not None:
+            cc.flags2 = f2
+        if tt is not None:
+            cc.thread_type = tt
+        return cc
+
+    AVReceiver.video_codec = staticmethod(video_codec)
+    AVReceiver._compat_controle_ir = True
+
+
 class Conexao:
     def __init__(self, pasta):
         self.pasta = pasta
@@ -197,6 +242,7 @@ class Conexao:
         if self.device:  # sessão anterior que não ficou pronta
             self.desconectar()
         from pyremoteplay.receiver import QueueReceiver
+        compat_av()
         d = self._dispositivo(ip)
         if not d.is_on:
             self._sync(d.wakeup, self._usuario(d, usuario), profiles=self._perfis())

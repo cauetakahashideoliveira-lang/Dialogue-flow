@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795455762.357554,
-    "seen": 1795455775.084678,
-    "ast_hash": "8f286671a00a465a2182074ce2b5d5c5",
+    "mtime": 1795457184.1245067,
+    "seen": 1795457510.793871,
+    "ast_hash": "92bf897ceb2cab689cf38fce9af8642e",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -162,15 +162,15 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795454843.1067562,
-    "seen": 1795455775.0847642,
-    "ast_hash": "4cac89e777e75da80d8ab1949c9ec7e8",
+    "mtime": 1795457266.0560238,
+    "seen": 1795457510.7940412,
+    "ast_hash": "ad30e86e02ff54592dc34a648c203377",
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
-    "mtime": 1795454856.5599983,
-    "seen": 1795455775.0847874,
-    "ast_hash": "9b3f4c0e8585b6b134a4879069fc7445",
+    "mtime": 1795457319.5266457,
+    "seen": 1795457510.7940848,
+    "ast_hash": "e35c83fcf52998e665d54b4b0147a416",
     "semantic_hash": ""
   },
   "ferramentas/gree_variante.py": {
@@ -330,15 +330,15 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/capacidade.json": {
-    "mtime": 1795455585.2415545,
-    "seen": 1795455775.084666,
-    "ast_hash": "603acb427a7b97b6d5a06e07dc26d8cd",
+    "mtime": 1795456833.4901168,
+    "seen": 1795457510.793849,
+    "ast_hash": "49ce9d8d7ba4f468e25b4df81d23d72f",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/principal.py": {
-    "mtime": 1795455683.53667,
-    "seen": 1795455775.0846717,
-    "ast_hash": "6cb4b8436b0d6131ff22c5e6af99be26",
+    "mtime": 1795457184.0119076,
+    "seen": 1795457510.7938607,
+    "ast_hash": "f492c530e9c5c935b5900f6aa99790b2",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/termometro/capacidade.json": {
@@ -726,15 +726,15 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/objetivo.py": {
-    "mtime": 1795455360.8547869,
-    "seen": 1795455775.0846689,
-    "ast_hash": "337939d14a7dc0865933173e4b0e1cd1",
+    "mtime": 1795456980.885948,
+    "seen": 1795457510.7938554,
+    "ast_hash": "92611c7e5ef1a25977a785745343ee65",
     "semantic_hash": ""
   },
   "testes/test_objetivo.py": {
-    "mtime": 1795455413.2955234,
-    "seen": 1795455775.084761,
-    "ast_hash": "141b98547b3231af03f52dd76882d3d6",
+    "mtime": 1795456990.6176414,
+    "seen": 1795457510.7940342,
+    "ast_hash": "04e5d6b29264c25162e041a483cc2b4c",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/modos/capacidade.json": {
@@ -756,9 +756,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/tela/vigia.py": {
-    "mtime": 1795455675.770473,
-    "seen": 1795455775.0846736,
-    "ast_hash": "c73a3d3f9b31e79f47a6a87b48a0db6a",
+    "mtime": 1795456980.8863392,
+    "seen": 1795457510.793863,
+    "ast_hash": "2a1bf5ae4fec994704708fc324f9c582",
     "semantic_hash": ""
   },
   "ferramentas/tcl112.py": {
@@ -768,9 +768,9 @@
     "semantic_hash": ""
   },
   "testes/test_vigia.py": {
-    "mtime": 1795455675.7756424,
-    "seen": 1795455775.0847628,
-    "ast_hash": "d209dded761cbd67898b283961c0eaf7",
+    "mtime": 1795456990.6167967,
+    "seen": 1795457510.7940385,
+    "ast_hash": "2b861bb3b9d5f614ebf825c14a9a188a",
     "semantic_hash": ""
   },
   "docs/aparelhos/quarto-2/ar-condicionado-quarto-2.md": {

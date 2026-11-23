@@ -162,7 +162,10 @@ class TestJogador(unittest.TestCase):
         q2[40:120, 150:170] = [40, 90, 210]  # rival colado, do outro lado e no alto (pulando)
         ctx2 = self.jog.perceber(q2, dict(cfg, topo_pulo=0.3))
         self.assertEqual((ctx2["frente"], ctx2["faixa"], ctx2["rival_no_ar"]), ("LEFT", "perto", True))
-        self.assertEqual(self.jog.perceber(np.zeros((90, 160, 3), np.uint8), cfg)["chave"], "sem_lutador")
+        # sumiu por um instante: usa a última posição; sem histórico: sem_lutador
+        self.assertEqual(self.jog.perceber(np.zeros((180, 320, 3), np.uint8), cfg)["frente"], "LEFT")
+        self.assertEqual(self.jog.perceber(np.zeros((90, 160, 3), np.uint8), dict(cfg, _visto={}))["chave"],
+                         "sem_lutador")
         # vida: fração acesa; salto grande (round novo) é ignorado com limite
         a = np.zeros((90, 160, 3), np.uint8)
         a[0:9, 0:80] = [220, 40, 40]  # meia barra vermelha

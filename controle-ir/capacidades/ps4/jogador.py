@@ -106,7 +106,7 @@ def recompensa(antes, depois, detectores):
 
 
 # --------------------------------------------------------------------------- percepção da luta
-def centro_x(rgb, area, spec, minimo=0.002):
+def centro_x(rgb, area, spec, minimo=0.0008):
     """Centro horizontal (0–1 da tela) dos pixels da cor `spec` dentro de `area`; None se quase não aparece."""
     pedaco = regiao(rgb, area)
     m = mascara_cor(pedaco, spec)
@@ -115,7 +115,7 @@ def centro_x(rgb, area, spec, minimo=0.002):
         return None, frac, None
     ys, xs = np.nonzero(m)
     x0, y0, w, h = [float(v) for v in area]
-    cx = x0 + (xs.mean() + 0.5) / m.shape[1] * w
+    cx = x0 + (float(np.median(xs)) + 0.5) / m.shape[1] * w  # mediana: o cenário não puxa o centro
     topo = y0 + np.percentile(ys, 5) / m.shape[0] * h  # topo do lutador (pulo = topo alto)
     return float(cx), frac, float(topo)
 
@@ -123,8 +123,20 @@ def centro_x(rgb, area, spec, minimo=0.002):
 def perceber(rgb, cfg):
     """cfg: {area, eu:{spec}, rival:{spec}, distancias:[perto, medio], topo_pulo}. Devolve contexto + chave."""
     area = cfg.get("area", [0.0, 0.15, 1.0, 0.8])
-    eu, fe, te = centro_x(rgb, area, cfg["eu"], cfg.get("minimo", 0.002))
-    rv, fr, tr = centro_x(rgb, area, cfg["rival"], cfg.get("minimo", 0.002))
+    eu, fe, te = centro_x(rgb, area, cfg["eu"], cfg.get("minimo", 0.0008))
+    rv, fr, tr = centro_x(rgb, area, cfg["rival"], cfg.get("minimo", 0.0008))
+    agora = time.monotonic()
+    memoria = cfg.get("_visto") or {}
+    # um lutador some por um instante (clarão, golpe, sobreposição): usa a última posição vista há pouco
+    if eu is None and agora - memoria.get("eu_t", -9) < float(cfg.get("memoria_s", 1.5)):
+        eu, te = memoria["eu"], memoria.get("eu_topo")
+    if rv is None and agora - memoria.get("rv_t", -9) < float(cfg.get("memoria_s", 1.5)):
+        rv, tr = memoria["rv"], memoria.get("rv_topo")
+    if eu is not None and fe >= float(cfg.get("minimo", 0.0008)):
+        memoria.update({"eu": eu, "eu_topo": te, "eu_t": agora})
+    if rv is not None and fr >= float(cfg.get("minimo", 0.0008)):
+        memoria.update({"rv": rv, "rv_topo": tr, "rv_t": agora})
+    cfg["_visto"] = memoria
     ctx = {"eu_x": None if eu is None else round(eu, 3), "rival_x": None if rv is None else round(rv, 3),
            "eu_frac": round(fe, 4), "rival_frac": round(fr, 4)}
     if eu is None or rv is None:

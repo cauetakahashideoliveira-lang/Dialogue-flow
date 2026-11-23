@@ -46,4 +46,8 @@ curiosidade UCB + demonstrações) → recompensa pelos detectores da tela → a
 - Remote Play soma ~100–200 ms de rede e vídeo; o jogador decide a cada jogada (habilidade + `intervalo_ms`).
   Bom para menus, turnos, estratégia, rotinas (farm, corrida contra o tempo); reflexo puro (tiro, luta) não.
 - Teto maior exigiria hardware (placa de captura + Pico/GP2040-CE com autenticação) — fora do escopo sem custo.
-- Ainda não testado com o PS4 real (falta instalar no Termux e parear).
+- Validado em 23/11/2026 no PS4-617 (192.168.1.13, sistema 14.02, conta taktak_gamer22): pareamento, conexão
+  720p/60 em ~4 s e botão PS levando de Configurações à tela inicial, com a imagem de volta em ~1,9 s.
+  Correções que o teste real exigiu: chamadas da biblioteca dentro do laço (1.0.110), compatibilidade com o
+  PyAV 19 (1.0.112: `Flags.LOW_DELAY` → `low_delay`) e PARAR antigo não bloquear comandos (1.0.113).
+  `acao=log` mostra as últimas linhas da pyremoteplay para diagnosticar.

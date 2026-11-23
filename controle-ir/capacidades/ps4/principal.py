@@ -284,7 +284,7 @@ def _laco_jogador(cfg):
                 continue
             r = j.passo(con.quadro, agir, explorar=cfg["explorar"], guardar_quadro=guardar)
             if "erro" in r:
-                time.sleep(0.5)
+                time.sleep(0.25 if r.get("erro") == "fora da luta" else 0.5)
                 continue
             E.jog_info["passos"] += 1
             E.jog_info["recompensa"] = round(E.jog_info["recompensa"] + r["recompensa"], 4)
@@ -331,6 +331,9 @@ def cmd_jogador(a):
                                 percepcao=dict(a["percepcao"]) if a.get("percepcao") is not None else None,
                                 **extra)
         E.jogador.reflexos = a.get("reflexos")
+        E.jogador.estrategia = a.get("estrategia")
+        if a.get("estrategia"):
+            E.jogador.cerebro.alfa = max(E.jogador.cerebro.alfa, 0.5)  # adapta em poucas jogadas
         conf = _ler(CONF, {})
         conf["jogo"] = jogo
         _gravar(CONF, conf)

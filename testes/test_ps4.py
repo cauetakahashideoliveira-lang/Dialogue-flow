@@ -215,6 +215,21 @@ class TestJogador(unittest.TestCase):
         j.ultimos = []
         self.assertEqual(j.reflexo(q3, {"faixa": "perto", "rival_x": 0.5}), "def")
 
+    def test_especialista_e_trava_fora_da_luta(self):
+        det = [{"tipo": "vida", "regiao": [0, 0, 1, 0.1], "nome": "minha_vida"}]
+        j = self.jog.Jogador(self.pasta, "esp", ["gancho", "jab", "combo", "agarrao", "tiro"], det)
+        j.estrategia = {"situacoes": {"*|ar": ["gancho"], "perto|chao": ["jab", "combo"], "longe|chao": ["tiro"]},
+                        "anti_bloqueio": "agarrao", "ataques": ["jab", "combo"], "variar": 0}
+        self.assertEqual(j.especialista(0, {"chave": "medio|ar|meio"}), "gancho")
+        self.assertEqual(j.especialista(0, {"chave": "longe|chao|meio"}), "tiro")
+        self.assertEqual(j.especialista(0, {"chave": "perto|chao|meio"}), "jab")
+        j.cerebro.cont["0|combo"], j.cerebro.q["0|combo"] = 3, 0.5  # combo conectando: sobe
+        self.assertEqual(j.especialista(0, {"chave": "perto|chao|meio"}), "combo")
+        j.ultimos = [(0, "jab", 0.0)] * 3  # bloqueando tudo: agarrão
+        self.assertEqual(j.especialista(0, {"chave": "perto|chao|meio"}), "agarrao")
+        menu = np.zeros((90, 160, 3), np.uint8)
+        self.assertEqual(j.passo(lambda: menu, lambda h, c: None)["erro"], "fora da luta")
+
     def test_demonstracao_e_nota(self):
         j = self.jog.Jogador(self.pasta, "demo", ["a", "b"], [])
         q = np.full((90, 160, 3), 128, dtype=np.uint8)

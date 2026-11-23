@@ -338,9 +338,12 @@ class Jogador:
         q0 = olhar()
         if q0 is None:
             return {"erro": "sem imagem do jogo"}
+        if getattr(self, "estrategia", None) and not self.na_luta(q0):
+            return {"erro": "fora da luta"}  # menus/resultado/login: não aperta nada
         s, ctx = self.situacao(q0)
         self.ultimo_ctx = ctx
-        h = self.reflexo(q0, ctx) or self.cerebro.escolher(s, explorar)
+        h = self.reflexo(q0, ctx) or (self.especialista(s, ctx) if getattr(self, "estrategia", None)
+                                       else self.cerebro.escolher(s, explorar))
         t0 = time.monotonic()
         try:
             agir(h, ctx)
@@ -366,6 +369,36 @@ class Jogador:
             reg["quadro"] = guardar_quadro(q1, f"p{self.passos_total:06d}")
         self.gravar(reg)
         return reg
+
+    def na_luta(self, quadro):
+        """Há luta na tela quando as barras de vida aparecem (soma das frações acesas > limiar)."""
+        vidas = [medir(quadro, d) for d in self.detectores if d.get("tipo") == "vida"]
+        return not vidas or sum(vidas) > float(self.estrategia.get("hud_min", 0.08))
+
+    def especialista(self, s, ctx):
+        """Joga bem desde o início: lista de golpes por situação (do estudo: dados de quadro e combos do jogo),
+        reordenada pelo que está conectando agora (valor aprendido, alfa alto). Abre a guarda com agarrão quando
+        os golpes seguidos não tiram vida (rival bloqueando). Varia entre os 2 melhores para não ficar previsível."""
+        cfg = self.estrategia
+        chave = ctx.get("chave") or ""
+        faixa, alt = (chave.split("|") + ["", ""])[:2]
+        sit = cfg.get("situacoes", {})
+        lista = (sit.get(f"{faixa}|{alt}") or sit.get(f"*|{alt}") or sit.get(f"{faixa}|*") or sit.get("*") or [])
+        lista = [h for h in lista if h in self.cerebro.hab] or self.cerebro.hab
+        bloqueados = [r for (_s, h, r) in self.ultimos[-int(cfg.get("janela_bloqueio", 3)):]
+                      if h in cfg.get("ataques", lista)]
+        if (cfg.get("anti_bloqueio") and faixa == "perto" and len(bloqueados) >= int(cfg.get("janela_bloqueio", 3))
+                and all(abs(r) < 0.005 for r in bloqueados)):
+            return cfg["anti_bloqueio"]
+        peso = float(cfg.get("peso_aprendido", 4.0))
+        notas = []
+        for i, h in enumerate(lista):
+            n = self.cerebro.cont.get(f"{s}|{h}", 0)
+            notas.append(((1.0 - i / max(1, len(lista))) + (peso * self.cerebro.valor(s, h) if n else 0.0), h))
+        notas.sort(reverse=True)
+        if len(notas) > 1 and random.random() < float(cfg.get("variar", 0.25)):
+            return notas[1][1]
+        return notas[0][1]
 
     def reflexo(self, quadro, ctx):
         """Camada rápida antes do aprendido (cfg em self.reflexos): defende quando o rival perto se mexe forte

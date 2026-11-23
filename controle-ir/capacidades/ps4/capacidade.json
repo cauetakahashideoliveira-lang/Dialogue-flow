@@ -158,6 +158,9 @@
    "salvar": {
     "type": "boolean",
     "description": "jogador perceber: guardar esta percepção no jogador"
+   },
+   "ao_reconectar": {
+    "description": "jogador: passos depois de reconectar se a sessão cair (padrão 'bola esperar:600 bola esperar:600', fecha a pausa)"
    }
   },
   "required": [

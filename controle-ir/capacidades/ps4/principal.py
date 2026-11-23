@@ -261,8 +261,27 @@ def _laco_jogador(cfg):
     try:
         while time.time() < fim and not E.jog_parar.is_set() and not _parar_global(t0):
             if not con.conectado:
-                E.jog_info["estado_txt"] = "sessão caiu"
-                break
+                # a sessão do Remote Play cai de vez em quando: guarda o motivo e reconecta (até 5 vezes)
+                quedas = E.jog_info.setdefault("quedas", [])
+                quedas.append({"t": time.strftime("%H:%M:%S"), "sessao": con._estado_sessao(),
+                               "log": _mod("conexao").ultimas_linhas(6)})
+                if len(quedas) > 5:
+                    E.jog_info["estado_txt"] = "sessão caiu (5 vezes)"
+                    break
+                E.jog_info["estado_txt"] = "reconectando"
+                j.salvar()
+                try:
+                    conf = _ler(CONF, {})
+                    con.conectar(conf.get("ip"), conf.get("usuario"))
+                    time.sleep(1.5)
+                    # o jogo costuma pausar quando o controle remoto some: "voltar" fecha menus de pausa
+                    # (na luta é só um chute traseiro). Configurável por jogo em cfg["ao_reconectar"].
+                    rodar_comando(cfg.get("ao_reconectar") or "bola esperar:600 bola esperar:600")
+                    E.jog_info["estado_txt"] = "jogando"
+                except Exception as e:  # noqa: BLE001
+                    quedas[-1]["reconexao"] = str(e)[:160]
+                    time.sleep(5)
+                continue
             r = j.passo(con.quadro, agir, explorar=cfg["explorar"], guardar_quadro=guardar)
             if "erro" in r:
                 time.sleep(0.5)
@@ -320,7 +339,7 @@ def cmd_jogador(a):
             return {"erro": "PS4 não conectado (acao=conectar)", "preparado": jogo}
         cfg = {"duracao": max(10, min(float(a.get("duracao", 600)), 4 * 3600)),
                "intervalo_ms": max(0, min(int(a.get("intervalo_ms", 100)), 10000)),
-               "explorar": a.get("explorar", True) is not False}
+               "explorar": a.get("explorar", True) is not False, "ao_reconectar": a.get("ao_reconectar")}
         E.jog_parar.clear()
         E.jog_info = {"cfg": cfg, "jogo": jogo}
         E.jog_th = threading.Thread(target=_laco_jogador, args=(cfg,), name="ps4-jogador", daemon=True)

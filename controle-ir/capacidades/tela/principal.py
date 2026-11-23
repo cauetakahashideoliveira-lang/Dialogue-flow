@@ -130,6 +130,49 @@ def regioes_visuais(xml_texto, fracao=0.15):
     return sorted(out, key=lambda r: -r[2] * r[3])[:2]
 
 
+_WEB_DESC = re.compile(r"visualizacao na web|web view|webview")
+
+
+def regioes_web(xml_texto):
+    """Páginas web que a acessibilidade não descreve: nó WebView (no Chrome, "Visualização na Web") com menos de 3
+    DESCENDENTES com texto. Pela árvore, não pela posição: a barra do Chrome fica desenhada por cima da página (mesma
+    área) e seus 5 botões faziam a página parecer descrita (23/11). Já uma lista que COBRE a página (as sugestões da
+    busca) é lida pelo texto: a página atrás dela não conta."""
+    try:
+        raiz = ET.fromstring(xml_texto)
+    except ET.ParseError:
+        return []
+    pai = {c: p for p in raiz.iter() for c in p}
+    out = []
+    for n in raiz.iter("node"):
+        if "WebView" not in n.attrib.get("class", "") and not _WEB_DESC.search(normalizar(n.attrib.get("content-desc"))):
+            continue
+        b = ler_bounds(n.attrib.get("bounds"))
+        if not b or b[2] - b[0] < 300 or b[3] - b[1] < 400:
+            continue
+        internos = {id(d) for d in n.iter("node")}
+        if sum(1 for d in n.iter("node") if d is not n and (d.attrib.get("text") or d.attrib.get("content-desc"))) >= 3:
+            continue  # a página está descrita (o Chrome expôs o conteúdo)
+        acima, p = set(), pai.get(n)
+        while p is not None:
+            acima.add(id(p))
+            p = pai.get(p)
+        area = (b[2] - b[0]) * (b[3] - b[1])
+
+        def cobre(o):  # outro nó (não pai, não filho) sobre ≥ 40% da página, com texto: lista/diálogo por cima
+            bo = ler_bounds(o.attrib.get("bounds"))
+            if not bo or id(o) in internos or id(o) in acima:
+                return False
+            ix = max(0, min(b[2], bo[2]) - max(b[0], bo[0]))
+            iy = max(0, min(b[3], bo[3]) - max(b[1], bo[1]))
+            return ix * iy >= 0.4 * area and sum(1 for d in o.iter("node") if d.attrib.get("text")
+                                                 or d.attrib.get("content-desc")) >= 3
+        if any(cobre(o) for o in raiz.iter("node")):
+            continue
+        out.append([b[0], b[1], b[2] - b[0], b[3] - b[1]])
+    return out[:1]
+
+
 def dentro(ponto, regiao):
     x, y = ponto
     return regiao[0] <= x <= regiao[0] + regiao[2] and regiao[1] <= y <= regiao[1] + regiao[3]
@@ -2532,7 +2575,7 @@ def _objetivo(a):
 
         @staticmethod
         def regioes(xml):
-            return regioes_visuais(xml)
+            return regioes_web(xml) + regioes_visuais(xml)
 
         @staticmethod
         def capturar(largura, recorte=None):

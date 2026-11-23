@@ -31,6 +31,16 @@ A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padr
   outro app (modo `livre`), pausa com travar, sobrevive a reiniciar o serviço. Limites: 10 vigias, 5 min–24 h, até 72 h.
 - Descrição da ferramenta: o conector só mostra os primeiros **800 caracteres** de cada `cap_*`; o começo da
   descrição da tela agora traz objetivo/pergunta/visão/vigiar.
+- **1.0.103 (1º teste real da 1.0.102):** a visão não entrou na página de resultado (o modelo de texto rolou e
+  parou). Correções: a área cega conta só os textos do PRÓPRIO app (as teclas do teclado aberto por cima, outro
+  pacote, faziam a página parecer descrita), captura reserva pelo `screencap` e `visao_diag` no resultado
+  (telas cegas, capturas que falharam, erro do modelo, página descrita e por quem).
+- **1.0.104:** o diagnóstico mostrou a causa real — `web_descrita: textos_do_app 5, outros_apps []`: a **barra do
+  Chrome** (início, endereço, nova guia, guias, menu) fica desenhada por cima da página, na mesma área, e os 5 botões
+  contavam como texto da página (a visão só entrava depois de a rolagem esconder a barra). Agora a área cega vem da
+  ÁRVORE da tela (`principal.regioes_web`): só contam descendentes do nó da página; uma lista que cobre ≥ 40% da página
+  (sugestões da busca, diálogo) continua sendo lida pelo texto. Teste no POCO com a 1.0.103: "1 dólar americano =
+  5,99 reais (conversor do Google)", concluído pela visão em 14,6 s (3 consultas, 1 olhada).
 
 ## 22/11 — ar condicionado quarto 2 (Brastemp Clean)
 - Servidor no POCO: **1.0.101** (canal direto conectado). O conector caiu duas vezes com "Not Found" e voltou

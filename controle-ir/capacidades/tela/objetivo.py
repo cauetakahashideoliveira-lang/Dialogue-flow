@@ -225,9 +225,13 @@ class Grafo:
                 "objetivos": [{"objetivo": k, "app": o.get("app"), "vezes": o.get("ok", 0)} for k, o in obj]}
 
 
-def area_cega(els, regioes=()):
+def area_cega(els, regioes=(), so_regioes=False):
     """Região [x, y, l, a] que a acessibilidade não descreve: página web (o Chrome mostra só o nó "Visualização na
-    Web", 22/11), mapa, vídeo, jogo. Só a imagem mostra o conteúdo dali. None se a tela é toda descrita."""
+    Web", 22/11), mapa, vídeo, jogo. Só a imagem mostra o conteúdo dali. None se a tela é toda descrita.
+    so_regioes: o celular já calculou as regiões pela ÁRVORE da tela (principal.regioes_web), que é a fonte certa;
+    sem ela (testes), vale o heurístico pela posição dos elementos."""
+    if so_regioes:
+        return list(regioes[0]) if regioes else None
     if not els:
         return list(regioes[0]) if regioes else None
     larg = max(e.get("x", 0) + e.get("l", 0) // 2 for e in els) or 1
@@ -249,7 +253,8 @@ def textos_na_area(els, e, r):
     """Elementos com texto do MESMO app dentro da área: o teclado aberto por cima (outro pacote) tem uma descrição
     por tecla e fazia a página parecer descrita — o executor ficava sem a visão logo depois de digitar (23/11)."""
     return sum(1 for o in els if o is not e and rotulo(o) and o.get("pacote") == e.get("pacote")
-               and no_retangulo(o.get("x", 0), o.get("y", 0), r))
+               and not o.get("id") and no_retangulo(o.get("x", 0), o.get("y", 0), r))  # com id: botão nativo
+               # do app (a barra do Chrome por cima da página), não conteúdo da página
 
 
 def no_retangulo(x, y, r, folga=0):
@@ -386,7 +391,9 @@ class Executor:
                 return ()
 
         def cega_de(els_, xml_):
-            return area_cega(els_, regioes(xml_)) if usar_visao or self.julgar else None
+            if not (usar_visao or self.julgar):
+                return None
+            return area_cega(els_, regioes(xml_), so_regioes=hasattr(t, "regioes"))
 
         def assinar(els_, app_, xml_):
             """Assinatura da tela; numa área cega (página web), soma um resumo da IMAGEM dela: rolar a página ou

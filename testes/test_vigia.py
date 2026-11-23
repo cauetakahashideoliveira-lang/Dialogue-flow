@@ -223,3 +223,46 @@ class TestLigacaoNoServicoDaTela(unittest.TestCase):
         self.assertIn("nota", r)
         self.assertEqual(self.p.grafo_resumo()["objetivos"], [])
         self.assertFalse(self.p.retomar_vigias())  # nenhum arquivo: nada a religar
+
+
+CHROME_XML = '''<?xml version="1.0"?><hierarchy rotation="0">
+<node class="android.widget.FrameLayout" package="com.android.chrome" bounds="[0,0][1280,2772]" text="" content-desc="">
+ <node class="android.widget.FrameLayout" package="com.android.chrome" bounds="[0,152][1280,2720]" text="" content-desc="">
+  <node class="android.webkit.WebView" package="com.android.chrome" content-desc="Visualização na Web" bounds="[0,152][1280,2720]" text="">{pagina}</node>
+ </node>
+ <node class="android.view.ViewGroup" package="com.android.chrome" resource-id="com.android.chrome:id/toolbar" bounds="[0,183][1280,303]" text="" content-desc="">
+  <node class="android.widget.ImageButton" package="com.android.chrome" resource-id="com.android.chrome:id/home_button" content-desc="Abrir a página inicial" clickable="true" bounds="[18,183][138,303]" text=""/>
+  <node class="android.widget.EditText" package="com.android.chrome" resource-id="com.android.chrome:id/url_bar" text="google.com/search?q=cota" clickable="true" bounds="[160,183][820,303]" content-desc=""/>
+  <node class="android.widget.ImageButton" package="com.android.chrome" content-desc="Nova guia" clickable="true" bounds="[823,183][943,303]" text=""/>
+  <node class="android.widget.ImageButton" package="com.android.chrome" content-desc="Ver 2 guias" clickable="true" bounds="[986,183][1106,303]" text=""/>
+  <node class="android.widget.ImageButton" package="com.android.chrome" content-desc="Personalizar e controlar o Google Chrome" clickable="true" bounds="[1142,183][1262,303]" text=""/>
+ </node>{por_cima}
+</node></hierarchy>'''
+
+
+class TestRegioesWeb(unittest.TestCase):
+    """principal.regioes_web: pela árvore da tela, não pela posição (23/11, POCO: a barra do Chrome por cima da
+    página fazia a página parecer descrita e a visão não entrava)."""
+
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("tela_principal_web", CAP / "principal.py")
+        cls.p = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.p)
+
+    def test_barra_por_cima_nao_descreve_a_pagina(self):
+        xml = CHROME_XML.format(pagina="", por_cima="")
+        self.assertEqual(self.p.regioes_web(xml), [[0, 152, 1280, 2568]])
+
+    def test_pagina_exposta_pela_acessibilidade_e_texto(self):
+        linhas = "".join(f'<node class="android.view.View" package="com.android.chrome" text="linha {k}" '
+                         f'bounds="[0,{400 + k * 100}][1280,{480 + k * 100}]" content-desc=""/>' for k in range(4))
+        self.assertEqual(self.p.regioes_web(CHROME_XML.format(pagina=linhas, por_cima="")), [])
+
+    def test_sugestoes_da_busca_cobrindo_a_pagina_sao_lidas_pelo_texto(self):
+        itens = "".join(f'<node class="android.widget.TextView" package="com.android.chrome" text="cotação {k}" '
+                        f'bounds="[0,{350 + k * 150}][1280,{480 + k * 150}]" content-desc=""/>' for k in range(6))
+        lista = ('<node class="androidx.recyclerview.widget.RecyclerView" package="com.android.chrome" '
+                 f'bounds="[0,320][1280,2400]" text="" content-desc="">{itens}</node>')
+        self.assertEqual(self.p.regioes_web(CHROME_XML.format(pagina="", por_cima=lista)), [])
+        self.assertEqual(self.p.regioes_web("não é xml"), [])

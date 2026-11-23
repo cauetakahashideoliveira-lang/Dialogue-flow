@@ -54,7 +54,8 @@ def fracao_cor(rgb, r, cor, tol=60):
 
 
 def mascara_cor(pedaco, spec):
-    """spec: {cor:[r,g,b], tolerancia} (distância RGB) ou {matiz:[min,max] graus, sat_min, val_min} (HSV)."""
+    """spec: {cor:[r,g,b], tolerancia} (RGB), {matiz:[min,max] graus, sat_min, val_min} (HSV) ou
+    {sat_max, val_min, val_max} (cinza/metal)."""
     a = np.asarray(pedaco, dtype=np.float32)[..., :3]
     if "matiz" in spec:
         r, g, b = a[..., 0] / 255, a[..., 1] / 255, a[..., 2] / 255
@@ -65,6 +66,11 @@ def mascara_cor(pedaco, spec):
         h0, h1 = [float(x) for x in spec["matiz"]]
         dentro = (h >= h0) & (h <= h1) if h0 <= h1 else (h >= h0) | (h <= h1)
         return dentro & (sat >= float(spec.get("sat_min", 0.4))) & (mx >= float(spec.get("val_min", 0.3)))
+    if "sat_max" in spec:  # "metal"/cinza: pouca saturação e brilho numa faixa (ex.: armadura prateada)
+        mx, mn = a.max(axis=2) / 255, a.min(axis=2) / 255
+        sat = (mx - mn) / (mx + 1e-6)
+        return ((sat <= float(spec["sat_max"])) & (mx >= float(spec.get("val_min", 0.3)))
+                & (mx <= float(spec.get("val_max", 0.8))))
     dist = np.sqrt(((a - np.asarray(spec.get("cor", [255, 255, 255]), dtype=np.float32)) ** 2).sum(axis=2))
     return dist <= float(spec.get("tolerancia", 60))
 

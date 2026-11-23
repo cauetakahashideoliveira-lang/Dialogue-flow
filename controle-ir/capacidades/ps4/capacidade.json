@@ -153,7 +153,7 @@
    },
    "percepcao": {
     "type": "object",
-    "description": "jogador: vê a luta pela cor dos lutadores: {area:[x,y,l,a], eu:{cor:[r,g,b],tolerancia}|{matiz:[min,max],sat_min,val_min}, rival:{...}, distancias:[perto,medio], topo_pulo, canto}. O estado vira faixa|ar/chao|canto e as habilidades usam frente/tras conforme o lado."
+    "description": "jogador: vê a luta pela cor dos lutadores: {area:[x,y,l,a], eu:{cor:[r,g,b],tolerancia}|{matiz:[min,max],sat_min,val_min}|{sat_max,val_min,val_max} (metal/cinza), rival:{...}, distancias:[perto,medio], topo_pulo, canto}. O estado vira faixa|ar/chao|canto e as habilidades usam frente/tras conforme o lado."
    },
    "salvar": {
     "type": "boolean",

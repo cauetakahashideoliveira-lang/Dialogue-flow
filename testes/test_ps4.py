@@ -177,6 +177,15 @@ class TestJogador(unittest.TestCase):
         cheio = np.full((90, 160, 3), 220, np.uint8)
         self.assertEqual(self.jog.recompensa(b, cheio, det)[0], 0.0)  # recarga do round não conta
 
+    def test_cor_metal(self):
+        q = np.zeros((10, 40, 3), np.uint8)
+        q[:, 0:10] = [140, 145, 155]   # armadura
+        q[:, 10:20] = [235, 240, 250]  # gelo/céu claro (brilho alto demais)
+        q[:, 20:30] = [200, 40, 30]    # cenário vermelho (saturado)
+        m = self.jog.mascara_cor(q, {"sat_max": 0.15, "val_min": 0.35, "val_max": 0.8})
+        self.assertTrue(m[:, 0:10].all())
+        self.assertFalse(m[:, 10:].any())
+
     def test_jogador_com_percepcao_passa_o_lado(self):
         cfg = {"area": [0, 0.2, 1, 0.8], "eu": {"cor": [220, 190, 30], "tolerancia": 40},
                "rival": {"cor": [40, 90, 210], "tolerancia": 40}}

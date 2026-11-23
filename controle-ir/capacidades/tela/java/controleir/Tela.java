@@ -531,17 +531,29 @@ public class Tela {
         if (campo == null) return "ERRO nenhum campo de texto em foco";
         String atual = "";
         CharSequence ja = campo.getText();
-        boolean dica = false;
-        try {
-            Method m = AccessibilityNodeInfo.class.getMethod("isShowingHintText");
-            dica = (Boolean) m.invoke(campo);
-        } catch (Throwable t) {
-            // Android antigo
-        }
-        if (ja != null && !dica) atual = ja.toString();
+        if (ja != null && !mostraDica(campo, ja)) atual = ja.toString();
         Bundle b = new Bundle();
         b.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, atual + s);
         return campo.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, b) ? "ok" : "ERRO o campo recusou o texto";
+    }
+
+    /** O campo vazio expõe a dica como texto ("Mensagem" no WhatsApp): sem isto, a dica ia junto com o que se
+     *  digitou (21/11, "MensagemTeste do Claude…"). Vale qualquer sinal: o próprio aviso de dica, o texto igual à
+     *  dica declarada, ou um campo editável sem cursor no texto (seleção -1: não há texto de verdade). */
+    static boolean mostraDica(AccessibilityNodeInfo campo, CharSequence ja) {
+        if (ja.length() == 0) return false;
+        try {
+            if ((Boolean) AccessibilityNodeInfo.class.getMethod("isShowingHintText").invoke(campo)) return true;
+        } catch (Throwable t) {
+            // Android antigo
+        }
+        try {
+            Object h = AccessibilityNodeInfo.class.getMethod("getHintText").invoke(campo);
+            if (h != null && h.toString().length() > 0 && h.toString().contentEquals(ja)) return true;
+        } catch (Throwable t) {
+            // Android antigo
+        }
+        return campo.isEditable() && campo.getTextSelectionStart() < 0 && campo.getTextSelectionEnd() < 0;
     }
 
     // ------------------------------------------------------------------ captura (JPEG direto)

@@ -45,8 +45,14 @@ def analisar_sonar(x, freq, taxa=TAXA, n=8192, faixa_doppler=(12.0, 160.0), limi
     desvio = np.abs(f - freq)
     lat = (desvio >= faixa_doppler[0]) & (desvio <= faixa_doppler[1])
     razoes = np.array([10 * np.log10((q[lat].sum() + 1e-20) / (q[perto].sum() + 1e-20)) for q in quadros])
-    base = float(np.median(razoes))
-    mov = razoes > base + limiar_db
+    # Quadros sem o tom não contam: a gravação começa ~0,4 s antes dele, e sem tom a razão lateral/tom dispara —
+    # virava "movimento" no 1º segundo de toda medição (visto no POCO em 21/11). Vale o quadro com o tom a até
+    # 10 dB do nível típico. A referência de "parado" é o percentil 10 (antes a mediana: com movimento em metade
+    # ou mais da gravação, a referência caía dentro do próprio movimento e ele sumia; o p10 aguenta até ~80 %).
+    tons = np.array([float(q[perto].sum()) for q in quadros])
+    com_tom = tons >= float(np.median(tons)) * 0.1
+    base = float(np.percentile(razoes[com_tom] if com_tom.any() else razoes, 10))
+    mov = (razoes > base + limiar_db) & com_tom
     seg_quadro = passo / taxa
     linha, por_meio = [], max(1, int(round(0.5 / seg_quadro)))
     for i in range(0, mov.size, por_meio):
@@ -54,8 +60,62 @@ def analisar_sonar(x, freq, taxa=TAXA, n=8192, faixa_doppler=(12.0, 160.0), limi
     return {"suporte": bool(suporte), "tom_acima_do_ruido_db": round(float(tom_db - ruido_db), 1),
             "movimento_pct": round(100.0 * float(mov.mean()), 1),
             "linha_do_tempo_meio_s": linha, "frequencia_hz": freq,
-            "leitura": "1 = movimento naquele meio segundo" if suporte else
-            "o tom não chegou ao microfone: alto-falante ou gravação cortam essa frequência; tente 18000 Hz"}
+            "leitura": "1 = movimento naquele meio segundo" if suporte else sugestao_sem_tom(freq)}
+
+
+def sugestao_sem_tom(freq):
+    if freq > MINIMA:
+        return (f"o tom não chegou ao microfone: alto-falante ou gravação cortam essa frequência; "
+                f"tente {max(MINIMA, freq - 1000)} Hz")
+    return "o tom não chegou ao microfone nem na frequência mínima (17000 Hz): este aparelho não serve para o sonar"
+
+
+# Sem frequência pedida: a última que funcionou neste celular; sem ela, a padrão e depois a mínima (no POCO X8 Pro
+# Max, 19 e 18 kHz não chegam ao microfone e 17 kHz chega com folga — medido em 21/11).
+PADRAO, MINIMA = 19000, 17000
+MEMORIA = os.path.join(BASE, "medicoes", "sonar.json")
+
+
+def frequencia_lembrada():
+    try:
+        with open(MEMORIA) as f:
+            v = int(json.load(f)["frequencia"])
+        return v if MINIMA <= v <= 20500 else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def lembrar(freq):
+    try:
+        os.makedirs(os.path.dirname(MEMORIA), exist_ok=True)
+        with open(MEMORIA, "w") as f:
+            json.dump({"frequencia": freq, "quando": time.strftime("%Y-%m-%d %H:%M")}, f)
+    except OSError:
+        pass
+
+
+def escolher_e_testar(a, testar_fn):
+    """Frequência pedida: testa só ela. Sem pedido: a lembrada; se não houver (ou falhar), 19000 e então 17000.
+    A que funcionar fica lembrada para as próximas vezes."""
+    segundos = max(4, min(int(a.get("segundos", 10)), 20))
+    volume = max(1, min(int(a.get("volume", 10)), 15))
+    if "frequencia" in a:
+        fila = [max(MINIMA, min(int(a["frequencia"]), 20500))]
+    else:
+        fila = [f for f in dict.fromkeys([frequencia_lembrada(), PADRAO, MINIMA]) if f]
+    tentativas = []
+    for freq in fila:
+        out = testar_fn(freq, segundos, volume)
+        if "erro" in out:
+            return out
+        tentativas.append({"frequencia_hz": freq, "suporte": out.get("suporte"),
+                           "tom_acima_do_ruido_db": out.get("tom_acima_do_ruido_db")})
+        if out.get("suporte"):
+            lembrar(freq)
+            break
+    if len(tentativas) > 1:
+        out["tentativas"] = tentativas
+    return out
 
 
 # --------------------------------------------------------------------------- celular
@@ -112,9 +172,7 @@ def main():
     if a.get("acao") != "testar":
         print(json.dumps({"erro": "acao deve ser testar"}, ensure_ascii=False))
         return
-    freq = max(17000, min(int(a.get("frequencia", 19000)), 20500))
-    print(json.dumps(testar(freq, max(4, min(int(a.get("segundos", 10)), 20)),
-                            max(1, min(int(a.get("volume", 10)), 15))), ensure_ascii=False))
+    print(json.dumps(escolher_e_testar(a, testar), ensure_ascii=False))
 
 
 if __name__ == "__main__":

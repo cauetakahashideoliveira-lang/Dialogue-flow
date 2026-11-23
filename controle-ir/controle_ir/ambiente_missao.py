@@ -130,7 +130,7 @@ def executar(mcp, args, navegar):
             opcoes.append({"nome":"capacidades","argumentos":{"acao":"listar"}})
         disponiveis = {f["nome"] for f in ambiente["ferramentas"] if f["permitida"]}
         permitidas = {"politica", "consultar", "cap_estado_celular", "opcoes", "progresso", "capacidades",
-                      "cap_termometro", "cap_foto", "cap_ouvir_bipe", "cap_sonar", "cap_sono",
+                      "cap_termometro", "cap_foto", "cap_ouvir_bipe", "cap_sonar", "cap_sono", "cap_bluetooth",
                       "controlar", "buscar", "procurar_perfis"}
         if not isinstance(opcoes,list) or not 1 <= len(opcoes) <= 64:
             return {"erro":"lista de opções inválida"}

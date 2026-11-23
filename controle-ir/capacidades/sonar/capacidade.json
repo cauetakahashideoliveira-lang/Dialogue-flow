@@ -1,14 +1,14 @@
 {
  "nome": "sonar",
  "titulo": "Sonar de presença por ultrassom (experimental)",
- "descricao": "O alto-falante emite um tom quase inaudível (18–20 kHz) enquanto o microfone grava; quem se mexe no cômodo desvia a frequência do eco (efeito Doppler). acao=testar: diz se o celular consegue emitir e ouvir o tom (suporte) e mostra, a cada meio segundo, se houve movimento. Para validar, peça ao usuário para ficar parado na 1ª metade e mexer o braço a ~1 m na 2ª. Experimental: pessoa totalmente parada pode não ser detectada.",
+ "descricao": "O alto-falante emite um tom quase inaudível (17–20 kHz) enquanto o microfone grava; quem se mexe no cômodo desvia a frequência do eco (efeito Doppler). acao=testar: diz se o celular consegue emitir e ouvir o tom (suporte) e mostra, a cada meio segundo, se houve movimento. Para validar, peça ao usuário para ficar parado na 1ª metade e mexer o braço a ~1 m na 2ª. Experimental: pessoa totalmente parada pode não ser detectada.",
  "executar": "principal.py",
  "efeito": "leitura",
- "acessos": ["alto-falante (tom de 18–20 kHz, volume de mídia ajustado e restaurado)", "termux-api: microphone-record, media-player, volume", "ffmpeg e numpy", "áudio apagado após a análise"],
- "tempo_limite": 50,
+ "acessos": ["alto-falante (tom de 17–20 kHz, volume de mídia ajustado e restaurado)", "termux-api: microphone-record, media-player, volume", "ffmpeg e numpy", "áudio apagado após a análise"],
+ "tempo_limite": 90,
  "entrada": {"type": "object", "properties": {
    "acao": {"type": "string", "description": "testar"},
-   "frequencia": {"type": "integer", "description": "Hz do tom, 17000–20500 (padrão 19000)"},
+   "frequencia": {"type": "integer", "description": "Hz do tom, 17000–20500. Sem ela: a última que funcionou neste celular; na primeira vez tenta 19000 e, se o tom não chegar ao microfone, 17000 (e lembra a que funcionou)"},
    "segundos": {"type": "integer", "description": "duração, 4–20 (padrão 10)"},
    "volume": {"type": "integer", "description": "volume de mídia durante o teste, 1–15 (padrão 10; o anterior é restaurado)"}
  }, "required": ["acao"], "additionalProperties": false}

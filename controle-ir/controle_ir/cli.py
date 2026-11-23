@@ -618,6 +618,18 @@ def mostrar_log(n: int = 40) -> int:
     return 0
 
 
+def _retomar_vigias(servico, espera=20):
+    """Vigias da tela (missões de horas) sobrevivem a reiniciar o serviço: religa o laço se houver vigia ativo."""
+    if not (PASTA / "tela" / "vigias.json").exists():
+        return
+    time.sleep(espera)  # o leitor rápido (Shizuku) sobe junto com o serviço
+    try:
+        from .capacidades import modulo_embutido
+        modulo_embutido(servico.reg.embutidas / "tela", "tela").retomar_vigias()
+    except Exception as e:  # noqa: BLE001 — nunca derruba o serviço
+        print(time.strftime("%H:%M:%S"), "vigias: não religou —", str(e)[:120], flush=True)
+
+
 def _seguir_log(desde: int | None, parar_ev: threading.Event):
     log = caminho_log()
     f = None
@@ -914,6 +926,7 @@ def _iniciar(args, trava):
         sys.exit(1)
     threading.Thread(target=srv.serve_forever, name="http", daemon=True).start()
     _soltar_inicio(trava)
+    threading.Thread(target=_retomar_vigias, args=(servico,), name="vigias-inicio", daemon=True).start()
     if avisar:
         _aviso("Controle IR ligado — pode pedir ao Claude")
     try:

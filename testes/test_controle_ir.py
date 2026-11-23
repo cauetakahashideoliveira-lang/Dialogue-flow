@@ -547,6 +547,22 @@ class TestCanal(unittest.TestCase):
         self.assertEqual((r["t"], r["id"], r["s"]), ("res", "r1", 200))
         self.assertIn("tools/call", json.loads(r["b"])["result"]["eco"])
         self.assertEqual(cn.atendidas, 1)
+        fim = time.time() + 3
+        while not cn.chamadas and time.time() < fim:
+            time.sleep(0.02)
+        d = cn.desempenho()  # telemetria: tempo dentro do celular, sem argumentos
+        self.assertEqual(d["celular_ms"]["n"], 1)
+        self.assertEqual(d["ultimas"][0]["ferramenta"], "tools/call")
+        self.assertEqual(d["ultimas"][0]["status"], 200)
+
+    def test_nome_da_chamada_sem_argumentos(self):
+        from controle_ir.canal import nome_da_chamada
+        corpo = json.dumps({"method": "tools/call", "params": {"name": "executar_capacidade", "arguments": {
+            "nome": "tela", "argumentos": {"acao": "ver", "texto": "segredo"}}}}).encode()
+        self.assertEqual(nome_da_chamada(corpo), ("cap:tela.ver", "tools/call"))
+        self.assertEqual(nome_da_chamada(b'{"method":"tools/call","params":{"name":"consultar"}}'),
+                         ("consultar", "tools/call"))
+        self.assertEqual(nome_da_chamada(b"lixo"), (None, None))
 
 
 class TestServidorMCP(unittest.TestCase):
@@ -992,6 +1008,87 @@ class TestGreeVariante(unittest.TestCase):
             self.g.gerar("frio", "baixa", 18, oscilar=True)
 
 
+class TestTcl112(unittest.TestCase):
+    """ferramentas/tcl112.py: “ar condicionado quarto 2” (Brastemp Clean BBV09BBBNA) aceitou o TCL112 em 22/11/2026."""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(RAIZ / "ferramentas"))
+        import tcl112
+        cls.t = tcl112
+        cls.capturas = {}
+        import gzip
+        with gzip.open(BASE, "rt") as f:
+            for linha in f:
+                d = json.loads(linha)
+                if d["chave"] in ("smartir:climate/1900", "smartir:climate/1901"):
+                    cls.capturas[d["chave"]] = d
+
+    @staticmethod
+    def quadros(p):
+        """Durações → quadros de bytes (LSB primeiro), separados pelos cabeçalhos."""
+        out, bits = [], []
+        for i in range(0, len(p) - 1, 2):
+            if p[i] > 2000:
+                if bits:
+                    out.append(bits)
+                bits = []
+            elif p[i + 1] < 3000:
+                bits.append(1 if p[i + 1] > 1.6 * p[i] else 0)
+        out.append(bits)
+        return [[sum(x << k for k, x in enumerate(b[j:j + 8])) for j in range(0, len(b) - 7, 8)] for b in out]
+
+    def test_reproduz_as_capturas_byte_a_byte(self):
+        vent = {"auto_mais_swing": True, "auto_mais_no_swing": False}
+        conferidos = 0
+        for chave, d in self.capturas.items():
+            for e in d["estado_completo"]["estados"]:
+                if chave.endswith("1900") and (e["modo"] != "frio" or e["temperatura"] == 19):
+                    # o calor do XA21I não traz o 0x80 do byte 12 (o do XA71IN traz);
+                    # o "frio 19" do XA21I é cópia do código de 18 °C (erro de captura do SmartIR)
+                    continue
+                _, p = broadlink_para_pulsos(e["sinal"]["broadlink"])
+                cap = self.quadros(p)
+                if sum(cap[-1][:13]) & 0xFF != cap[-1][13]:
+                    continue  # captura com bit corrompido (frio 30 °C do XA21I)
+                gerado = self.t.estado(e["modo"], e["temperatura"], oscilacao=vent.get(e["ventilacao"], False))
+                self.assertEqual(gerado, cap[-1], f"{chave} {e['modo']} {e['temperatura']} {e['ventilacao']}")
+                conferidos += 1
+        self.assertGreater(conferidos, 140)
+
+    def test_desligar_e_quadro_especial_sao_os_capturados(self):
+        off = next(c for c in self.capturas["smartir:climate/1900"]["comandos"] if c["chave"] == "energia_desligar")
+        _, p = broadlink_para_pulsos(off["sinal"]["broadlink"])
+        self.assertEqual(self.quadros(p), [list(self.t.ESPECIAL), list(self.t.DESLIGAR)])
+        _, g = broadlink_para_pulsos(self.t.sinal(self.t.ESPECIAL, self.t.DESLIGAR)["broadlink"])
+        self.assertEqual(len(g), len(p))  # 455 durações, como a captura
+        self.assertEqual(self.quadros(g), self.quadros(p))
+
+    def test_bits_extras_e_soma(self):
+        b = self.t.estado("frio", 23, "alta", oscilacao=True, turbo=True, visor=False)
+        self.assertEqual(" ".join(f"{x:02X}" for x in b), "23 CB 26 01 00 64 43 08 3D 00 00 00 88 89")
+        self.assertEqual(self.t.estado("desumidificar", 23, "alta")[8], 0x02)  # o controle fixa a ventilação baixa
+        with self.assertRaises(self.t.ErroTcl):
+            self.t.estado("frio", 15)
+
+    def test_perfil_importa_e_controla_com_oscilacao(self):
+        s, _ = novo_servico(com_base=False)
+        p = self.t.perfil()
+        self.assertEqual(len(p["estado_completo"]["estados"]), 5 * 4 * 2 * 16)
+        r = s.importar(json.dumps(p), nome="ar condicionado quarto 2", categoria="ar_condicionado",
+                       destino="aparelho")
+        self.assertEqual(r["aparelho"], "ar condicionado quarto 2")
+        res = s.controlar("ar condicionado quarto 2", ligar=True,
+                          definir={"modo": "frio", "temperatura": 23, "ventilacao": "alta", "oscilacao": "ligada"})
+        self.assertEqual(res["status"], "sinal_enviado")
+        self.assertEqual(res["configuracao"]["valores"],
+                         {"modo": "frio", "temperatura": 23, "ventilacao": "alta", "oscilacao": "ligada"})
+        res = s.controlar("ar condicionado quarto 2", definir={"temperatura": 20})  # o resto vem do último envio
+        self.assertEqual(res["configuracao"]["valores"]["oscilacao"], "ligada")
+        res = s.controlar("ar condicionado quarto 2", ligar=False)
+        self.assertEqual(res["enviados"][0]["comando"], "desligar")
+
+
 class TestResumoInstrucoes(unittest.TestCase):
     """Resumo dos aparelhos nas instruções do MCP (economiza a chamada opcoes antes de cada pedido)."""
 
@@ -1063,6 +1160,32 @@ class TestResumoInstrucoes(unittest.TestCase):
             self.assertIn("instructions", r["result"])
         finally:
             del self.s.aparelhos.dados["aparelhos"]["quebrado"]
+
+    def test_instrucoes_poem_aparelhos_e_regras_no_trecho_lido(self):
+        """O Claude Code corta as instruções em 4096 caracteres (22/11): aparelhos, modos e regras essenciais
+        precisam estar antes disso, com todos os nomes, mesmo com muitos aparelhos."""
+        from controle_ir.mcp import ServidorMCP
+        m = ServidorMCP(self.s)
+        extras = [f"aparelho extra {i}" for i in range(12)]
+        for n in extras:
+            self.s.salvar_aparelho(n, perfil=94)
+        try:
+            _, r = m.tratar({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+            lido = r["result"]["instructions"][:4096]
+            for nome in [a["nome"] for a in self.s.aparelhos.listar()]:
+                self.assertIn(f'"{nome}"', lido)
+            for trecho in ("chame controlar direto", "Modos do celular", "reuniao", "autorizar só com o código",
+                           "DESARMADO", "acao=piloto", "Opções do desenvolvedor"):
+                self.assertIn(trecho, lido)
+            self.assertLess(lido.index('"ar do quarto"'), lido.index("REGRAS"))
+            _, r = m.tratar({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+            fs = {f["name"]: f["description"] for f in r["result"]["tools"]}
+            self.assertIn("ar do quarto", fs["controlar"])
+            self.assertNotIn("Use primeiro", fs["consultar"])
+            self.assertNotIn("Consulte antes de controlar", fs["opcoes"])
+        finally:
+            for n in extras:
+                self.s.editar_aparelho(n, excluir=True)
 
 
 
@@ -2151,6 +2274,12 @@ for linha in sys.stdin:
                '<node bounds="[0,1300][500,1400]" text="Desfazer" content-desc=""/></node></hierarchy>')
         self.assertEqual(self.m.regioes_visuais(xml), [[0, 200, 1000, 1000]])
         self.assertEqual(self.m.regioes_visuais(TestTela.XML), [])  # tela só de texto: nada de imagem
+        linhas = "".join(f'<node bounds="[0,{y}][1000,{y + 150}]" text="Opção {y}" content-desc=""/>'
+                         for y in range(300, 1800, 200))
+        lista = ('<?xml version="1.0"?><hierarchy><node bounds="[0,0][1000,2000]" text="" content-desc="">'
+                 '<node bounds="[0,250][1000,1900]" text="" content-desc="" class="FrameLayout"/>' + linhas +
+                 '</node></hierarchy>')
+        self.assertEqual(self.m.regioes_visuais(lista), [])  # contêiner vazio com as linhas por cima: não é imagem
         self.assertTrue(self.m.dentro([500, 700], [0, 200, 1000, 1000]))
         self._leitor_falso()
         self.m.ver(imagem=False)

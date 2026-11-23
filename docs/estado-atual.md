@@ -2,6 +2,264 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 23/11 — agente de tela: visão em páginas web, resposta, grafo de telas e vigias (1.0.102)
+
+**Teste real que motivou (POCO, Chrome):** objetivo "pesquisar a cotação do dólar e ler o valor".
+- A navegação funcionou (abrir, digitar, pesquisar em < 2 s), mas a página de resultado chega à acessibilidade como
+  **um nó só, "Visualização na Web", sem texto**. O executor ficou cego: rolou, voltou e parou com "preciso do
+  Claude", com **US$ 1 = R$ 5,99** visível na captura.
+- Falso "concluído": `concluido={qualquer:["Real"]}` casou com a **sugestão** "cotação do dólar hoje em real", antes de
+  o resultado abrir.
+
+**Aplicado (`capacidades/tela/objetivo.py`, `principal.py`, `vigia.py`):**
+- **Visão automática:** área que a acessibilidade não descreve (WebView sem texto dentro, ou as `regioes_visuais`)
+  → a captura (720 px) vai ao modelo de visão do nível (`forte` = Opus), que responde `feito`/`resposta` ou o próximo
+  passo (tocar x,y da imagem → convertido para a tela, opção pelo número, rolar, voltar). Segurança: toque por
+  coordenada só dentro da área cega e com o rótulo passando pela lista de efeitos externos; a página é dado, nunca
+  ordem (na política do modelo). Até 8 olhadas por chamada. Rolar funciona na página (gesto na área cega) e a
+  assinatura da tela soma um resumo da imagem (senão rolar parecia "sem efeito").
+- **Conclusão pelo modelo e resposta:** `concluido` virou opcional (sem ele, o modelo julga) e `pergunta='...'` devolve
+  `resposta` lida da tela final (texto pelo Sonnet; imagem pelo modelo do nível). Na decisão por texto o modelo tem a
+  opção "✓ objetivo cumprido", conferida pela leitura. O texto digitado e as sugestões que começam com ele não
+  concluem mais.
+- **Grafo de telas** (`~/.controle-ir/tela/grafo_telas.json`): nó = tela, aresta = toque/rolagem → tela seguinte, e o
+  destino de cada objetivo cumprido. Objetivo igual ou parecido (≥ 60% das palavras) acha o caminho por busca em
+  largura a partir da tela atual, sem modelo (`via: "grafo"`). `acao=grafo` mostra o resumo.
+- **Vigias** (missões de horas): `acao=vigiar, vigia={nome, objetivo, app, pergunta, a_cada (min), condicao:
+  muda|abaixo|acima|contem|variacao, duracao (h), quando}` faz a 1ª leitura na hora e depois roda sozinho numa
+  thread do serviço, avisando por notificação com som. Só lê (sem `permitir`), adia com a tela apagada ou o dono em
+  outro app (modo `livre`), pausa com travar, sobrevive a reiniciar o serviço. Limites: 10 vigias, 5 min–24 h, até 72 h.
+- Descrição da ferramenta: o conector só mostra os primeiros **800 caracteres** de cada `cap_*`; o começo da
+  descrição da tela agora traz objetivo/pergunta/visão/vigiar.
+- **1.0.103 (1º teste real da 1.0.102):** a visão não entrou na página de resultado (o modelo de texto rolou e
+  parou). Correções: a área cega conta só os textos do PRÓPRIO app (as teclas do teclado aberto por cima, outro
+  pacote, faziam a página parecer descrita), captura reserva pelo `screencap` e `visao_diag` no resultado
+  (telas cegas, capturas que falharam, erro do modelo, página descrita e por quem).
+- **1.0.104:** o diagnóstico mostrou a causa real — `web_descrita: textos_do_app 5, outros_apps []`: a **barra do
+  Chrome** (início, endereço, nova guia, guias, menu) fica desenhada por cima da página, na mesma área, e os 5 botões
+  contavam como texto da página (a visão só entrava depois de a rolagem esconder a barra). Agora a área cega vem da
+  ÁRVORE da tela (`principal.regioes_web`): só contam descendentes do nó da página; uma lista que cobre ≥ 40% da página
+  (sugestões da busca, diálogo) continua sendo lida pelo texto. Teste no POCO com a 1.0.103: "1 dólar americano =
+  5,99 reais (conversor do Google)", concluído pela visão em 14,6 s (3 consultas, 1 olhada).
+- **1.0.105:** a árvore real do Chrome (`acao=arvore`, nova: o `uiautomator dump` volta vazio com o leitor ligado)
+  mostrou a página como `FrameLayout (Visualização na Web)` sem filhos com texto e a barra (`#control_container`)
+  como IRMÃ dela. Na guia nova a visão queria buscar de novo: agora pode pedir `digitar` (o mesmo texto autorizado,
+  uma vez a mais), e o diagnóstico traz as respostas recusadas. Teste no POCO partindo de um artigo de notícia:
+  digitar → rolar (visão) → concluir (visão) em **7,5 s**, resposta "1 dólar ≈ R$ 6,00 (conversor do Google;
+  Investing.com cita 5,9575)".
+- **1.0.106:** `url=` abre o endereço direto no app (o caminho não depende de onde o app parou; ideal para vigias)
+  e a visão pode rolar para cima (a barra de endereço some quando a página é rolada).
+- **1.0.107:** o objetivo devolve `valor` (o número que responde à pergunta, separado pelo modelo): "1 dólar ≈
+  R$ 6,00" fazia o vigia ler 1. Teste com `url`: abrir endereço → rolar para cima (visão) → concluir em **9,2 s**,
+  "1 dólar americano = 5,99 reais (23 de nov., 18:03 UTC, Morningstar)", `valor: 5.99`. Grafo: 7 telas do Chrome,
+  3 objetivos.
+- **1.0.108:** o endereço reabre na MESMA guia do Chrome (`com.android.browser.application_id`); antes, cada
+  leitura abria uma guia nova. Conferido no POCO: 4 guias → 5 na 1ª leitura com a identificação → 5 na 2ª. Duas
+  leituras seguidas pelo endereço: 7,4 s e 7,9 s, `valor: 5.99` nas duas.
+- **Vigia ainda não rodou sozinho no POCO:** o vigia "dolar" (30 min, variação ≥ 1%, 3 h) nasceu **pausado**
+  porque existe `~/.controle-ir/PARAR`. Esse arquivo é gravado em todo travar (e no desarmar pela Central) e só é
+  apagado ao armar pelo terminal sem pareamento (`cli.py`); `destravar` não o remove. Num celular pareado ele fica
+  para sempre e também para os laços do termômetro e do sono. Uma mudança para comparar a hora do travar com a do
+  vigia foi recusada nesta sessão por mexer no freio — decisão do dono. Para rodar: o dono apaga o arquivo no
+  Termux (`rm ~/.controle-ir/PARAR`) e pede `vigia={nome:"dolar", retomar:true}`.
+
+## 22/11 — ar condicionado quarto 2 (Brastemp Clean)
+- Servidor no POCO: **1.0.101** (canal direto conectado). O conector caiu duas vezes com "Not Found" e voltou
+  depois de religar o serviço no celular.
+- Novo aparelho `ar condicionado quarto 2`: split Brastemp Clean BBV09BBBNA. Apesar da etiqueta Whirlpool, ele
+  **só responde ao protocolo TCL112**: os perfis Consul/Whirlpool não tiveram efeito. Foi identificado com o
+  ar ligado e uma busca de códigos "desligar" (candidato 33, TCL TAC-12CHSD). O perfil completo, nº 9524, foi
+  gerado por `ferramentas/tcl112.py` (640 estados com oscilação) e importado no celular. Detalhes na
+  [ficha](aparelhos/quarto-2/ar-condicionado-quarto-2.md).
+- Diagnóstico útil: `rish -c 'logcat -d -s ConsumerIrHal'` mostra cada transmissão (`Send to driver: Enter/Exit`
+  e a duração). O `sinal_enviado` da API não garante que o emissor transmitiu; o log, sim.
+- Pendente: mapear turbo, apagar painel, dormir e renovar do controle Brastemp Clean.
+
+## 22/11 — rodada ponta a ponta: agir primeiro e modo reunião (1.0.99 `0389999` → 1.0.101)
+
+**Onde o tempo se perdia (medido):**
+- **Comando conhecido** ("desliga o ar do quarto"): o Claude Code lê só os primeiros **4096 caracteres** das
+  instruções do conector, e o resumo dos aparelhos ficava depois dos ~7.900 de regras. Nenhum modelo via os
+  aparelhos e as descrições ainda pediam "use primeiro" (`consultar`) e "consulte antes de controlar" (`opcoes`).
+  - Antes: `opcoes` (14 ms no celular) → `controlar` (1.168 ms no celular), **5,7 s** do pedido ao fim do envio,
+    com 1 chamada e 1 turno de modelo a mais (no claude.ai, quase sempre 2: `consultar` de 12,9 KB + `opcoes`).
+  - Dentro do celular, o `controlar` simulado leva 15 ms; o resto é emissão. O `termux-infrared-transmit` custa
+    ~0,3 s (medido com pulso de 1 ms) e o `service call consumer_ir` pelo Shizuku também transmite (Parcel 0), mas o
+    ganho seria ~0,2 s. Fica anotado, sem troca de emissor por agora.
+- **Controle novo** (modo reunião), feito à mão pelo terminal: 4 comandos e ~154 s até o ciclo funcionar, sem nada
+  reutilizável (sem guardar, sem restaurar, sem atalho).
+  - O teste que separou as causas: `cmd media_session volume --set` pelo shell é **ignorado** no HyperOS (nem 0
+    nem 2 pegam: não é regra do volume zero, é o caminho); `termux-volume` escreve; `cmd audio set-ringer-mode
+    VIBRATE/NORMAL` pelo Shizuku muda o toque e, ao voltar ao normal, o volume do toque (1/17) volta sozinho.
+
+**Aplicado:**
+- `mcp.py`: TOPO "AJA PRIMEIRO" → aparelhos → modos → REGRAS essenciais (segurança inclusa) dentro de `VISIVEL`
+  (4060). Com muitos aparelhos, o resumo encolhe (teclas 20 → 8 → compacto → só nomes) sem cortar nenhum nome.
+  `controlar` traz os nomes salvos na própria descrição; `consultar`/`opcoes` não mandam mais chamar antes.
+- Capacidade **`modos`** (embutida, em processo): `entrar|sair|alternar|estado|listar|definir|testar|atalho|remover`.
+  - Guarda o estado antes de mexer, aplica, confere pela leitura e restaura.
+  - Aprende o método que funcionou e as condições (`android_sdk`, `shizuku`) em `~/.controle-ir/modos/aprendido.json`.
+    Um método que falhou nas mesmas condições não é tentado de novo; se a condição muda, revalida.
+  - Shizuku parado conta como condição, não como defeito. Correções do usuário (`definir` num modo existente)
+    ficam registradas como antes/depois e invalidam a validação até um novo `testar`.
+  - Plano B sem Shizuku: silencia pelos volumes (sem vibrar) e avisa. O `testar` grava a validação e cria o
+    atalho "Modo reuniao (liga-desliga)" no Termux:Widget.
+- **1º `testar` real (1.0.99):** validou pelo plano B. O diagnóstico apontou "o toque não mudou", mas um teste
+  separou a causa: o `settings get global mode_ringer` só reflete a mudança na 3ª leitura (~0,6 s), e a 1.0.99
+  lia com 0,3 s. Era atraso de leitura, não recusa. **1.0.100:** relê por até ~2,5 s; `versao_metodos` entra nas
+  condições, para o falso negativo aprendido com o código antigo ser revalidado sozinho.
+- **Resultado (1.0.100 no POCO):**
+
+  | Medida | Antes | Depois |
+  |---|---|---|
+  | Comando conhecido: chamadas até o envio | 2 (`opcoes` + `controlar`; no claude.ai, 3) | 1 (`controlar`) |
+  | Comando conhecido: pedido entendido → "sinal enviado" | 5,71 s | 1,23 s |
+  | Modo reunião: até o controle funcionar | ~154 s, 4 comandos, nada reutilizável | 3,47 s, 1 chamada (`modos testar`), validado e com atalho |
+  | Modo reunião: uso depois de criado | — | entrar 1,55 s, sair 1,31 s (2 e 6 chamadas ao Android); widget 1,6 s / 1,7 s |
+  | Intervenções do dono | 0 (ar), 0 (modo) | 0 e 0 |
+
+  As instruções reais, montadas no celular com os 4 aparelhos, têm 7.396 caracteres. Os primeiros 4.096 trazem
+  os 4 nomes, as faixas de valores, `x_luz`, o modo reunião e as regras de segurança inteiras.
+- Testes: `testes/test_modos.py` (13, celular falso que imita o POCO, inclusive o atraso) e
+  `test_instrucoes_poem_aparelhos_e_regras_no_trecho_lido`. 271 testes OK.
+
+## 21/11 — nível e tempo do Stockfish no Termux
+
+O POCO recebeu a versão 1.0.72.1 pelo pacote `9e59cdb`. Com o Stockfish 19, o botão abriu no nível 0
+e sugeriu `c2c4` com 50 ms. Após `e2e4`, o comando `configurar` mudou o nível para 17 e o tempo para
+250 ms. O motor recebeu `setoption name Skill Level value 17` e `go movetime 250` e respondeu `e7e5`.
+Ao reabrir pelo terminal, o estudo recuperou os dois valores. O ensaio usou uma pasta temporária de
+preferências. A configuração pessoal conferida ao final foi nível 20 e tempo automático.
+
+## 21/11 — atualização e correções (branch `ccr-201914aa-m2jj33`)
+- **POCO:** 1.0.64 → 1.0.65 (`80ca80d`) → 1.0.66 (`944f71c`) → 1.0.67 (`f55b4ef`) → 1.0.68 (`42ff118`) → 1.0.69 (`a17970f`) → 1.0.70 (`9af8695`) → 1.0.71 (`d8ed2bc`) → 1.0.72 (`a2bf6f4`) → 1.0.72.1 (Stockfish, `9e59cdb`) → 1.0.74 (`2da4d0d`, junção com o Stockfish) → **1.0.75** pelo `atualizar_sistema`. O canal
+  direto voltou sozinho a cada reinício; aparelhos, catálogo e política ficaram preservados. Conferido com `consultar`
+  e com uma missão de leitura (Sonnet, grafo de 1.858 nós). Pareado, armado até a meia-noite, modo autônomo.
+- **Android 16:** o Termux não lê `/proc/uptime` nem `/proc/loadavg` (`Permission denied`); o `CLOCK_BOOTTIME`
+  funciona e o Python do Termux não tem `os.getloadavg`. O `estado_celular` usa o relógio de boot (98,6 h ligado em
+  21/11) e devolve `carga_cpu_1min: null` quando não há leitura (antes saía 0, que parecia processador ocioso).
+- **`consultar`:** o perfil misto do “ar do quarto” repetia `modo` (teclas + estado completo); corrigido.
+- **Pacote × cache do Python:** o ZIP grava a data fixa de 1980; com um fonte novo do mesmo tamanho o `.pyc` antigo era
+  reaproveitado (a 1.0.66 rodou o código novo informando 1.0.65). Desde a 1.0.67 o `instalar.sh` apaga os
+  `__pycache__` antes de religar.
+- **Testes:** `testes/test_consistencia.py` (listas de risco iguais no celular e na Central, ferramentas da missão,
+  resumo, estado do celular, cache na atualização) e `testes/test_capacidades_aparelho.py` (download, termômetro,
+  sonar, varredura sem Wi-Fi) e `testes/test_bluetooth.py`: 214 testes Python no total.
+- **Checagem completa (1.0.68 `42ff118` → 1.0.69 `a17970f`):** canal direto, emissor (pulso neutro e TV volume +1/−1:
+  `sinal_enviado`), os 4 aparelhos (`opcoes` e plano simulado), tela (ler, abrir Configurações, voltar ao início),
+  câmera, microfone, sono, missão e rede funcionando. Encontrado e corrigido:
+  - `diagnostico_rede`: download voltava HTTP 403 (a Cloudflare recusa o urllib sem User-Agent) → User-Agent próprio e
+    OVH de reserva (28 Mbps medidos); a perda até a internet vale pelo melhor de 1.1.1.1 e 8.8.8.8.
+  - `termometro`: uma leitura do Termux:API passou de 15 s com outra chamada em andamento e derrubava a medição →
+    vira amostra ausente. Chamadas ao Termux:API em paralelo travam; rode uma por vez.
+  - `sonar`: no POCO 19 e 18 kHz não chegam ao microfone; 17 kHz chega com ~98 dB de folga. Sem frequência pedida ele
+    desce até a que funciona e lembra dela (`~/.controle-ir/medicoes/sonar.json`). O 1º segundo marcava movimento
+    falso (gravação começa antes do tom) e a referência pela mediana sumia com movimento longo → percentil 10 dos
+    quadros com tom.
+- **Teste de uso real (WhatsApp):** o agente de tela abriu o WhatsApp, entrou pela Nova conversa no contato
+  “(Você) · Mensagens para mim” e mandou uma mensagem para o próprio dono. A 1ª saiu “MensagemTeste do Claude…”: o
+  campo vazio do WhatsApp expõe a dica “Mensagem” como texto e o leitor (`Tela.java`) somava ao digitado. Na 1.0.70 a
+  dica é reconhecida também pela dica declarada e pela falta de cursor; a 2ª mensagem saiu exata (10:59), digitada
+  pelo leitor recompilado. A trava “coordenada só vale na tela lida” barrou dois toques depois de a tela mudar
+  (teclado abrindo), como deve.
+- **Varredura fora de casa (1.0.71):** com o Wi-Fi desligado o Termux:API informa o IP `0.0.0.0`; o
+  `descobrir_rede` varria a “sub-rede 0.0.0” e gravava o resultado por cima do inventário de casa (os 10 aparelhos
+  de 192.168.5 viraram “sumidos”). Agora ele recusa sem Wi-Fi e guarda um inventário por sub-rede
+  (`{"redes": {...}}`, lê o formato antigo). O inventário de casa se refaz na próxima varredura em casa.
+- **Capacidade nova `bluetooth` (1.0.72):** o Termux:API não tem Bluetooth e o `bluetoothctl` não acha o
+  adaptador no Android. O leitor `capacidades/bluetooth/java/controleir/Bluetooth.java` roda como shell pelo
+  Shizuku (`app_process`, com a identidade `com.android.shell` para passar nas permissões do Android 12+), só
+  ESCUTA a busca BLE (nunca conecta nem pareia) e lista os pareados; com o Bluetooth desligado tenta o modo só BLE
+  e desfaz no fim (`ligar=true` liga de verdade só durante a busca, por `cmd bluetooth_manager`). O Python
+  classifica pelo nome, fabricante (ID da Bluetooth SIG, anúncio Continuity da Apple) e serviços, e estima a
+  distância pelo sinal. Testada aqui contra imitações do Android (`testes/android_stub/`, `testes/test_bluetooth.py`);
+  **No POCO (1.0.73–1.0.74):** o `app_process` precisa registrar o serviço do Bluetooth (`ActivityThread.initializeMainlineModules`,
+  senão o adaptador vem nulo); estado e pareados funcionam (Honda HFT e AirPods Pro). A **busca é recusada pelo
+  HyperOS**: `BtGatt.ScanController: MIUI PERMISSION DENIED: com.android.shell`. Lido no `Bluetooth.apk` (dexdump):
+  `ScanController.checkAllowedToScan` libera apps comuns (uid ≥ 10000), mas pacotes do sistema só com tela própria
+  em primeiro plano ou serviço em primeiro plano declarado — o Shell não tem nenhum dos dois. Pacote vazio passa
+  na regra e quebra adiante (NullPointerException no serviço); `MIUIOP(10053)` não muda nada (testado e
+  revertido). A capacidade devolve `busca: bloqueada_hyperos` e, do registro do sistema, os sinais que as buscas
+  do próprio sistema captam (fim do endereço e força, sem nome).
+- **App auxiliar `Controle IR Bluetooth` (1.0.75):** `br.controleir.bluetooth`, montado aqui com o build-tools 35
+  (`ferramentas/construir_app_bluetooth.sh`; chave fora do repositório; `fontes.sha256` + teste acusam APK velho).
+  Uma janela de diálogo (`Busca`, só abre com a permissão DUMP, ou seja, pelo shell) escuta a busca BLE como app
+  comum — que o HyperOS aceita — e grava o JSON em `Android/data/br.controleir.bluetooth/files`. `modo=auto`
+  instala/atualiza pelo shell, dá BLUETOOTH_SCAN/CONNECT (`neverForLocation`: sem localização) e cai no shell se
+  não der. O analisador do próprio Android leu o APK (`getPackageArchiveInfo`: ok). **Instalar pelo shell exige
+  “Instalar via USB”** (`INSTALL_FAILED_USER_RESTRICTED`); pelo instalador do Android, o arquivo vindo do Termux,
+  da pasta Downloads ou do app Arquivos dava “problema ao analisar o pacote” (entrega do arquivo, não o APK).
+- **Otimização Cloud ↔ Android, ciclo 1 (1.0.76–1.0.78):**
+  - *Medido* (POCO em dados móveis): turno do modelo sozinho ~2,3 s; chamada ao conector fora do celular ~0,5–0,6 s
+    (cliente + Central + canal, 2 amostras); WebSocket do canal ida e volta mediana 157 ms (p95 213, n=4); dentro
+    do celular: `ver` só árvore 0,15–0,17 s, `tocar` 0,85–1,3 s, `abrir` 0,9–1,2 s. Resposta com imagem 64–82 KB
+    contra 1–5 KB só texto. Gargalo = **turnos da nuvem por ação** (~80% do tempo no passo a passo).
+  - *Telemetria* (1.0.76): `consultar → servidor.canal.desempenho` (ms dentro do celular por chamada, só o nome da
+    ferramenta; RTT do canal medido na hora se houver poucas amostras).
+  - *Imagem desnecessária* (1.0.77): `regioes_visuais` contava contêiner vazio de lista como "área visual" e anexava
+    captura nas Configurações; agora só área que a acessibilidade não descreve (≥ 3 textos dentro = descrita).
+  - *Executor de objetivos* (`tela/objetivo.py`, `acao=objetivo`, 1.0.77): laço perceber→decidir (pistas → memória
+    → digitar → modelo do celular → rolar) → agir → conferir no aparelho; erro transitório tenta 1× de novo, depois
+    alternativa; tela repetida/limite/prazo param; rótulos de efeito externo só com `permitir`; devolve passos e os
+    textos da tela final. 1.0.78: cortina do sistema é recolhida com `cmd statusbar collapse` (o "voltar" injetado
+    não fecha no HyperOS — achado no teste real) e texto de outra janela (notificações) nunca volta à nuvem
+    (o 1º teste real devolveu texto da cortina: corrigido e coberto por teste).
+  - *Incidente* (1.0.78, T5+T6): a pista "Opções do desenvolvedor" foi tocada de novo dentro da tela de opções do
+    desenvolvedor, onde o mesmo rótulo é o **interruptor geral** → desligou o modo de desenvolvedor, a depuração sem
+    fio e o Shizuku. 1.0.79: cada pista vale uma vez e interruptores (marcáveis, ou linha com marcável ao lado)
+    nunca são tocados sem `permitir` — nem por pista, memória, modelo ou "dispensar"; teste reproduz o caso.
+    Religar: Sobre o telefone → tocar 7× na versão do OS → Opções do desenvolvedor → Depuração sem fio → Shizuku.
+  - *Resultados reais* (mesmo estado inicial, Configurações encerrado): T1 Bluetooth passo a passo 19,3 s / 4
+    chamadas / 2 imagens → `sequencia` 9,6 s / 1 / 0 → `objetivo` 7,4 s / 1 / 0 (−62%); T2 versão do Android passo
+    a passo 10,6 s / 2 / 0 → `objetivo` 7,3 s / 1 / 0 (−31%), resposta já no resultado. T5+T6 (cortina por cima +
+    alvo abaixo da dobra): 1ª tentativa falhou (ver acima); a repetição com a 1.0.78 parou porque o Shizuku caiu
+    ("Server is not running") — **refazer T5–T8 e T12 com o Shizuku de pé**. Simulados (`testes/test_objetivo.py`):
+    pista, modelo + memória, abrir, notificação, cortina, rolar, toque transitório/estrutural, diálogo, proibidos,
+    laço, digitar, app bloqueado.
+- **Otimização, ciclo 2 (1.0.79–1.0.84), testes reais no POCO** (tempos "no celular" = dentro do aparelho; "total" =
+  relógio do container incluindo turnos do Claude):
+  - T5 cortina por cima → recolhe e segue: 8,1 s total (2,25 s no celular). T6 alvo abaixo da dobra → rola e acha
+    (4,5 s; o passo de rolar levou 3,4 s esperando a lista assentar: próximo alvo). T7 app lento (Play Store fria):
+    a 1.0.79 deu **falso sucesso** (apertou voltar no app anterior e o "Pesquisar" da tela inicial "concluiu") →
+    1.0.80 espera o app (1,7 s) e só conclui dentro dele: 2,3 s. T8 toque sem efeito → 2 tentativas e alternativa:
+    2,1 s. T2 sem pistas (modelo do celular): 1.0.80 falhou (o modelo só via rolar/voltar: o título não é clicável,
+    a linha é; e o cérebro lê 1 dígito) → 1.0.81 acerta com 1 consulta (3,3 s) e, aprendido, 1,4 s sem modelo.
+    T4 WhatsApp (ler a conversa Você, sem enviar): ciclo chat↔informações (1.0.81) → corte de ciclo e busca/Meta
+    AI fora das opções (1.0.82); desvio por outra conversa aprendido como rota → memória só do caminho certo e
+    pista fora da tela é procurada antes do modelo (1.0.83–1.0.84): 3,2 s, 0 consultas, "Enviar" nunca tocado.
+  - T12 composto (versão, armazenamento, bateria, rede): passo a passo 13,3 s / 3 chamadas → objetivo +
+    estado_celular num lote 6,4 s (−52%). T10/T11: o cliente do Claude executa as chamadas de um lote **em série**
+    (B começou 0,74 s depois de A): paralelismo real só dentro do celular; cada chamada extra num lote ~0,7 s.
+  - Queda do conector ("Not Found") por ~1–2 min durante o ciclo, voltou sozinha.
+- **Otimização, ciclo 3 (1.0.85–1.0.95): cérebros fortes no celular.** O dono pediu inteligência acima de
+  economia. Escada `cerebro` no objetivo: rapido (Haiku) | padrao (Haiku+Sonnet) | **forte (Sonnet+Opus, padrão)** |
+  maximo (Opus pensando); sobe um degrau sozinho em tela que já falhou/repetiu; o modelo recebe a tela inteira e o
+  histórico. Medido no POCO (1 decisão cada, mesma tarefa, todos acertaram): Haiku 1.460 ms, Sonnet 1.552 ms, Opus
+  1.675 ms, Opus pensando 1.885 ms — o Opus custa ~0,2 s a mais por decisão (conexões abertas, resposta no 1º
+  dígito). Teste difícil (informações do WhatsApp nas Configurações, sem pistas): revelou e corrigiu — Configurações
+  → "Apps" abre OUTRO pacote (com.miui.securitycenter: app aberto por toque nosso faz parte do caminho, inclusive se
+  abrir devagar); o cliente do Claude **corta chamadas aos 60 s** (o objetivo terminou em 72 s no celular e o
+  resultado se perdeu → prazo ≤ 50 s, `acao=objetivo_resultado` recupera o último); rolar lista longa custa ~3–5 s
+  por tela e o modelo era consultado a cada uma (rolagem contínua sem consulta); digitou 8× (uma vez por objetivo);
+  pista "Apps" casou com "Atualização de apps…" (pista só exato/início); "Pesquisar apps" é botão que abre o campo;
+  pista casava com o próprio campo digitado. Forçar parada/limpar/desativar/desligar entram nos proibidos. Final:
+  com `pistas` + `digitar:{texto, depois_de}` o caminho completo sai em **7,5 s, 0 consultas** (antes: 72 s e
+  falha); sem pistas, o Opus resolveu sozinho um impasse escolhendo o tamanho do app na mesma linha.
+- **Piloto com visão + delegação (22/11, 1.0.96–1.0.97, `d0ce4c3`):** Mental Math Master
+  (`com.fivedaysweekend.math`) desenha a conta como imagem; o piloto agora recorta a caixa da pergunta, um modelo de
+  visão chamado DO celular (Sonnet) transcreve, o celular calcula (sem eval) e toca; `continuar` aperta ▶ do nível
+  no fim da rodada. 1.0.96 confundia o botão "Parar Cronômetro (10)" com a pergunta (1.0.97 corrige; não instalada
+  ainda: o conector caiu com erro 405 do lado do claude.ai). **Pendente:** `atualizar_sistema(d0ce4c3…)` e iniciar
+  `tela acao=piloto iniciar={modo:"quiz", app:"com.fivedaysweekend.math", visao:true, modelo_visao:
+  "claude-sonnet-5-5", continuar:[{se:"Pontuação Total", tocar:[900,1244]}], continuar_apos:1.2, duracao:3600}`.
+  Regra de delegação ("QUEM FAZ O QUÊ") gravada nas instruções do conector e no CLAUDE.md, após cobrança do dono.
+- **Achados sem correção pelo conector:** Termux:Boot não instalado (o início automático fica desligado: instale-o do
+  F-Droid, abra uma vez e rode `controle-ir inicio-automatico sim` no Termux); no celular só há os modelos Qwen2.5
+  1.5B (o 3B do guia de passagem não está lá); `controle-ir painel …` é recusado pelo conector por ser administrativo
+  (de propósito). Rede: Wi-Fi 5 GHz em −68 a −72 dBm, ~23–31 ms até o roteador, 10 aparelhos na rede local (2
+  prováveis câmeras IP); túnel de reserva da Central respondendo (HTTP 405 a um GET, como esperado).
+- **Pendente (decisão do dono):** merge na branch padrão. Até lá, a linha de instalação do README baixa a 1.0.65.
+
 ## Resumo (fim do dia 19/11)
 - **Celular:** POCO X8 Pro Max, HyperOS 3 (Android 16), Termux + Termux:API (F-Droid). Servidor **1.0.28**, pareado com a
   Central de Controle (só o painel arma, com a digital do POCO ou do iPad), ligado o tempo todo. **Modo autônomo** ligado (só o celular muda o modo; o freio é o atalho "Travar
@@ -310,6 +568,7 @@ Ficha completa de cada um (perfil, comandos testados, sinais extras, ressalvas):
 | Quarto | `tv do quarto` | TV **Samsung** (Samsung32, 0x07) | Flipper "Samsung TV Full" (nº 2331) + ligar/desligar diretos + macro `abrir Netflix` | [tv-do-quarto](aparelhos/quarto/tv-do-quarto.md) |
 | Escritório | `ar do escritório` | ar-condicionado **Carrier** | SmartIR Carrier Unknown (nº 94) | [ar-do-escritorio](aparelhos/escritorio/ar-do-escritorio.md) |
 | Laboratório | `ar condicionado laboratório` | ar-condicionado **Midea** | o mesmo Carrier nº 94 + oscilação Ferroli/York | [ar-condicionado-laboratorio](aparelhos/laboratorio/ar-condicionado-laboratorio.md) |
+| Quarto 2 | `ar condicionado quarto 2` | ar-condicionado **Brastemp Clean** BBV09BBBNA (protocolo TCL112) | nº 9524 gerado por `ferramentas/tcl112.py` | [ar-condicionado-quarto-2](aparelhos/quarto-2/ar-condicionado-quarto-2.md) |
 
 - Em 17/11 "escritório" virou `ar do escritório` e "quarto" virou `ar do quarto` (o quarto também tem a TV).
 - Ar do escritório e ar do laboratório usam os mesmos códigos: se os dois estiverem ao alcance, os dois reagem.

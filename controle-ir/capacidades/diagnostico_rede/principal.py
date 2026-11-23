@@ -12,6 +12,7 @@ import statistics
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 
@@ -88,21 +89,33 @@ def dns():
     return out
 
 
+# A Cloudflare recusa o urllib sem um User-Agent próprio (HTTP 403, visto no POCO em 21/11); a OVH fica de reserva.
+FONTES_DOWNLOAD = (
+    lambda mb: f"https://speed.cloudflare.com/__down?bytes={mb * 1_000_000}",
+    lambda mb: "https://proof.ovh.net/files/" + ("10Mb.dat" if mb >= 10 else "1Mb.dat"),
+)
+CABECALHOS = {"User-Agent": "controle-ir (diagnostico_rede)"}
+
+
 def download(mb):
-    url = f"https://speed.cloudflare.com/__down?bytes={mb * 1_000_000}"
-    t0 = time.monotonic()
-    try:
-        with urllib.request.urlopen(url, timeout=30) as r:
-            n = 0
-            while True:
-                b = r.read(65536)
-                if not b:
-                    break
-                n += len(b)
-        s = time.monotonic() - t0
-        return {"mbps": round(n * 8 / s / 1e6, 1), "bytes": n, "segundos": round(s, 1)}
-    except OSError as e:
-        return {"erro": str(e)[:200]}
+    erros = []
+    for fonte in FONTES_DOWNLOAD:
+        url = fonte(mb)
+        host = urllib.parse.urlsplit(url).hostname
+        t0 = time.monotonic()
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=CABECALHOS), timeout=30) as r:
+                n = 0
+                while True:
+                    b = r.read(65536)
+                    if not b:
+                        break
+                    n += len(b)
+            s = time.monotonic() - t0
+            return {"mbps": round(n * 8 / s / 1e6, 1), "bytes": n, "segundos": round(s, 1), "fonte": host}
+        except OSError as e:
+            erros.append(f"{host}: {e}"[:160])
+    return {"erro": "; ".join(erros)[:300]}
 
 
 def analisar(r):
@@ -116,7 +129,13 @@ def analisar(r):
                              "compare as duas (5 GHz é mais rápida e alcança menos)")
         elif rssi < -67:
             achados.append(f"sinal Wi-Fi médio ({rssi} dBm)")
-    gw, net = r.get("ping", {}).get("roteador") or {}, r.get("ping", {}).get("1.1.1.1") or {}
+    pings = r.get("ping", {})
+    gw = pings.get("roteador") or {}
+    # a internet vale pelo melhor dos dois destinos: um ping perdido só para 1.1.1.1 (que limita ICMP) com 0 % para
+    # 8.8.8.8 não é problema do provedor
+    medidos = [p for p in (pings.get("1.1.1.1"), pings.get("8.8.8.8"))
+               if isinstance(p, dict) and isinstance(p.get("perda_pct"), (int, float))]
+    net = min(medidos, key=lambda p: (p["perda_pct"], p.get("ms_med") or 1e9)) if medidos else {}
     pg, pn = gw.get("perda_pct"), net.get("perda_pct")
     if isinstance(pg, (int, float)) and pg >= 5:
         achados.append(f"perda de {pg}% até o roteador: o problema está no Wi-Fi/roteador, não no provedor")
@@ -179,4 +198,5 @@ def main():
     print(json.dumps(r, ensure_ascii=False))
 
 
-main()
+if __name__ == "__main__":
+    main()

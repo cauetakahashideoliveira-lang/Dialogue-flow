@@ -186,6 +186,7 @@ class TestCompatPyAV(unittest.TestCase):
         except Exception:  # noqa: BLE001
             raise unittest.SkipTest("sem codificador H.264")
         enc.width, enc.height, enc.pix_fmt = 160, 96, "yuv420p"
+        enc.options = {"tune": "zerolatency"}  # como o PS4: sem quadros B
         pacotes = []
         for i in range(6):
             img = np.zeros((96, 160, 3), np.uint8)

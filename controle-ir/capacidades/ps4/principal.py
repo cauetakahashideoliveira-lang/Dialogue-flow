@@ -133,8 +133,14 @@ class Estado:
 E = Estado()
 
 
-def _parar_global():
-    return os.path.exists(PARAR)
+def _parar_global(desde=0.0):
+    """travar() cria/atualiza ~/.controle-ir/PARAR. Só vale o que veio DEPOIS do início do comando/jogo: um
+    arquivo antigo (de uma trava passada) não pode bloquear o uso depois de rearmar — com o sistema travado ou
+    desarmado a chamada já nem chega aqui."""
+    try:
+        return os.path.getmtime(PARAR) >= desde
+    except OSError:
+        return False
 
 
 def _ip(a):
@@ -147,8 +153,10 @@ def _ip(a):
 # --------------------------------------------------------------------------- comandos
 def rodar_comando(passos, origem="comando"):
     atom = controle.normalizar(passos, habilidades())
+    t0 = time.time()
     with E.trava:
-        return controle.executar(atom, E.conexao(), parar=lambda: E.parar_tarefa.is_set() or _parar_global())
+        return controle.executar(atom, E.conexao(),
+                                 parar=lambda: E.parar_tarefa.is_set() or _parar_global(t0))
 
 
 def cmd_comando(a):
@@ -238,7 +246,8 @@ def _guardar_quadro(pasta):
 
 def _laco_jogador(cfg):
     j, con = E.jogador, E.conexao()
-    fim = time.time() + cfg["duracao"]
+    t0 = time.time()
+    fim = t0 + cfg["duracao"]
     intervalo = cfg["intervalo_ms"] / 1000
     guardar = _guardar_quadro(j.pasta)
     E.jog_info.update({"inicio": time.time(), "passos": 0, "recompensa": 0.0, "estado_txt": "jogando"})
@@ -246,7 +255,7 @@ def _laco_jogador(cfg):
     def agir(h):
         rodar_comando([{"habilidade": h}])
     try:
-        while time.time() < fim and not E.jog_parar.is_set() and not _parar_global():
+        while time.time() < fim and not E.jog_parar.is_set() and not _parar_global(t0):
             if not con.conectado:
                 E.jog_info["estado_txt"] = "sessão caiu"
                 break

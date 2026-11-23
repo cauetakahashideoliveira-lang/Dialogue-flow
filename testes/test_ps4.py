@@ -236,6 +236,20 @@ class TestPrincipal(unittest.TestCase):
         else:
             self.assertTrue(dados.startswith(b"\xff\xd8"))
 
+    def test_parar_antigo_nao_bloqueia_e_novo_interrompe(self):
+        import threading
+        import time as _t
+        parar = os.path.join(self.dir, "PARAR")
+        with open(parar, "w") as f:
+            f.write("trava antiga")
+        os.utime(parar, (_t.time() - 3600, _t.time() - 3600))
+        r = self.p.executar({"acao": "comando", "passos": "x:0 bola:0"})
+        self.assertEqual(r.get("feitos"), 6)
+        threading.Timer(0.15, lambda: open(parar, "w").write("travar agora")).start()
+        r = self.p.executar({"acao": "comando", "passos": "x:50 esperar:400 x:50 esperar:400 x:50"})
+        self.assertTrue(r.get("interrompido"))
+        self.assertEqual(self.p.E.con.ev[-1], ("s", "CROSS"))  # soltou o que estava apertado
+
     def test_jogador_preparar_detectores_relatorio(self):
         self.p.executar({"acao": "habilidade", "modo": "salvar", "nome": "a", "passos": "x:0"})
         r = self.p.executar({"acao": "jogador", "modo": "preparar", "jogo": "Teste 1",

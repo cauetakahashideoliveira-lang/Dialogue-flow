@@ -60,6 +60,13 @@ class Conexao:
     def _rodar(self, coro, timeout=40):
         return asyncio.run_coroutine_threadsafe(coro, self._laco()).result(timeout)
 
+    def _sync(self, fn, *a, timeout=30, **kw):
+        """Roda uma função síncrona da biblioteca DENTRO do laço: ela chama asyncio.get_event_loop() ao ler o
+        estado do PS4 (busca a capa do jogo aberto) e quebra numa thread sem laço, como as do serviço."""
+        async def _c():
+            return fn(*a, **kw)
+        return self._rodar(_c(), timeout)
+
     # ------------------------------------------------------------ conta PSN e pareamento
     def link_login(self):
         self._rp()
@@ -92,7 +99,7 @@ class Conexao:
         self._rp()
         from pyremoteplay.device import RPDevice
         out, perfis = [], self._perfis()
-        for d in RPDevice.search():
+        for d in self._sync(RPDevice.search):
             st = d.status or {}
             out.append({"ip": d.host, "nome": d.host_name, "tipo": d.host_type, "ligado": d.is_on,
                         "estado": d.status_name, "jogo": d.app_name, "sistema": d.system_version,
@@ -103,7 +110,7 @@ class Conexao:
         self._rp()
         from pyremoteplay.device import RPDevice
         d = RPDevice(ip)
-        if not d.get_status():
+        if not self._sync(d.get_status):
             raise RuntimeError(f"PS4 não respondeu em {ip} (mesmo Wi-Fi? Remote Play ativado?)")
         return d
 
@@ -126,7 +133,7 @@ class Conexao:
         u = usuario or (perfis.usernames[0] if perfis.usernames else None)
         if not u:
             raise RuntimeError("cadastre a conta PSN antes (acao=conta)")
-        r = d.register(u, str(pin), timeout=6.0, profiles=perfis, save=False)
+        r = self._sync(d.register, u, str(pin), timeout=6.0, profiles=perfis, save=False)
         if not r:
             raise RuntimeError("o PS4 recusou o PIN (ele muda a cada abertura da tela de vincular)")
         perfis.save(self.perfis_arq)
@@ -136,7 +143,7 @@ class Conexao:
         d = self._dispositivo(ip)
         if d.is_on:
             return {"ja_ligado": True}
-        d.wakeup(self._usuario(d, usuario), profiles=self._perfis())
+        self._sync(d.wakeup, self._usuario(d, usuario), profiles=self._perfis())
         return {"acordando": True}
 
     def repouso(self, ip=None, usuario=None):
@@ -161,7 +168,7 @@ class Conexao:
         from pyremoteplay.receiver import QueueReceiver
         d = self._dispositivo(ip)
         if not d.is_on:
-            d.wakeup(self._usuario(d, usuario), profiles=self._perfis())
+            self._sync(d.wakeup, self._usuario(d, usuario), profiles=self._perfis())
             raise RuntimeError("o PS4 estava em repouso: mandei acordar, tente conectar de novo em ~20 s")
         self.receptor = QueueReceiver(max_frames=4)
         loop = self._laco()

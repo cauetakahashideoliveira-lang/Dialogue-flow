@@ -152,6 +152,26 @@ class TestJogador(unittest.TestCase):
         self.assertLess(j.cerebro.valor(s, "b"), 0)
 
 
+class TestConexaoLaco(unittest.TestCase):
+    def test_funcao_sincrona_roda_dentro_do_laco(self):
+        """A pyremoteplay chama asyncio.get_event_loop() ao ler o estado do PS4; numa thread do serviço isso
+        quebrava ("There is no current event loop"). _sync roda dentro do laço da conexão."""
+        import asyncio
+        import threading
+        con = _mod("ps4_conexao_teste", "conexao.py").Conexao(tempfile.mkdtemp(prefix="ps4c-"))
+
+        def le_estado():
+            asyncio.ensure_future(asyncio.sleep(0))  # o que a biblioteca faz em _set_status
+            return asyncio.get_event_loop().is_running()
+
+        out = {}
+        th = threading.Thread(target=lambda: out.update(r=con._sync(le_estado)))
+        th.start()
+        th.join(5)
+        self.assertTrue(out["r"])
+        con.loop.call_soon_threadsafe(con.loop.stop)
+
+
 class ConexaoFalsa(Gravador):
     conectado = True
 

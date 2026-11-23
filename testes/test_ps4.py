@@ -199,6 +199,22 @@ class TestJogador(unittest.TestCase):
         self.assertEqual(r["situacao"], "longe|chao|meio")
         self.assertIn("longe|chao|meio", j.relatorio()["politica"])
 
+    def test_reflexo_defende_e_pune(self):
+        det = [{"tipo": "vida", "regiao": [0, 0, 1, 0.1], "nome": "minha_vida"}]
+        j = self.jog.Jogador(self.pasta, "refl", ["golpe"], det)
+        j.reflexos = {"defesas": ["def"], "punir": ["punir"], "prob_punir": 1.0}
+        q = np.full((90, 160, 3), 200, np.uint8)
+        self.assertIsNone(j.reflexo(q, {"faixa": "perto", "rival_x": 0.5}))
+        q2 = q.copy()
+        q2[0:9, 80:] = 0  # perdeu vida
+        self.assertEqual(j.reflexo(q2, {"faixa": "longe", "rival_x": 0.5}), "def")
+        j.ultimos = [(0, "def", 0.0)]
+        self.assertEqual(j.reflexo(q2, {"faixa": "perto", "rival_x": 0.5}), "punir")
+        q3 = q2.copy()
+        q3[30:80, 60:100] = 0  # rival se mexe forte
+        j.ultimos = []
+        self.assertEqual(j.reflexo(q3, {"faixa": "perto", "rival_x": 0.5}), "def")
+
     def test_demonstracao_e_nota(self):
         j = self.jog.Jogador(self.pasta, "demo", ["a", "b"], [])
         q = np.full((90, 160, 3), 128, dtype=np.uint8)

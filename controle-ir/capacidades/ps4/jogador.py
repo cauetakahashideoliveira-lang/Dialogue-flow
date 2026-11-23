@@ -340,7 +340,7 @@ class Jogador:
             return {"erro": "sem imagem do jogo"}
         s, ctx = self.situacao(q0)
         self.ultimo_ctx = ctx
-        h = self.cerebro.escolher(s, explorar)
+        h = self.reflexo(q0, ctx) or self.cerebro.escolher(s, explorar)
         t0 = time.monotonic()
         try:
             agir(h, ctx)
@@ -366,6 +366,37 @@ class Jogador:
             reg["quadro"] = guardar_quadro(q1, f"p{self.passos_total:06d}")
         self.gravar(reg)
         return reg
+
+    def reflexo(self, quadro, ctx):
+        """Camada rápida antes do aprendido (cfg em self.reflexos): defende quando o rival perto se mexe forte
+        ou quando acabei de levar dano; depois de uma defesa sem dano, pune. Devolve a habilidade ou None."""
+        cfg = getattr(self, "reflexos", None)
+        if not cfg:
+            return None
+        ant, self._q_ant = getattr(self, "_q_ant", None), quadro
+        vida_det = next((d for d in self.detectores if d.get("nome") == cfg.get("minha_vida", "minha_vida")), None)
+        vida = medir(quadro, vida_det) if vida_det else None
+        vida_ant, self._vida_ant = getattr(self, "_vida_ant", None), vida
+        levou = vida is not None and vida_ant is not None and vida_ant - vida > float(cfg.get("dano_min", 0.01))
+        ultimo = self.ultimos[-1][1] if self.ultimos else None
+        if ultimo in cfg.get("defesas", []) and not levou and cfg.get("punir"):
+            if ctx.get("faixa") in ("perto", "medio") and random.random() < float(cfg.get("prob_punir", 0.8)):
+                self.reflexos_usados = getattr(self, "reflexos_usados", 0) + 1
+                return random.choice(cfg["punir"])
+        perto = ctx.get("faixa") in tuple(cfg.get("faixas", ["perto", "medio"]))
+        mov = 0.0
+        if ant is not None and ctx.get("rival_x") is not None and ant.shape == quadro.shape:
+            x = float(ctx["rival_x"])
+            r = [max(0.0, x - 0.12), 0.3, 0.24, 0.6]
+            mov = float(np.abs(regiao(quadro, r) - regiao(ant, r)).mean() / 255.0)
+        ctx["mov_rival"] = round(mov, 4)
+        if levou or (perto and mov > float(cfg.get("limiar_mov", 0.05))):
+            self.reflexos_usados = getattr(self, "reflexos_usados", 0) + 1
+            defs = cfg.get("defesas") or []
+            if defs:
+                return defs[1] if (ctx.get("rival_no_ar") is False and len(defs) > 1 and random.random() < 0.35) \
+                    else defs[0]
+        return None
 
     def demonstrar(self, quadro, habilidade):
         s, _ = self.situacao(quadro)
@@ -397,6 +428,7 @@ class Jogador:
             por_hab[h][0] += n
             por_hab[h][1] += self.cerebro.q.get(k, 0.0) * n
         return {"jogo": self.jogo, "passos": self.passos_total, "estados": n,
+                "reflexos_usados": getattr(self, "reflexos_usados", 0),
                 "ultima_percepcao": self.ultimo_ctx or None,
                 "habilidades": {h: {"usos": v[0], "valor_medio": round(v[1] / max(1, v[0]), 3)}
                                 for h, v in sorted(por_hab.items(), key=lambda x: -x[1][0])},

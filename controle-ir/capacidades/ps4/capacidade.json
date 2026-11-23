@@ -161,6 +161,10 @@
    },
    "ao_reconectar": {
     "description": "jogador: passos depois de reconectar se a sessão cair (padrão 'bola esperar:600 bola esperar:600', fecha a pausa)"
+   },
+   "reflexos": {
+    "type": "object",
+    "description": "jogador: camada rápida antes do aprendido: {defesas:[alta,baixa], punir:[...], limiar_mov (0.05), faixas:[perto,medio], dano_min, prob_punir} — defende quando o rival perto se mexe ou quando levou dano; pune depois da defesa"
    }
   },
   "required": [

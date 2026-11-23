@@ -330,6 +330,7 @@ def cmd_jogador(a):
                                 limiar=float(a.get("limiar", 0.08)), estados_max=int(a.get("estados_max", 48)),
                                 percepcao=dict(a["percepcao"]) if a.get("percepcao") is not None else None,
                                 **extra)
+        E.jogador.reflexos = a.get("reflexos")
         conf = _ler(CONF, {})
         conf["jogo"] = jogo
         _gravar(CONF, conf)

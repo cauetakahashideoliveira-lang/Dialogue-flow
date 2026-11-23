@@ -239,11 +239,17 @@ def area_cega(els, regioes=()):
         if l * a_ < 0.15 * larg * alt:
             continue
         x0, y0 = e.get("x", 0) - l // 2, e.get("y", 0) - a_ // 2
-        dentro_ = sum(1 for o in els if o is not e and rotulo(o) and x0 <= o.get("x", 0) <= x0 + l
-                      and y0 <= o.get("y", 0) <= y0 + a_)
-        if dentro_ < 3:  # o Chrome às vezes expõe a página; com texto dentro, a acessibilidade já descreve
+        if textos_na_area(els, e, [x0, y0, l, a_]) < 3:
+            # o Chrome às vezes expõe a página; com texto DELE dentro, a acessibilidade já descreve
             return [x0, y0, l, a_]
     return list(regioes[0]) if regioes else None
+
+
+def textos_na_area(els, e, r):
+    """Elementos com texto do MESMO app dentro da área: o teclado aberto por cima (outro pacote) tem uma descrição
+    por tecla e fazia a página parecer descrita — o executor ficava sem a visão logo depois de digitar (23/11)."""
+    return sum(1 for o in els if o is not e and rotulo(o) and o.get("pacote") == e.get("pacote")
+               and no_retangulo(o.get("x", 0), o.get("y", 0), r))
 
 
 def no_retangulo(x, y, r, folga=0):
@@ -335,6 +341,7 @@ class Executor:
         app_grafo = app or ""
         destinos = self.grafo.destinos(app_grafo, objetivo) if self.grafo else []
         resposta, conclusao, extraido, visoes = [None], ["criterio"], [False], [0]
+        diag = {}  # visão: o que aconteceu (área cega vista, captura que falhou, erro do modelo) — vai no resultado
         xml_atual, nivel_atual = [""], [ORDEM_NIVEIS[nivel_base]]
 
         caminho = []  # [(tela, rótulo, tela seguinte)] do caminho que deu certo; desvios são cortados
@@ -362,6 +369,8 @@ class Executor:
                     r["resposta"] = resposta[0]
             if visoes[0]:
                 r["visoes"] = visoes[0]
+            if diag:
+                r["visao_diag"] = diag
             if a.get("ler", True) and els is not None:
                 if (app and app_atual not in apps_ok) or sistema(app_atual):
                     # outra janela na frente (notificações, outro app): o conteúdo dela não sai do celular
@@ -482,6 +491,18 @@ class Executor:
                 continue
 
             cega = cega_de(els, xml_atual[0])
+            if cega:
+                diag["telas_cegas"] = diag.get("telas_cegas", 0) + 1
+                diag["area"] = cega
+            else:
+                web_ = [e for e in els if WEB.search(str(e.get("classe", ""))) or WEB.search(norm(e.get("desc")))]
+                if web_:
+                    w = web_[0]
+                    r_ = [w.get("x", 0) - w.get("l", 0) // 2, w.get("y", 0) - w.get("a", 0) // 2, w.get("l", 0),
+                          w.get("a", 0)]
+                    diag["web_descrita"] = {"area": r_, "textos_do_app": textos_na_area(els, w, r_),
+                                            "outros_apps": sorted({o.get("pacote") for o in els if o.get("pacote")
+                                                                   != w.get("pacote")})[:4]}
             sig = assinar(els, app_atual, xml_atual[0])
             for k, (s_, _, _) in enumerate(caminho):
                 if s_ == sig:  # voltamos a uma tela do caminho: o trecho depois dela foi desvio
@@ -595,8 +616,11 @@ class Executor:
                 if usar_visao and cega and visoes[0] < MAX_VISOES:
                     try:
                         b64, fator = t.capturar(LARGURA_VISAO)
-                    except Exception:  # noqa: BLE001 — sem captura, decide pelo texto
+                    except Exception as erro_c:  # noqa: BLE001 — sem captura, decide pelo texto
                         b64, fator = None, 1.0
+                        diag["erro_captura"] = str(erro_c)[:120]
+                    if not b64:
+                        diag["capturas_falhas"] = diag.get("capturas_falhas", 0) + 1
                     if b64:
                         visto = True
                         visoes[0] += 1
@@ -605,7 +629,10 @@ class Executor:
                         try:
                             res = self.olhar(objetivo, pergunta, contexto, b64, opcoes, nivel) or {}
                         except Exception as erro_v:  # noqa: BLE001
-                            res = {"fonte": "erro: " + str(erro_v)[:60]}
+                            res = {"fonte": "erro"}
+                            diag["erro_visao"] = str(erro_v)[:160]
+                        if not (res.get("feito") or res.get("acao")):
+                            diag["visao_sem_acao"] = {k: res[k] for k in list(res)[:4]}
                         via_v = f"visao:{res.get('fonte') or '?'} ({nivel}, {round((self.relogio() - t_dec) * 1000)} ms)"
                         if res.get("feito"):
                             if res.get("resposta") not in (None, ""):

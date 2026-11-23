@@ -2538,8 +2538,16 @@ def _objetivo(a):
         def capturar(largura, recorte=None):
             """JPEG pelo leitor rápido + fator (pixel real por pixel da imagem), para converter o toque da visão."""
             b64, res = foto_rapida(largura, recorte)
-            if not b64:
-                return None, None
+            if not b64:  # reserva: screencap pelo Shizuku + ffmpeg (mais lento, ~1 s)
+                png = os.path.join(_pasta_troca(), f"tela-{os.getpid()}-{time.monotonic_ns()}.png")
+                try:
+                    rish(f"screencap -p {shlex.quote(png)}", timeout=20)
+                    res = resolucao_png(png)
+                    b64 = _jpeg(png, largura, recorte)
+                finally:
+                    _apagar(png)
+                if not b64:
+                    raise RuntimeError("sem captura (leitor rápido e screencap falharam)")
             try:
                 rl, ra = (int(v) for v in str(res).split("x")[:2])
             except ValueError:

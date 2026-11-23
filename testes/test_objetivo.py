@@ -842,3 +842,10 @@ class TestObjetivoVisaoEGrafo(unittest.TestCase):
         self.assertIsNone(self.m.area_cega(cheia))  # o Chrome expôs o texto da página: não precisa de imagem
         self.assertIsNone(self.m.area_cega([el("Wi-Fi", 200), el("Bluetooth", 300)]))
         self.assertEqual(self.m.area_cega([el("x", 10)], [[0, 0, 10, 10]]), [0, 0, 10, 10])
+
+
+class TestAreaCegaComTeclado(unittest.TestCase):
+    def test_teclado_aberto_por_cima_nao_descreve_a_pagina(self):
+        m = _carregar()
+        teclas = [el(t, 2300, pacote="com.google.android.inputmethod.latin") for t in "qwertyuiop"]
+        self.assertIsNotNone(m.area_cega([BARRA, web()] + teclas))  # 23/11: sem isto, a visão não entrava

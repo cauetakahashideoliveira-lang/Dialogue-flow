@@ -2535,7 +2535,8 @@ def _olhar(mod):
         texto = "\n".join(x for x in (
             f"Objetivo: {objetivo_}", f"Pergunta a responder no fim: {pergunta}" if pergunta else "",
             contexto, dim, ops,
-            'Se a tela já mostra o que o objetivo pede: {"feito": true, "resposta": "<o que se lê, curto>"}. '
+            'Se a tela já mostra o que o objetivo pede: {"feito": true, "resposta": "<o que se lê, curto>", '
+            '"valor": <o número que responde, sem unidade, ou null>}. '
             'Senão, o próximo passo: {"acao": "tocar", "x": <px>, "y": <px>, "rotulo": "<texto do que vai tocar>"}'
             ' | {"acao": "digitar", "x": <px>, "y": <px>, "rotulo": "<campo>"} (só se houver texto autorizado; '
             'digita esse texto e aperta Enter) | {"acao": "opcao", "opcao": <n>} | {"acao": "rolar"} | '
@@ -2555,7 +2556,7 @@ def _julgar(mod):
         texto = (f"Objetivo: {objetivo_}\nPergunta: {pergunta or 'o objetivo foi cumprido?'}\n"
                  f"Textos da tela: {' | '.join(textos)[:3000]}\n"
                  'Responda {"feito": true|false, "resposta": "<resposta curta, com o valor como aparece na tela>"'
-                 ' ou null}.')
+                 ' ou null, "valor": <o número que responde à pergunta, sem unidade, ou null>}.')
         conteudo = ([{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}}]
                     if b64 else []) + [{"type": "text", "text": texto}]
         d = _json_da_resposta(_perguntar_api(modelo, POLITICA_LER, conteudo, 300))

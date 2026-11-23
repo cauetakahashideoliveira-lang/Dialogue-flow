@@ -750,10 +750,11 @@ class TestObjetivoVisaoEGrafo(unittest.TestCase):
                 return {"acao": "tocar", "x": 360, "y": 506, "rotulo": "Cotação do dólar - resultado", "fonte": "v"}
             if rolado < 2:
                 return {"acao": "rolar", "fonte": "v"}
-            return {"feito": True, "resposta": "US$ 1 = R$ 5,99", "fonte": "v"}
+            return {"feito": True, "resposta": "US$ 1 = R$ 5,99", "valor": "5,99", "fonte": "v"}
         r = self.executor(cel, olhar).executar({"objetivo": "ler a cotação do dólar", "app": CHROME,
                                                 "pergunta": "quanto vale 1 dólar em reais?"})
         self.assertEqual((r["estado"], r["conclusao"], r["resposta"]), ("concluido", "visao", "US$ 1 = R$ 5,99"))
+        self.assertEqual(r["valor"], 5.99)
         self.assertEqual([p["acao"] for p in r["passos"]], ["tocar", "rolar", "rolar", "concluir"])
         self.assertIn("tocar 640 900", cel.injetados)  # 360×(1280/720) = 640: coordenada da imagem → tela
         self.assertEqual(r["visoes"], 4)

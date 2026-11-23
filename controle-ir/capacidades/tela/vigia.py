@@ -34,12 +34,19 @@ def norm(t):
 
 
 def numero(texto):
-    """Primeiro número do texto, em pt-BR ou en: "R$ 5,99" → 5.99; "1.234,56" → 1234.56; "1,234.56" → 1234.56;
-    "R$ 1.299" → 1299 (ponto com 3 casas = milhar, como no Brasil)."""
-    m = re.search(r"-?\d[\d.,]*", str(texto or ""))
-    if not m:
-        return None
-    s = m.group().rstrip(".,")
+    """Número do texto, em pt-BR ou en: "R$ 5,99" → 5.99; "1.234,56" → 1234.56; "1,234.56" → 1234.56;
+    "R$ 1.299" → 1299 (ponto com 3 casas = milhar, como no Brasil). Com "R$" no texto, vale o número dele:
+    "1 dólar = R$ 5,99" → 5.99 (o 1º número seria o 1 do "1 dólar")."""
+    texto = str(texto or "")
+    m = re.search(r"R\$\s*(-?\d[\d.,]*)", texto)
+    if m:
+        return _converter(m.group(1))
+    m = re.search(r"-?\d[\d.,]*", texto)
+    return _converter(m.group()) if m else None
+
+
+def _converter(bruto):
+    s = bruto.rstrip(".,")
     if "," in s and "." in s:
         s = s.replace(".", "").replace(",", ".") if s.rfind(",") > s.rfind(".") else s.replace(",", "")
     elif "," in s:
@@ -258,7 +265,9 @@ class Vigias:
             resp = " | ".join(r["tela"]["textos"][:3])
         leitura = {"quando": time.strftime("%d/%m %H:%M", time.localtime(t0)), "s": round(self.relogio() - t0, 1)}
         if r.get("estado") == "concluido" and resp not in (None, ""):
-            leitura.update(resposta=str(resp)[:200], valor=numero(resp))
+            v_ = r.get("valor")  # o número que o modelo separou da resposta vale mais que o lido do texto
+            leitura.update(resposta=str(resp)[:200], valor=float(v_) if isinstance(v_, (int, float))
+                           and not isinstance(v_, bool) else numero(resp))
         else:
             leitura["falha"] = r.get("erro") or r.get("motivo") or r.get("estado") or "sem leitura"
         aviso = None

@@ -54,7 +54,8 @@ class TestVigia(unittest.TestCase):
 
     def test_numero_em_formatos_do_brasil_e_ingles(self):
         n = self.m.numero
-        self.assertEqual(n("US$ 1 = R$ 5,99"), 1.0)  # o 1º número
+        self.assertEqual(n("US$ 1 = R$ 5,99"), 5.99)  # com R$, o número dele (o 1º seria o 1 do dólar)
+        self.assertEqual(n("1 dólar ≈ R$ 6,00 (outra fonte: 5,9575)"), 6.0)
         self.assertEqual(n("R$ 5,99"), 5.99)
         self.assertEqual(n("1.234,56"), 1234.56)
         self.assertEqual(n("1,234.56"), 1234.56)
@@ -81,6 +82,14 @@ class TestVigia(unittest.TestCase):
         self.assertEqual([t for _, t in self.avisos], ["R$ 5,95 (abaixo de 6)", "R$ 5,70 (abaixo de 6)"])
         self.assertEqual(v.descrever("dolar")["leituras"], 5)
         self.assertEqual(self.voltas, ["x", "inicio", "inicio", "inicio", "inicio"])  # 1ª: pedido do dono (sempre)
+
+    def test_valor_separado_pelo_modelo_vale_mais_que_o_texto(self):
+        self.leituras = iter([{"estado": "concluido", "resposta": "1 dólar = 5,99 reais", "valor": 5.99}])
+        v = self.vigias()
+        r = v.criar({"nome": "d", "objetivo": "ver o dólar", "url": "https://www.google.com/search?q=dolar"})
+        self.assertEqual(r["leitura"]["valor"], 5.99)  # sem o campo, o texto daria 1
+        self.assertEqual(self.rodados[0]["url"], "https://www.google.com/search?q=dolar")
+        self.assertIn("erro", v.criar({"nome": "e", "objetivo": "x", "url": "ftp://x"}))
 
     def test_muda_compara_com_a_leitura_anterior(self):
         self.leituras = iter([self.ok("Em trânsito"), self.ok("Em trânsito"), self.ok("Saiu para entrega")])

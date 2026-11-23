@@ -348,6 +348,7 @@ class Executor:
         app_grafo = app or ""
         destinos = self.grafo.destinos(app_grafo, objetivo) if self.grafo else []
         resposta, conclusao, extraido, visoes, redigitado = [None], ["criterio"], [False], [0], [0]
+        valor = [None]  # o número que responde à pergunta (o modelo separa: "1 dólar = R$ 5,99" → 5.99)
         diag = {}  # visão: o que aconteceu (área cega vista, captura que falhou, erro do modelo) — vai no resultado
         xml_atual, nivel_atual = [""], [ORDEM_NIVEIS[nivel_base]]
 
@@ -374,6 +375,8 @@ class Executor:
                 r["conclusao"] = conclusao[0]
                 if resposta[0] is not None:
                     r["resposta"] = resposta[0]
+                if valor[0] is not None:
+                    r["valor"] = valor[0]
             if visoes[0]:
                 r["visoes"] = visoes[0]
             if diag:
@@ -427,6 +430,7 @@ class Executor:
                 j = {}
             if j.get("resposta") not in (None, ""):
                 resposta[0] = str(j["resposta"])[:500]
+                valor[0] = numerico(j.get("valor"))
             return j
 
         feitas = set()  # (tela, ação) que já mudou a tela: se voltamos aqui, ela não leva ao objetivo
@@ -664,6 +668,7 @@ class Executor:
                         if res.get("feito"):
                             if res.get("resposta") not in (None, ""):
                                 resposta[0] = str(res["resposta"])[:500]
+                                valor[0] = numerico(res.get("valor"))
                                 extraido[0] = True
                             conclusao[0] = "visao"
                             anotar("concluir", None, via_v, t0)
@@ -805,6 +810,20 @@ class Executor:
                 if escolhida_pista:
                     usadas.add(escolhida_pista)
                 anotar(acao, rotulo_acao, via, t0)
+
+
+def numerico(v):
+    """Número que o modelo devolveu em "valor" (float), ou None. Aceita "5,99" e "R$ 5,99" por garantia."""
+    if isinstance(v, bool) or v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    m = re.search(r"-?\d+(?:[.,]\d+)?", str(v).replace(".", "").replace(",", ".") if re.search(r"\d\.\d{3},", str(v))
+                  else str(v).replace(",", "."))
+    try:
+        return float(m.group()) if m else None
+    except ValueError:
+        return None
 
 
 def inteiro(v):

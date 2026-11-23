@@ -836,6 +836,32 @@ class TestObjetivoVisaoEGrafo(unittest.TestCase):
         self.assertEqual(g.proximo(APP, baixo, destinos), "Sobre o telefone")  # já no meio do caminho
         self.assertEqual(g.destinos(APP, "ligar o wi-fi"), [])  # nada parecido
 
+    def test_visao_digita_de_novo_o_texto_autorizado_numa_pagina_nova(self):
+        # 23/11, POCO: o modelo de texto tocou "Nova guia"; na guia nova a visão queria buscar de novo e não podia
+        campo = el("", 700, editavel=True, pacote=CHROME)
+        telas = {"busca": ([el("", 100, editavel=True, pacote=CHROME)], {"<enter>": "nova"}),
+                 "nova": ([BARRA, web(), campo], {"<enter>": "res"}),
+                 "res": ([BARRA, web()], {})}
+        cel = CelularWeb(telas, "busca")
+
+        def olhar(estado, opcoes):
+            if estado[0] == "nova":
+                return {"acao": "digitar", "x": 169, "y": 394, "rotulo": "Pesquisar"}  # 300×(720/1280), 700×…
+            if estado[0] == "res":
+                return {"feito": True, "resposta": "R$ 5,99"}
+            return {}
+        r = self.executor(cel, olhar).executar({"objetivo": "cotação do dólar", "app": CHROME,
+                                                "digitar": "dolar hoje", "pergunta": "quanto?"})
+        self.assertEqual((r["estado"], r["resposta"]), ("concluido", "R$ 5,99"))
+        self.assertEqual([p["acao"] for p in r["passos"]], ["digitar", "digitar", "concluir"])
+        self.assertEqual(cel.digitado, "dolar hojedolar hoje")  # o mesmo texto autorizado, uma vez a mais
+        # e só uma vez a mais: a terceira tentativa é recusada e anotada
+        cel = CelularWeb({"busca": telas["busca"], "nova": ([BARRA, web(), campo], {"<enter>": "nova"})}, "busca")
+        r = self.executor(cel, lambda e, o: {"acao": "digitar", "x": 169, "y": 394}).executar(
+            {"objetivo": "cotação do dólar", "app": CHROME, "digitar": "dolar hoje", "max_passos": 6})
+        self.assertEqual(sum(p["acao"] == "digitar" for p in r["passos"]), 2)
+        self.assertIn("visao_recusada", r["visao_diag"])
+
     def test_area_cega(self):
         self.assertIsNotNone(self.m.area_cega([BARRA, web()]))
         cheia = [BARRA, web()] + [el(f"linha {k}", 600 + k * 100, pacote=CHROME) for k in range(5)]

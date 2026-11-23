@@ -133,11 +133,12 @@ def regioes_visuais(xml_texto, fracao=0.15):
 _WEB_DESC = re.compile(r"visualizacao na web|web view|webview")
 
 
-def regioes_web(xml_texto):
-    """Páginas web que a acessibilidade não descreve: nó WebView (no Chrome, "Visualização na Web") com menos de 3
-    DESCENDENTES com texto. Pela árvore, não pela posição: a barra do Chrome fica desenhada por cima da página (mesma
-    área) e seus 5 botões faziam a página parecer descrita (23/11). Já uma lista que COBRE a página (as sugestões da
-    busca) é lida pelo texto: a página atrás dela não conta."""
+_ULTIMA_WEB = {"analise": []}
+
+
+def analisar_web(xml_texto):
+    """Cada nó de página web (WebView; no Chrome, "Visualização na Web") com o que decide se a acessibilidade a
+    descreve: quantos DESCENDENTES têm texto e se outro nó com texto a cobre (lista de sugestões, diálogo)."""
     try:
         raiz = ET.fromstring(xml_texto)
     except ET.ParseError:
@@ -151,26 +152,76 @@ def regioes_web(xml_texto):
         if not b or b[2] - b[0] < 300 or b[3] - b[1] < 400:
             continue
         internos = {id(d) for d in n.iter("node")}
-        if sum(1 for d in n.iter("node") if d is not n and (d.attrib.get("text") or d.attrib.get("content-desc"))) >= 3:
-            continue  # a página está descrita (o Chrome expôs o conteúdo)
+        textos = sum(1 for d in n.iter("node") if d is not n and (d.attrib.get("text") or d.attrib.get("content-desc")))
         acima, p = set(), pai.get(n)
         while p is not None:
             acima.add(id(p))
             p = pai.get(p)
         area = (b[2] - b[0]) * (b[3] - b[1])
-
-        def cobre(o):  # outro nó (não pai, não filho) sobre ≥ 40% da página, com texto: lista/diálogo por cima
+        coberta = None
+        for o in raiz.iter("node"):
             bo = ler_bounds(o.attrib.get("bounds"))
             if not bo or id(o) in internos or id(o) in acima:
-                return False
+                continue
             ix = max(0, min(b[2], bo[2]) - max(b[0], bo[0]))
             iy = max(0, min(b[3], bo[3]) - max(b[1], bo[1]))
-            return ix * iy >= 0.4 * area and sum(1 for d in o.iter("node") if d.attrib.get("text")
-                                                 or d.attrib.get("content-desc")) >= 3
-        if any(cobre(o) for o in raiz.iter("node")):
-            continue
-        out.append([b[0], b[1], b[2] - b[0], b[3] - b[1]])
-    return out[:1]
+            if ix * iy < 0.4 * area:
+                continue
+            # cobre de verdade: texto DENTRO da área da página (um contêiner do tamanho da tela com só a barra do
+            # Chrome lá em cima não esconde a página)
+            dentro_ = 0
+            for d in o.iter("node"):
+                bd = ler_bounds(d.attrib.get("bounds"))
+                if bd and (d.attrib.get("text") or d.attrib.get("content-desc")):
+                    cx, cy = (bd[0] + bd[2]) // 2, (bd[1] + bd[3]) // 2
+                    if b[0] <= cx <= b[2] and b[1] + 0.15 * (b[3] - b[1]) <= cy <= b[3]:
+                        dentro_ += 1
+            if dentro_ >= 3:
+                coberta = (o.attrib.get("class", "").split(".")[-1] + "#" +
+                           o.attrib.get("resource-id", "").split("/")[-1]).rstrip("#")
+                break
+        out.append({"area": [b[0], b[1], b[2] - b[0], b[3] - b[1]], "textos_dentro": textos, "coberta_por": coberta})
+    return out
+
+
+def regioes_web(xml_texto):
+    """Páginas web que a acessibilidade não descreve, pela ÁRVORE (não pela posição): a barra do Chrome fica
+    desenhada por cima da página e seus 5 botões faziam a página parecer descrita (23/11). Só contam descendentes do
+    nó da página; uma lista que cobre a página (sugestões da busca) é lida pelo texto."""
+    analise = analisar_web(xml_texto)
+    _ULTIMA_WEB["analise"] = analise
+    return [w["area"] for w in analise if w["textos_dentro"] < 3 and not w["coberta_por"]][:1]
+
+
+def arvore(a):
+    """acao=arvore: a árvore da tela (classe, id, caixa, texto) pelo leitor rápido — diagnóstico do agente."""
+    xml = dump_ui()
+    try:
+        raiz = ET.fromstring(xml)
+    except ET.ParseError:
+        return {"erro": "sem árvore da tela"}
+    app = foco()
+    if _privado(app):
+        return {"erro": "app protegido em primeiro plano: a árvore não sai do celular"}
+    limite = max(20, min(int(a.get("limite") or 150), 400))
+    linhas = []
+
+    def andar(n, d):
+        if len(linhas) >= limite:
+            return
+        if n.tag == "node":
+            at = n.attrib
+            if _privado(at.get("package", "")):
+                return
+            t, c = (at.get("text") or "")[:40], (at.get("content-desc") or "")[:40]
+            rid = at.get("resource-id", "").split("/")[-1]
+            linhas.append("  " * min(d, 14) + " ".join(x for x in (
+                at.get("class", "").split(".")[-1], f"#{rid}" if rid else "", at.get("bounds", ""),
+                repr(t) if t else "", f"({c})" if c else "") if x))
+        for f in n:
+            andar(f, d + 1)
+    andar(raiz, 0)
+    return {"app": app, "linhas": linhas, "web": analisar_web(xml)}
 
 
 def dentro(ponto, regiao):
@@ -2486,7 +2537,9 @@ def _olhar(mod):
             contexto, dim, ops,
             'Se a tela já mostra o que o objetivo pede: {"feito": true, "resposta": "<o que se lê, curto>"}. '
             'Senão, o próximo passo: {"acao": "tocar", "x": <px>, "y": <px>, "rotulo": "<texto do que vai tocar>"}'
-            ' | {"acao": "opcao", "opcao": <n>} | {"acao": "rolar"} | {"acao": "voltar"}.') if x)
+            ' | {"acao": "digitar", "x": <px>, "y": <px>, "rotulo": "<campo>"} (só se houver texto autorizado; '
+            'digita esse texto e aperta Enter) | {"acao": "opcao", "opcao": <n>} | {"acao": "rolar"} | '
+            '{"acao": "voltar"}.') if x)
         conteudo = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
                     {"type": "text", "text": texto}]
         d = _json_da_resposta(_perguntar_api(modelo, POLITICA_VISAO, conteudo, 300, pensar))
@@ -2576,6 +2629,10 @@ def _objetivo(a):
         @staticmethod
         def regioes(xml):
             return regioes_web(xml) + regioes_visuais(xml)
+
+        @staticmethod
+        def web_motivo():
+            return _ULTIMA_WEB.get("analise") or None
 
         @staticmethod
         def capturar(largura, recorte=None):
@@ -2731,6 +2788,8 @@ def _executar(a):
             r = objetivo(a)
         elif acao == "grafo":
             r = grafo_resumo()
+        elif acao == "arvore":
+            r = arvore(a)
         elif acao == "vigiar":
             r = vigiar(a)
         elif acao == "objetivo_resultado":

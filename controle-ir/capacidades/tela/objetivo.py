@@ -345,7 +345,7 @@ class Executor:
         memoria = self._memoria().get(chave_mem, {})
         app_grafo = app or ""
         destinos = self.grafo.destinos(app_grafo, objetivo) if self.grafo else []
-        resposta, conclusao, extraido, visoes = [None], ["criterio"], [False], [0]
+        resposta, conclusao, extraido, visoes, redigitado = [None], ["criterio"], [False], [0], [0]
         diag = {}  # visão: o que aconteceu (área cega vista, captura que falhou, erro do modelo) — vai no resultado
         xml_atual, nivel_atual = [""], [ORDEM_NIVEIS[nivel_base]]
 
@@ -501,6 +501,8 @@ class Executor:
             if cega:
                 diag["telas_cegas"] = diag.get("telas_cegas", 0) + 1
                 diag["area"] = cega
+            elif hasattr(t, "web_motivo") and t.web_motivo():
+                diag["web"] = t.web_motivo()  # por que a página não foi tratada como cega (árvore da tela)
             else:
                 web_ = [e for e in els if WEB.search(str(e.get("classe", ""))) or WEB.search(norm(e.get("desc")))]
                 if web_:
@@ -619,6 +621,9 @@ class Executor:
                 if passos:
                     contexto += "\nJá feito: " + "; ".join(
                         f"{p['acao']} {p.get('alvo', '')} ({p['via']})" for p in passos[-6:])
+                pode_digitar = bool(digitar) and redigitado[0] < 1
+                if pode_digitar:
+                    contexto += f"\nTexto autorizado para digitar numa busca: {digitar!r}"
                 visto = False
                 if usar_visao and cega and visoes[0] < MAX_VISOES:
                     try:
@@ -649,7 +654,30 @@ class Executor:
                             anotar("concluir", None, via_v, t0)
                             return fim("concluido", None, els, app_atual)
                         ac = res.get("acao")
-                        if ac == "opcao":
+                        recusa = None
+                        if ac == "digitar":
+                            x_, y_ = inteiro(res.get("x")), inteiro(res.get("y"))
+                            if not pode_digitar:
+                                recusa = "digitar sem texto autorizado (ou já redigitado)"
+                            elif x_ is None or y_ is None:
+                                recusa = "digitar sem coordenada"
+                            else:
+                                rx, ry = round(x_ * (fator or 1.0)), round(y_ * (fator or 1.0))
+                                campo_ = next((e for e in els if e.get("editavel") and abs(e.get("x", 0) - rx)
+                                               <= max(80, e.get("l", 0) // 2) and abs(e.get("y", 0) - ry)
+                                               <= max(80, e.get("a", 0) // 2)), None)
+                                if not (campo_ or no_retangulo(rx, ry, cega, 8)):
+                                    recusa = "campo fora da página"
+                                else:  # busca numa página nova (a guia nova do Chrome, 23/11): mesmo texto, 1 vez
+                                    redigitado[0] += 1
+                                    t.injetar(f"tocar {(campo_ or {}).get('x', rx)} {(campo_ or {}).get('y', ry)}")
+                                    t.calma(100, 1200)
+                                    t.injetar("texto " + digitar.encode().hex())
+                                    t.injetar("tecla 66")
+                                    t.calma(150, 2500)
+                                    anotar("digitar", f"{len(digitar)} caracteres", via_v, t0)
+                                    continue
+                        elif ac == "opcao":
                             k_ = inteiro(res.get("opcao"))
                             if k_ is not None and 1 <= k_ <= len(opcoes):
                                 e = melhor(alvos, opcoes[k_ - 1])
@@ -671,6 +699,13 @@ class Executor:
                             escolha, via = ROLAR, via_v
                         elif ac == "voltar" and not falhou(sig, VOLTAR):
                             escolha, via = VOLTAR, via_v
+                        if not escolha and ac:
+                            rec = diag.setdefault("visao_recusada", [])
+                            if len(rec) < 4:
+                                rec.append({"acao": ac, **({"rotulo": str(res.get("rotulo"))[:40]}
+                                                           if res.get("rotulo") else {}),
+                                            "motivo": recusa or ("rótulo proibido ou fora da página"
+                                                                 if ac == "tocar" else "repetida ou inválida")})
                 if not visto and usar_modelo and (opcoes or extras):
                     consultas += 1
                     t_dec = self.relogio()

@@ -16,7 +16,7 @@
   "properties": {
    "acao": {
     "type": "string",
-    "description": "objetivo | objetivo_resultado (último objetivo, se a chamada foi cortada) | vigiar | grafo | navegar | ver | tocar | digitar | tecla | deslizar | abrir | sequencia | grade | rotina | reflexos | fechar_anuncio | piloto | estado"
+    "description": "objetivo | objetivo_resultado (último objetivo, se a chamada foi cortada) | vigiar | grafo | arvore (árvore da tela p/ diagnóstico) | navegar | ver | tocar | digitar | tecla | deslizar | abrir | sequencia | grade | rotina | reflexos | fechar_anuncio | piloto | estado"
    },
    "x": {
     "type": "integer"

@@ -236,9 +236,13 @@ class TestJogador(unittest.TestCase):
         j = self.jog.Jogador(self.pasta, "vencer", ["a"], det)
         j.ultimos = [(0, "a", 0.0)] * 5
         q = np.zeros((90, 160, 3), np.uint8)
-        q[0:9, 0:80] = 220                    # eu cheio, rival zerado
+        cheio = np.full((90, 160, 3), 0, np.uint8)
+        cheio[0:9, :] = 220                   # round começa: as duas barras cheias
         ctx = {}
-        j.vontade_de_vencer(q, ctx)
+        j.vontade_de_vencer(cheio, ctx)
+        q[0:9, 0:80] = 220                    # eu cheio, rival zerado (3 leituras seguidas)
+        for _ in range(3):
+            j.vontade_de_vencer(q, ctx)
         self.assertEqual(j.placar["vitorias"], 1)
         self.assertGreater(j.cerebro.valor(0, "a"), 0)
         j.vontade_de_vencer(q, ctx)
@@ -327,7 +331,7 @@ class TestTecnico(unittest.TestCase):
 class ConexaoFalsa(Gravador):
     conectado = True
 
-    def quadro(self):
+    def quadro(self, cheio=False):
         return np.full((72, 128, 3), 90, dtype=np.uint8)
 
     def estado(self):

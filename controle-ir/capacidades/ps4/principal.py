@@ -118,7 +118,9 @@ class Estado:
         self.jog_info = {}
         self.interromper = threading.Event()
         self.guarda_ate = 0.0
-        self.guarda_livre_ate = 0.0  # reflexo manda segurar o bloqueio até este instante (estende enquanto o rival ataca)  # reflexo por quadro corta o golpe em andamento
+        self.guarda_livre_ate = 0.0
+        self.guarda_baixa_ate = 0.0  # levou golpe baixo com guarda alta: agacha na guarda por um tempo
+        self.guardando = None  # reflexo manda segurar o bloqueio até este instante (estende enquanto o rival ataca)  # reflexo por quadro corta o golpe em andamento
         self.tecnico = {}
 
     def conexao(self):
@@ -292,17 +294,29 @@ def _laco_jogador(cfg):
                     time.sleep(1.5)
                 continue
             if time.monotonic() < E.guarda_ate:
-                # GUARDA: segura R1 até o ataque do rival acabar (máx. 1,5 s), depois pune na hora
+                # GUARDA: segura o bloqueio (MK11: R2 — o R1 é "interagir") até o ataque acabar, depois pune.
+                # Baixa (agachado) quando o rival acabou de acertar por baixo da guarda em pé.
                 ini = time.monotonic()
+                botao = str((j.reflexos or {}).get("botao_guarda", "R2")).upper()
+                baixa = ini < E.guarda_baixa_ate
                 try:
                     with E.trava:
-                        con.apertar("R1")
+                        E.guardando = "baixa" if baixa else "alta"
+                        if baixa:
+                            con.apertar("DOWN")
+                        con.apertar(botao)
                         while time.monotonic() < E.guarda_ate and time.monotonic() - ini < GUARDA_MAX_S \
                                 and not E.jog_parar.is_set():
                             time.sleep(0.015)
-                        con.soltar("R1")
+                        con.soltar(botao)
+                        if baixa:
+                            con.soltar("DOWN")
                 except Exception:  # noqa: BLE001
                     pass
+                finally:
+                    E.guardando = None
+                E.jog_info["guardas_baixas" if baixa else "guardas_altas"] = \
+                    E.jog_info.get("guardas_baixas" if baixa else "guardas_altas", 0) + 1
                 E.guarda_livre_ate = time.monotonic() + 0.35  # depois de defender, a vez é de atacar
                 E.jog_info["guardas"] = E.jog_info.get("guardas", 0) + 1
                 E.jog_info["guarda_ms_total"] = E.jog_info.get("guarda_ms_total", 0) + \
@@ -357,6 +371,12 @@ def _laco_reflexo(cfg):
             if float(cfg.get("dano_guarda", 0.02)) < queda < 0.3 and (j.ultimo_ctx or {}).get("faixa") != "longe":
                 E.guarda_ate = agora + float(cfg.get("guarda_dano_ms", 450)) / 1000
                 E.jog_info["guardas_por_dano"] = E.jog_info.get("guardas_por_dano", 0) + 1
+                if E.guardando == "alta":  # apanhou defendendo em pé: golpe baixo → guarda baixa
+                    E.guarda_baixa_ate = agora + float(cfg.get("baixa_s", 3.0))
+                    E.jog_info["furou_alta"] = E.jog_info.get("furou_alta", 0) + 1
+                elif E.guardando == "baixa":  # apanhou agachado: golpe alto/overhead → volta para em pé
+                    E.guarda_baixa_ate = 0.0
+                    E.jog_info["furou_baixa"] = E.jog_info.get("furou_baixa", 0) + 1
                 vidas.clear()  # um disparo por golpe levado
                 if not E.interromper.is_set():
                     E.interromper.set()

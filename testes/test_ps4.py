@@ -318,6 +318,8 @@ class TestTecnico(unittest.TestCase):
         self.assertEqual(est["situacoes"]["longe|chao"], ["tiro"])
         self.assertEqual(est["situacoes"]["*|ar"], ["gancho"])
         self.assertIsNone(tr.interpretar("sem json", {"jab"}))
+        cercado = 'Plano:\n```json\n{"situacoes": {"*|ar": ["gancho"]}, "dica": "use {gancho}"}\n```\nBoa luta {:)}'
+        self.assertEqual(tr.interpretar(cercado, {"gancho"})["situacoes"]["*|ar"], ["gancho"])
         conteudo = tr.montar_pedido({"placar": {"vitorias": 1}}, {"jab": "1"}, est, b"\xff\xd8", "vencer")
         self.assertEqual(conteudo[0]["type"], "image")
 

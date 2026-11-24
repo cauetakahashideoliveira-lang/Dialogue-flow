@@ -51,12 +51,19 @@ def montar_pedido(relatorio, habilidades, estrategia, jpeg, objetivo):
 
 def interpretar(texto, nomes_validos):
     """Extrai o JSON da resposta e mantém só habilidades que existem. None se não der para usar."""
-    m = re.search(r"\{.*\}", texto or "", re.S)
-    if not m:
+    texto = texto or ""
+    i = texto.find("{")
+    if i < 0:
         return None
     try:
-        d = json.loads(m.group(0))
+        d, _ = json.JSONDecoder().raw_decode(texto[i:])
     except ValueError:
+        m = re.search(r"\{.*\}", texto, re.S)  # cercas ```json ou texto depois: tenta o maior bloco
+        try:
+            d = json.loads(m.group(0)) if m else None
+        except ValueError:
+            d = None
+    if not isinstance(d, dict):
         return None
     sit = {}
     for k in SITUACOES:
@@ -74,7 +81,7 @@ def interpretar(texto, nomes_validos):
 
 
 def perguntar(chave, modelo, conteudo, timeout=12):
-    corpo = json.dumps({"model": modelo, "max_tokens": 400,
+    corpo = json.dumps({"model": modelo, "max_tokens": 1200,
                         "messages": [{"role": "user", "content": conteudo}]}).encode()
     req = urllib.request.Request(API, data=corpo, headers={
         "content-type": "application/json", "x-api-key": chave, "anthropic-version": VERSAO})

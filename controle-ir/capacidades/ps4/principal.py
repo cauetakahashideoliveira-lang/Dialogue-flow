@@ -356,7 +356,7 @@ def _laco_reflexo(cfg):
             pedaco = slice(int(0.3 * H), int(0.9 * H)), slice(x0, x0 + int(0.24 * W))
             mov = float(np.abs(q[pedaco].astype(np.int16) - ant[pedaco].astype(np.int16)).mean() / 255.0)
             atual = j.ultimos[-1][1] if j.ultimos else None
-            if mov > limiar:
+            if mov > limiar and time.monotonic() > getattr(j, "combo_ate", 0):  # rival apanhando também se mexe
                 # guarda contínua: segura o bloqueio enquanto o rival perto ataca (+janela após o último movimento)
                 E.guarda_ate = time.monotonic() + float(cfg.get("guarda_ms", 220)) / 1000
                 if atual not in defesas and not E.interromper.is_set():

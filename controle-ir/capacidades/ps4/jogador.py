@@ -382,7 +382,7 @@ class Jogador:
         s, ctx = self.situacao(q0)
         self.ultimo_ctx = ctx
         self.vontade_de_vencer(q0, ctx)
-        h = self.reflexo(q0, ctx) or (self.especialista(s, ctx) if getattr(self, "estrategia", None)
+        h = self.continuar_combo(ctx) or self.reflexo(q0, ctx) or (self.especialista(s, ctx) if getattr(self, "estrategia", None)
                                        else self.cerebro.escolher(s, explorar))
         t0 = time.monotonic()
         try:
@@ -398,6 +398,11 @@ class Jogador:
         self.cerebro.aprender(s, h, r, s2)
         self.passos_total += 1
         self.ultimos = (self.ultimos + [(s, h, r)])[-20:]
+        if r > float((getattr(self, "estrategia", None) or {}).get("acerto_min", 0.01)):
+            self.combo_ate = time.monotonic() + float((getattr(self, "estrategia", None) or {}).get("janela_combo_s", 0.7))
+            self.combo_n = getattr(self, "combo_n", 0) + 1
+        else:
+            self.combo_n = 0
         self.bloco.append(r)
         if len(self.bloco) >= 25:
             self.historico.append(round(sum(self.bloco) / len(self.bloco), 4))
@@ -448,6 +453,22 @@ class Jogador:
             return True
         # HUD pisca (clarão, golpe especial, zoom): continua lutando por um instante em vez de congelar
         return agora - getattr(self, "_hud_t", -9) < float(self.estrategia.get("hud_memoria_s", 0.6))
+
+    def continuar_combo(self, ctx):
+        """Dinâmica: golpe que acertou emenda direto no próximo da sequência (estrategia.sequencias), sem dar
+        tempo do rival respirar. Só sequências cadastradas (verificadas na lista de golpes)."""
+        cfg = getattr(self, "estrategia", None) or {}
+        seqs = cfg.get("sequencias") or {}
+        if not seqs or not self.ultimos or time.monotonic() > getattr(self, "combo_ate", 0):
+            return None
+        _s, h, _r = self.ultimos[-1]
+        prox = [x for x in seqs.get(h, []) if x in self.cerebro.hab]
+        if not prox or getattr(self, "combo_n", 0) > int(cfg.get("combo_max", 4)):
+            return None
+        if ctx.get("faixa") == "longe" and not all(x in cfg.get("longe_ok", []) for x in prox):
+            return None
+        self.combos_emendados = getattr(self, "combos_emendados", 0) + 1
+        return prox[0] if len(prox) == 1 else random.choice(prox)
 
     def especialista(self, s, ctx):
         """Joga bem desde o início: lista de golpes por situação (do estudo: dados de quadro e combos do jogo),
@@ -541,6 +562,7 @@ class Jogador:
             por_hab[h][1] += self.cerebro.q.get(k, 0.0) * n
         return {"jogo": self.jogo, "passos": self.passos_total, "estados": n,
                 "reflexos_usados": getattr(self, "reflexos_usados", 0),
+                "combos_emendados": getattr(self, "combos_emendados", 0),
                 "placar": getattr(self, "placar", None),
                 "ultima_percepcao": self.ultimo_ctx or None,
                 "habilidades": {h: {"usos": v[0], "valor_medio": round(v[1] / max(1, v[0]), 3)}

@@ -299,20 +299,59 @@ class Jogador:
         except (OSError, ValueError):
             return {}
 
-    def salvar(self):
+    def salvar(self, fundo=False):
         d = {"jogo": self.jogo, "estados": self.estados.dump(), "cerebro": self.cerebro.dump(),
              "historico": self.historico[-500:], "passos_total": self.passos_total,
              "detectores": self.detectores, "percepcao": {k: v for k, v in (self.percepcao or {}).items()
                                                           if not k.startswith("_")} or None,
              "chaves": self.chaves, "salvo": time.strftime("%Y-%m-%d %H:%M:%S")}
-        tmp = self._arq() + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(d, f)
-        os.replace(tmp, self._arq())
+        tmp, arq = self._arq() + ".tmp", self._arq()
+
+        def escrever(d=d):
+            with open(tmp, "w") as f:
+                json.dump(d, f)
+            os.replace(tmp, arq)
+        if fundo:
+            d = json.loads(json.dumps(d))  # cópia tirada agora; o disco fica com a fila
+            self.em_fundo(lambda: escrever(d))
+        else:
+            escrever()
 
     def gravar(self, reg):
-        with open(os.path.join(self.pasta, "gravacao.jsonl"), "a") as f:
-            f.write(json.dumps(reg, ensure_ascii=False) + "\n")
+        """Grava em segundo plano: disco no meio da luta trava a mão do jogador."""
+        fila = getattr(self, "_fila", None)
+        if fila is None:
+            import queue
+            import threading
+            fila = self._fila = queue.Queue(maxsize=2000)
+
+            def escritor():
+                while True:
+                    tarefa = fila.get()
+                    try:
+                        tarefa()
+                    except Exception:  # noqa: BLE001
+                        pass
+            threading.Thread(target=escritor, name="jogador-disco", daemon=True).start()
+        arq = os.path.join(self.pasta, "gravacao.jsonl")
+        linha = json.dumps(reg, ensure_ascii=False) + "\n"
+
+        def escrever():
+            with open(arq, "a") as f:
+                f.write(linha)
+        try:
+            fila.put_nowait(escrever)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def em_fundo(self, tarefa):
+        """Qualquer trabalho lento (salvar memória, guardar quadro) vai para a fila do disco."""
+        if getattr(self, "_fila", None) is None:
+            self.gravar({"t": round(time.time(), 2), "inicio_fila": True})
+        try:
+            self._fila.put_nowait(tarefa)
+        except Exception:  # noqa: BLE001
+            pass
 
     # ---- situação
     def situacao(self, quadro, aprender=True):
@@ -367,7 +406,10 @@ class Jogador:
                "situacao": ctx.get("chave"), "frente": ctx.get("frente"), "habilidade": h,
                "recompensa": round(r, 4), "detalhes": det, "proximo": s2, "ms": int((time.monotonic() - t0) * 1000)}
         if guardar_quadro and (abs(r) >= 0.05 or self.passos_total % 50 == 1):
-            reg["quadro"] = guardar_quadro(q1, f"p{self.passos_total:06d}")
+            nome = f"p{self.passos_total:06d}"
+            reg["quadro"] = nome
+            copia = np.array(q1, copy=True)
+            self.em_fundo(lambda: guardar_quadro(copia, nome))
         self.gravar(reg)
         return reg
 
@@ -397,7 +439,12 @@ class Jogador:
     def na_luta(self, quadro):
         """Há luta na tela quando as barras de vida aparecem (soma das frações acesas > limiar)."""
         vidas = [medir(quadro, d) for d in self.detectores if d.get("tipo") == "vida"]
-        return not vidas or sum(vidas) > float(self.estrategia.get("hud_min", 0.08))
+        agora = time.monotonic()
+        if not vidas or sum(vidas) > float(self.estrategia.get("hud_min", 0.08)):
+            self._hud_t = agora
+            return True
+        # HUD pisca (clarão, golpe especial, zoom): continua lutando por um instante em vez de congelar
+        return agora - getattr(self, "_hud_t", -9) < float(self.estrategia.get("hud_memoria_s", 1.2))
 
     def especialista(self, s, ctx):
         """Joga bem desde o início: lista de golpes por situação (do estudo: dados de quadro e combos do jogo),

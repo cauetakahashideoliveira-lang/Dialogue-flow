@@ -316,4 +316,14 @@ class Conexao:
         f = self.receptor.get_latest_video_frame()
         if f is None:
             return None
-        return f.to_ndarray(format="rgb24")
+        # converter o quadro custa caro no celular: converte já pequeno (320x180 basta, tudo é em frações) e
+        # reaproveita enquanto o PS4 não mandar quadro novo (reflexo, jogador e técnico pedem o mesmo quadro)
+        cache = getattr(self, "_cache_q", None)
+        if cache and cache[0] is f:
+            return cache[1]
+        try:
+            a = f.to_ndarray(width=320, height=180, format="rgb24")
+        except TypeError:
+            a = f.to_ndarray(format="rgb24")
+        self._cache_q = (f, a)
+        return a

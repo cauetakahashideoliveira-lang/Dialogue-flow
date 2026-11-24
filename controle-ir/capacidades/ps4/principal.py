@@ -306,14 +306,15 @@ def _laco_jogador(cfg):
                 j.ultimos = (j.ultimos + [(-1, defesa, 0.0)])[-20:]  # o reflexo pune no passo seguinte
             r = j.passo(con.quadro, agir, explorar=cfg["explorar"], guardar_quadro=guardar)
             if "erro" in r:
-                time.sleep(0.25 if r.get("erro") == "fora da luta" else 0.5)
+                time.sleep(0.12 if r.get("erro") == "fora da luta" else 0.03)
                 continue
             E.jog_info["passos"] += 1
             E.jog_info["recompensa"] = round(E.jog_info["recompensa"] + r["recompensa"], 4)
             E.jog_info["ultimo"] = {k: r[k] for k in ("estado", "habilidade", "recompensa")}
-            if E.jog_info["passos"] % 20 == 0:
-                j.salvar()
-            time.sleep(intervalo)
+            if E.jog_info["passos"] % 40 == 0:
+                j.salvar(fundo=True)
+            if intervalo:
+                time.sleep(intervalo)
         else:
             E.jog_info["estado_txt"] = "terminou"
     except Exception as e:  # noqa: BLE001
@@ -431,7 +432,7 @@ def cmd_jogador(a):
         if not E.conexao().conectado:
             return {"erro": "PS4 não conectado (acao=conectar)", "preparado": jogo}
         cfg = {"duracao": max(10, min(float(a.get("duracao", 600)), 4 * 3600)),
-               "intervalo_ms": max(0, min(int(a.get("intervalo_ms", 100)), 10000)),
+               "intervalo_ms": max(0, min(int(a.get("intervalo_ms", 0)), 10000)),
                "explorar": a.get("explorar", True) is not False, "ao_reconectar": a.get("ao_reconectar")}
         E.jog_parar.clear()
         E.jog_info = {"cfg": cfg, "jogo": jogo}

@@ -342,6 +342,7 @@ class Jogador:
             return {"erro": "fora da luta"}  # menus/resultado/login: não aperta nada
         s, ctx = self.situacao(q0)
         self.ultimo_ctx = ctx
+        self.vontade_de_vencer(q0, ctx)
         h = self.reflexo(q0, ctx) or (self.especialista(s, ctx) if getattr(self, "estrategia", None)
                                        else self.cerebro.escolher(s, explorar))
         t0 = time.monotonic()
@@ -370,6 +371,29 @@ class Jogador:
         self.gravar(reg)
         return reg
 
+    def vontade_de_vencer(self, quadro, ctx):
+        """Objetivo central: vencer. Round ganho reforça forte as últimas jogadas; round perdido pune forte tudo o
+        que levou à queda. Atrás na vida = modo virada (sem variar, só o que mais rende)."""
+        dets = {d.get("nome"): d for d in self.detectores if d.get("tipo") == "vida"}
+        if "minha_vida" not in dets or "vida_rival" not in dets:
+            return
+        eu, rv = medir(quadro, dets["minha_vida"]), medir(quadro, dets["vida_rival"])
+        placar = self.__dict__.setdefault("placar", {"vitorias": 0, "derrotas": 0, "fechado": False})
+        cfg = getattr(self, "estrategia", None) or {}
+        peso = float(cfg.get("peso_resultado", 3.0))
+        if not placar["fechado"] and eu > 0.05 and rv <= 0.01:
+            placar["vitorias"] += 1
+            placar["fechado"] = True
+            self.nota(peso, 20)
+        elif not placar["fechado"] and rv > 0.05 and eu <= 0.01:
+            placar["derrotas"] += 1
+            placar["fechado"] = True
+            self.nota(-peso, 20)
+        elif eu > 0.5 and rv > 0.5:
+            placar["fechado"] = False  # round novo
+        ctx["virada"] = eu + float(cfg.get("margem_virada", 0.15)) < rv
+        ctx["vida"] = [round(eu, 3), round(rv, 3)]
+
     def na_luta(self, quadro):
         """Há luta na tela quando as barras de vida aparecem (soma das frações acesas > limiar)."""
         vidas = [medir(quadro, d) for d in self.detectores if d.get("tipo") == "vida"]
@@ -394,9 +418,10 @@ class Jogador:
         notas = []
         for i, h in enumerate(lista):
             n = self.cerebro.cont.get(f"{s}|{h}", 0)
-            notas.append(((1.0 - i / max(1, len(lista))) + (peso * self.cerebro.valor(s, h) if n else 0.0), h))
+            p = peso * (2 if ctx.get("virada") else 1)
+            notas.append(((1.0 - i / max(1, len(lista))) + (p * self.cerebro.valor(s, h) if n else 0.0), h))
         notas.sort(reverse=True)
-        if len(notas) > 1 and random.random() < float(cfg.get("variar", 0.25)):
+        if len(notas) > 1 and not ctx.get("virada") and random.random() < float(cfg.get("variar", 0.25)):
             return notas[1][1]
         return notas[0][1]
 
@@ -462,6 +487,7 @@ class Jogador:
             por_hab[h][1] += self.cerebro.q.get(k, 0.0) * n
         return {"jogo": self.jogo, "passos": self.passos_total, "estados": n,
                 "reflexos_usados": getattr(self, "reflexos_usados", 0),
+                "placar": getattr(self, "placar", None),
                 "ultima_percepcao": self.ultimo_ctx or None,
                 "habilidades": {h: {"usos": v[0], "valor_medio": round(v[1] / max(1, v[0]), 3)}
                                 for h, v in sorted(por_hab.items(), key=lambda x: -x[1][0])},

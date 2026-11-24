@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795478157.8448124,
-    "seen": 1795478229.0260787,
-    "ast_hash": "1a9e5f2f506f76f1fa6d094e28bfaed7",
+    "mtime": 1795478568.6812074,
+    "seen": 1795478631.342053,
+    "ast_hash": "3b8078fc938ccf1dd265df23e1ded691",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -798,9 +798,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/ps4/jogador.py": {
-    "mtime": 1795478156.5252285,
-    "seen": 1795478229.0260544,
-    "ast_hash": "447d2748af1ca0208fe5dfaa6e23aac5",
+    "mtime": 1795478567.585546,
+    "seen": 1795478631.3420224,
+    "ast_hash": "cd5059d578c7c88b0121cc2d79297128",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/ps4/principal.py": {
@@ -810,9 +810,9 @@
     "semantic_hash": ""
   },
   "testes/test_ps4.py": {
-    "mtime": 1795478156.5367196,
-    "seen": 1795478229.0261707,
-    "ast_hash": "3749384c64a3b100c3ccb6666eb5b56d",
+    "mtime": 1795478567.5865557,
+    "seen": 1795478631.3422844,
+    "ast_hash": "de0cc29c638efb838723bf846325ff38",
     "semantic_hash": ""
   },
   "docs/ps4.md": {

@@ -230,6 +230,25 @@ class TestJogador(unittest.TestCase):
         menu = np.zeros((90, 160, 3), np.uint8)
         self.assertEqual(j.passo(lambda: menu, lambda h, c: None)["erro"], "fora da luta")
 
+    def test_vontade_de_vencer(self):
+        det = [{"tipo": "vida", "regiao": [0, 0, 0.5, 0.1], "nome": "minha_vida"},
+               {"tipo": "vida", "regiao": [0.5, 0, 0.5, 0.1], "nome": "vida_rival"}]
+        j = self.jog.Jogador(self.pasta, "vencer", ["a"], det)
+        j.ultimos = [(0, "a", 0.0)] * 5
+        q = np.zeros((90, 160, 3), np.uint8)
+        q[0:9, 0:80] = 220                    # eu cheio, rival zerado
+        ctx = {}
+        j.vontade_de_vencer(q, ctx)
+        self.assertEqual(j.placar["vitorias"], 1)
+        self.assertGreater(j.cerebro.valor(0, "a"), 0)
+        j.vontade_de_vencer(q, ctx)
+        self.assertEqual(j.placar["vitorias"], 1)  # conta uma vez por round
+        q2 = np.zeros((90, 160, 3), np.uint8)
+        q2[0:9, 0:20] = 220
+        q2[0:9, 80:160] = 220
+        j.vontade_de_vencer(q2, ctx)
+        self.assertTrue(ctx["virada"])
+
     def test_demonstracao_e_nota(self):
         j = self.jog.Jogador(self.pasta, "demo", ["a", "b"], [])
         q = np.full((90, 160, 3), 128, dtype=np.uint8)

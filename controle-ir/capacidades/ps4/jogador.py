@@ -523,7 +523,12 @@ class Jogador:
             r = [max(0.0, x - 0.12), 0.3, 0.24, 0.6]
             mov = float(np.abs(regiao(quadro, r) - regiao(ant, r)).mean() / 255.0)
         ctx["mov_rival"] = round(mov, 4)
-        if levou or (perto and mov > float(cfg.get("limiar_mov", 0.05))):
+        base = getattr(self, "_mov_base", None)  # medido pela thread de reflexo (movimento normal do rival)
+        lim = float(cfg.get("limiar_mov", 0.05))
+        if base:
+            lim = max(lim, base * float(cfg.get("fator_base", 2.5)))
+        # com a thread quadro a quadro ligada, o movimento é dela (escala de 25 ms); aqui só o dano levado
+        if levou or (not cfg.get("quadro_a_quadro") and ctx.get("faixa") == "perto" and mov > lim):
             self.reflexos_usados = getattr(self, "reflexos_usados", 0) + 1
             defs = cfg.get("defesas") or []
             if defs:

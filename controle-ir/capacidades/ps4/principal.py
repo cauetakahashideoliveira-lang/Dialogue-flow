@@ -117,7 +117,8 @@ class Estado:
         self.jog_parar = threading.Event()
         self.jog_info = {}
         self.interromper = threading.Event()
-        self.guarda_ate = 0.0  # reflexo manda segurar o bloqueio até este instante (estende enquanto o rival ataca)  # reflexo por quadro corta o golpe em andamento
+        self.guarda_ate = 0.0
+        self.guarda_livre_ate = 0.0  # reflexo manda segurar o bloqueio até este instante (estende enquanto o rival ataca)  # reflexo por quadro corta o golpe em andamento
         self.tecnico = {}
 
     def conexao(self):
@@ -253,6 +254,9 @@ def _guardar_quadro(pasta):
     return g
 
 
+GUARDA_MAX_S = 0.8
+
+
 def _laco_jogador(cfg):
     j, con = E.jogador, E.conexao()
     t0 = time.time()
@@ -293,12 +297,13 @@ def _laco_jogador(cfg):
                 try:
                     with E.trava:
                         con.apertar("R1")
-                        while time.monotonic() < E.guarda_ate and time.monotonic() - ini < 1.5 \
+                        while time.monotonic() < E.guarda_ate and time.monotonic() - ini < GUARDA_MAX_S \
                                 and not E.jog_parar.is_set():
                             time.sleep(0.015)
                         con.soltar("R1")
                 except Exception:  # noqa: BLE001
                     pass
+                E.guarda_livre_ate = time.monotonic() + 0.35  # depois de defender, a vez é de atacar
                 E.jog_info["guardas"] = E.jog_info.get("guardas", 0) + 1
                 E.jog_info["guarda_ms_total"] = E.jog_info.get("guarda_ms_total", 0) + \
                     int((time.monotonic() - ini) * 1000)
@@ -329,7 +334,11 @@ def _laco_reflexo(cfg):
     """A cada ~30 ms olha o rival perto (quadro reduzido); se ele se mexe forte enquanto o jogador ataca, corta o
     golpe em andamento — o passo seguinte do jogador vê o perigo e defende."""
     import numpy as np
-    con, ant, vida_ant = E.conexao(), None, None
+    import collections
+    con, ant = E.conexao(), None
+    vidas = collections.deque(maxlen=6)
+    movs = collections.deque(maxlen=80)  # movimento "normal" do rival parado/andando: base adaptativa
+    fator_base = float(cfg.get("fator_base", 2.5))
     defesas = set(cfg.get("defesas") or [])
     limiar = float(cfg.get("limiar_mov", 0.05)) * float(cfg.get("fator_quadro", 1.2))
     E.jog_info["reflexo_cortes"] = 0
@@ -339,15 +348,18 @@ def _laco_reflexo(cfg):
         j = E.jogador
         if q is None or j is None:
             continue
+        agora = time.monotonic()
         vd = next((d for d in j.detectores if d.get("nome") == "minha_vida"), None)
         if vd is not None:
-            v = _mod("jogador").medir(q, vd)
-            if vida_ant is not None and 0.004 < vida_ant - v < 0.3 and (j.ultimo_ctx or {}).get("faixa") != "longe":
-                E.guarda_ate = time.monotonic() + float(cfg.get("guarda_dano_ms", 450)) / 1000
+            # dano de verdade: queda clara em relação ao maior valor recente (ruído do vídeo oscila ~0,5%)
+            vidas.append(_mod("jogador").medir(q, vd))
+            queda = max(vidas) - vidas[-1]
+            if float(cfg.get("dano_guarda", 0.02)) < queda < 0.3 and (j.ultimo_ctx or {}).get("faixa") != "longe":
+                E.guarda_ate = agora + float(cfg.get("guarda_dano_ms", 450)) / 1000
                 E.jog_info["guardas_por_dano"] = E.jog_info.get("guardas_por_dano", 0) + 1
+                vidas.clear()  # um disparo por golpe levado
                 if not E.interromper.is_set():
                     E.interromper.set()
-            vida_ant = v
         q = q[::4, ::4]
         ctx = j.ultimo_ctx or {}
         if ant is not None and ant.shape == q.shape and ctx.get("faixa") == "perto" and ctx.get("rival_x") is not None:
@@ -355,8 +367,12 @@ def _laco_reflexo(cfg):
             x0 = int(max(0, float(ctx["rival_x"]) - 0.12) * W)
             pedaco = slice(int(0.3 * H), int(0.9 * H)), slice(x0, x0 + int(0.24 * W))
             mov = float(np.abs(q[pedaco].astype(np.int16) - ant[pedaco].astype(np.int16)).mean() / 255.0)
+            movs.append(mov)
+            base = float(np.median(movs)) if len(movs) >= 10 else limiar
+            j._mov_base = base
             atual = j.ultimos[-1][1] if j.ultimos else None
-            if mov > limiar and time.monotonic() > getattr(j, "combo_ate", 0):  # rival apanhando também se mexe
+            ataque = mov > max(limiar, base * fator_base)
+            if ataque and agora > getattr(j, "combo_ate", 0) and agora > E.guarda_livre_ate:  # rival apanhando também se mexe
                 # guarda contínua: segura o bloqueio enquanto o rival perto ataca (+janela após o último movimento)
                 E.guarda_ate = time.monotonic() + float(cfg.get("guarda_ms", 220)) / 1000
                 if atual not in defesas and not E.interromper.is_set():

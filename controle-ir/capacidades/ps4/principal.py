@@ -204,7 +204,7 @@ def cmd_comando(a):
     r.update({"segundos": round(time.monotonic() - t0, 2), "demonstracao": demo})
     if a.get("ver_depois"):
         time.sleep(max(0, float(a.get("esperar_ms", 300))) / 1000)
-        q = E.conexao().quadro()
+        q = E.conexao().quadro(cheio=True)
         if q is not None:
             r["_imagem"] = imagem_json(q, a.get("largura", 640))
     return r
@@ -329,7 +329,7 @@ def _laco_reflexo(cfg):
     """A cada ~30 ms olha o rival perto (quadro reduzido); se ele se mexe forte enquanto o jogador ataca, corta o
     golpe em andamento — o passo seguinte do jogador vê o perigo e defende."""
     import numpy as np
-    con, ant = E.conexao(), None
+    con, ant, vida_ant = E.conexao(), None, None
     defesas = set(cfg.get("defesas") or [])
     limiar = float(cfg.get("limiar_mov", 0.05)) * float(cfg.get("fator_quadro", 1.2))
     E.jog_info["reflexo_cortes"] = 0
@@ -339,6 +339,15 @@ def _laco_reflexo(cfg):
         j = E.jogador
         if q is None or j is None:
             continue
+        vd = next((d for d in j.detectores if d.get("nome") == "minha_vida"), None)
+        if vd is not None:
+            v = _mod("jogador").medir(q, vd)
+            if vida_ant is not None and 0.004 < vida_ant - v < 0.3 and (j.ultimo_ctx or {}).get("faixa") != "longe":
+                E.guarda_ate = time.monotonic() + float(cfg.get("guarda_dano_ms", 450)) / 1000
+                E.jog_info["guardas_por_dano"] = E.jog_info.get("guardas_por_dano", 0) + 1
+                if not E.interromper.is_set():
+                    E.interromper.set()
+            vida_ant = v
         q = q[::4, ::4]
         ctx = j.ultimo_ctx or {}
         if ant is not None and ant.shape == q.shape and ctx.get("faixa") == "perto" and ctx.get("rival_x") is not None:
@@ -597,7 +606,7 @@ def executar(a):
         if acao == "comando":
             return cmd_comando(a)
         if acao == "quadro":
-            q = con.quadro()
+            q = con.quadro(cheio=True)
             if q is None:
                 return {"erro": "sem imagem (conectado? o vídeo leva alguns segundos para começar)"}
             return {"tamanho": [int(q.shape[1]), int(q.shape[0])],

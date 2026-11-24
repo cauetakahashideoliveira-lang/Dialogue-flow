@@ -420,18 +420,21 @@ class Jogador:
         if "minha_vida" not in dets or "vida_rival" not in dets:
             return
         eu, rv = medir(quadro, dets["minha_vida"]), medir(quadro, dets["vida_rival"])
-        placar = self.__dict__.setdefault("placar", {"vitorias": 0, "derrotas": 0, "fechado": False})
+        placar = self.__dict__.setdefault("placar", {"vitorias": 0, "derrotas": 0, "fechado": True})
+        hud = eu + rv > float((getattr(self, "estrategia", None) or {}).get("hud_min", 0.08))
+        fim = hud and ((eu > 0.05 and rv <= 0.01) or (rv > 0.05 and eu <= 0.01))
+        self._fim_n = (getattr(self, "_fim_n", 0) + 1) if fim else 0
         cfg = getattr(self, "estrategia", None) or {}
         peso = float(cfg.get("peso_resultado", 3.0))
-        if not placar["fechado"] and eu > 0.05 and rv <= 0.01:
+        if not placar["fechado"] and self._fim_n >= 3 and eu > 0.05 and rv <= 0.01:
             placar["vitorias"] += 1
             placar["fechado"] = True
             self.nota(peso, 20)
-        elif not placar["fechado"] and rv > 0.05 and eu <= 0.01:
+        elif not placar["fechado"] and self._fim_n >= 3 and rv > 0.05 and eu <= 0.01:
             placar["derrotas"] += 1
             placar["fechado"] = True
             self.nota(-peso, 20)
-        elif eu > 0.5 and rv > 0.5:
+        elif eu > 0.9 and rv > 0.9:
             placar["fechado"] = False  # round novo
         ctx["virada"] = eu + float(cfg.get("margem_virada", 0.15)) < rv
         ctx["vida"] = [round(eu, 3), round(rv, 3)]
@@ -444,7 +447,7 @@ class Jogador:
             self._hud_t = agora
             return True
         # HUD pisca (clarão, golpe especial, zoom): continua lutando por um instante em vez de congelar
-        return agora - getattr(self, "_hud_t", -9) < float(self.estrategia.get("hud_memoria_s", 1.2))
+        return agora - getattr(self, "_hud_t", -9) < float(self.estrategia.get("hud_memoria_s", 0.6))
 
     def especialista(self, s, ctx):
         """Joga bem desde o início: lista de golpes por situação (do estudo: dados de quadro e combos do jogo),
@@ -456,6 +459,10 @@ class Jogador:
         sit = cfg.get("situacoes", {})
         lista = (sit.get(f"{faixa}|{alt}") or sit.get(f"*|{alt}") or sit.get(f"{faixa}|*") or sit.get("*") or [])
         lista = [h for h in lista if h in self.cerebro.hab] or self.cerebro.hab
+        if faixa != "perto":
+            # soco/chute no vazio entrega punição: golpe de curto alcance só com o rival perto
+            curtos = set(cfg.get("curto_alcance", cfg.get("ataques", [])))
+            lista = [h for h in lista if h not in curtos] or lista
         bloqueados = [r for (_s, h, r) in self.ultimos[-int(cfg.get("janela_bloqueio", 3)):]
                       if h in cfg.get("ataques", lista)]
         if (cfg.get("anti_bloqueio") and faixa == "perto" and len(bloqueados) >= int(cfg.get("janela_bloqueio", 3))
@@ -485,7 +492,7 @@ class Jogador:
         levou = vida is not None and vida_ant is not None and vida_ant - vida > float(cfg.get("dano_min", 0.01))
         ultimo = self.ultimos[-1][1] if self.ultimos else None
         if ultimo in cfg.get("defesas", []) and not levou and cfg.get("punir"):
-            if ctx.get("faixa") in ("perto", "medio") and random.random() < float(cfg.get("prob_punir", 0.8)):
+            if ctx.get("faixa") == "perto" and random.random() < float(cfg.get("prob_punir", 0.8)):
                 self.reflexos_usados = getattr(self, "reflexos_usados", 0) + 1
                 return random.choice(cfg["punir"])
         perto = ctx.get("faixa") in tuple(cfg.get("faixas", ["perto", "medio"]))

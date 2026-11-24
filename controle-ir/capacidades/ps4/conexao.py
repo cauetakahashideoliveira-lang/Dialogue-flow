@@ -309,7 +309,7 @@ class Conexao:
         self._ctrl().stick(lado, point=(float(x), float(y)))
 
     # ------------------------------------------------------------ imagem
-    def quadro(self):
+    def quadro(self, cheio=False):
         """Último quadro do jogo como array RGB (ou None)."""
         if not self.receptor:
             return None
@@ -318,6 +318,8 @@ class Conexao:
             return None
         # converter o quadro custa caro no celular: converte já pequeno (320x180 basta, tudo é em frações) e
         # reaproveita enquanto o PS4 não mandar quadro novo (reflexo, jogador e técnico pedem o mesmo quadro)
+        if cheio:  # para o Claude ler menus: tamanho original
+            return f.to_ndarray(format="rgb24")
         cache = getattr(self, "_cache_q", None)
         if cache and cache[0] is f:
             return cache[1]

@@ -307,6 +307,21 @@ class TestCompatPyAV(unittest.TestCase):
         self.assertGreaterEqual(len(quadros), 5)
 
 
+class TestTecnico(unittest.TestCase):
+    def test_interpreta_e_aplica_plano(self):
+        tr = _mod("ps4_treinador_teste", "treinador.py")
+        txt = 'ok {"situacoes": {"perto|chao": ["jab", "inventado", "combo"], "*|ar": ["gancho"]}, "variar": 0.9, "dica": "pune"}'
+        plano = tr.interpretar(txt, {"jab", "combo", "gancho"})
+        self.assertEqual(plano["situacoes"]["perto|chao"], ["jab", "combo"])
+        self.assertEqual(plano["variar"], 0.4)
+        est = tr.aplicar({"situacoes": {"longe|chao": ["tiro"]}}, plano)
+        self.assertEqual(est["situacoes"]["longe|chao"], ["tiro"])
+        self.assertEqual(est["situacoes"]["*|ar"], ["gancho"])
+        self.assertIsNone(tr.interpretar("sem json", {"jab"}))
+        conteudo = tr.montar_pedido({"placar": {"vitorias": 1}}, {"jab": "1"}, est, b"\xff\xd8", "vencer")
+        self.assertEqual(conteudo[0]["type"], "image")
+
+
 class ConexaoFalsa(Gravador):
     conectado = True
 

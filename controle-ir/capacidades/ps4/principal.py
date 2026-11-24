@@ -116,6 +116,8 @@ class Estado:
         self.jog_th = None
         self.jog_parar = threading.Event()
         self.jog_info = {}
+        self.interromper = threading.Event()  # reflexo por quadro corta o golpe em andamento
+        self.tecnico = {}
 
     def conexao(self):
         if self.con is None:
@@ -159,8 +161,10 @@ def rodar_comando(passos, frente=None):
     atom = controle.normalizar(passos, habilidades(), frente=_frente(frente))
     t0 = time.time()
     with E.trava:
+        E.interromper.clear()
         return controle.executar(atom, E.conexao(),
-                                 parar=lambda: E.parar_tarefa.is_set() or _parar_global(t0))
+                                 parar=lambda: (E.parar_tarefa.is_set() or E.interromper.is_set()
+                                                or _parar_global(t0)))
 
 
 def cmd_comando(a):
@@ -273,14 +277,14 @@ def _laco_jogador(cfg):
                 try:
                     conf = _ler(CONF, {})
                     con.conectar(conf.get("ip"), conf.get("usuario"))
-                    time.sleep(1.5)
+                    time.sleep(0.3)
                     # o jogo costuma pausar quando o controle remoto some: "voltar" fecha menus de pausa
                     # (na luta é só um chute traseiro). Configurável por jogo em cfg["ao_reconectar"].
-                    rodar_comando(cfg.get("ao_reconectar") or "bola esperar:600 bola esperar:600")
+                    rodar_comando(cfg.get("ao_reconectar") or "bola esperar:350")
                     E.jog_info["estado_txt"] = "jogando"
                 except Exception as e:  # noqa: BLE001
                     quedas[-1]["reconexao"] = str(e)[:160]
-                    time.sleep(5)
+                    time.sleep(1.5)
                 continue
             r = j.passo(con.quadro, agir, explorar=cfg["explorar"], guardar_quadro=guardar)
             if "erro" in r:
@@ -300,6 +304,70 @@ def _laco_jogador(cfg):
         j.salvar()
         if E.jog_info.get("estado_txt") == "jogando":
             E.jog_info["estado_txt"] = "parado"
+
+
+def _laco_reflexo(cfg):
+    """A cada ~30 ms olha o rival perto (quadro reduzido); se ele se mexe forte enquanto o jogador ataca, corta o
+    golpe em andamento — o passo seguinte do jogador vê o perigo e defende."""
+    import numpy as np
+    con, ant = E.conexao(), None
+    defesas = set(cfg.get("defesas") or [])
+    limiar = float(cfg.get("limiar_mov", 0.05)) * float(cfg.get("fator_quadro", 1.2))
+    E.jog_info["reflexo_cortes"] = 0
+    while E.jog_th and E.jog_th.is_alive() and not E.jog_parar.is_set():
+        time.sleep(float(cfg.get("periodo_ms", 30)) / 1000)
+        q = con.quadro() if con.conectado else None
+        j = E.jogador
+        if q is None or j is None:
+            continue
+        q = q[::4, ::4]
+        ctx = j.ultimo_ctx or {}
+        if ant is not None and ant.shape == q.shape and ctx.get("faixa") == "perto" and ctx.get("rival_x") is not None:
+            H, W = q.shape[:2]
+            x0 = int(max(0, float(ctx["rival_x"]) - 0.12) * W)
+            pedaco = slice(int(0.3 * H), int(0.9 * H)), slice(x0, x0 + int(0.24 * W))
+            mov = float(np.abs(q[pedaco].astype(np.int16) - ant[pedaco].astype(np.int16)).mean() / 255.0)
+            atual = j.ultimos[-1][1] if j.ultimos else None
+            if mov > limiar and atual not in defesas and not E.interromper.is_set():
+                E.interromper.set()
+                E.jog_info["reflexo_cortes"] += 1
+        ant = q
+
+
+def _laco_tecnico(cfg):
+    """Técnico ao vivo: a cada `a_cada_s` manda quadro + relatório ao modelo e aplica o plano novo."""
+    tr = _mod("treinador")
+    chave = tr.ler_chave(BASE)
+    if not chave:
+        E.tecnico["erro"] = "sem chave da Anthropic (~/.controle-ir/anthropic.key)"
+        return
+    modelo = cfg.get("modelo", "claude-haiku-5-5")
+    while E.jog_th and E.jog_th.is_alive() and not E.jog_parar.is_set():
+        time.sleep(max(3.0, float(cfg.get("a_cada_s", 8))))
+        j, con = E.jogador, E.conexao()
+        if not j or not getattr(j, "estrategia", None):
+            continue
+        q = con.quadro() if con.conectado else None
+        jpeg = None
+        if q is not None:
+            mime, dados = codificar(reduzir_imagem(q, 480))
+            jpeg = dados if mime == "image/jpeg" else None
+        hs = habilidades()
+        nomes = {h: hs.get(h, {}).get("descricao", "") for h in j.cerebro.hab}
+        try:
+            t0 = time.monotonic()
+            texto = tr.perguntar(chave, modelo, tr.montar_pedido(j.relatorio(), nomes, j.estrategia, jpeg,
+                                                                  cfg.get("objetivo", "vencer sempre")))
+            plano = tr.interpretar(texto, set(nomes))
+            E.tecnico["consultas"] = E.tecnico.get("consultas", 0) + 1
+            E.tecnico["ms"] = int((time.monotonic() - t0) * 1000)
+            if plano:
+                tr.aplicar(j.estrategia, plano)
+                E.tecnico["ultimo_plano"] = plano
+            else:
+                E.tecnico["sem_plano"] = texto[:200]
+        except Exception as e:  # noqa: BLE001
+            E.tecnico["erro"] = str(e)[:200]
 
 
 def cmd_jogador(a):
@@ -348,6 +416,12 @@ def cmd_jogador(a):
         E.jog_info = {"cfg": cfg, "jogo": jogo}
         E.jog_th = threading.Thread(target=_laco_jogador, args=(cfg,), name="ps4-jogador", daemon=True)
         E.jog_th.start()
+        if (a.get("reflexos") or {}).get("quadro_a_quadro"):
+            threading.Thread(target=_laco_reflexo, args=(a["reflexos"],), name="ps4-reflexo", daemon=True).start()
+        if a.get("tecnico"):
+            E.tecnico = {"cfg": dict(a["tecnico"]), "consultas": 0}
+            threading.Thread(target=_laco_tecnico, args=(dict(a["tecnico"]),), name="ps4-tecnico",
+                             daemon=True).start()
         return {"jogando": jogo, "habilidades": nomes, "detectores": len(det), **cfg}
     if modo == "parar":
         E.jog_parar.set()
@@ -360,7 +434,8 @@ def cmd_jogador(a):
         E.jogador = jog.Jogador(os.path.join(PASTA, "jogadores"), jogo, list(habilidades()), None)
     j = E.jogador
     if modo == "estado":
-        return {"rodando": bool(E.jog_th and E.jog_th.is_alive()), "info": E.jog_info,
+        return {"rodando": bool(E.jog_th and E.jog_th.is_alive()), "info": E.jog_info, "tecnico": E.tecnico,
+                "placar": getattr(j, "placar", None),
                 "passos_total": j.passos_total, "estados": len(j.estados.prot)}
     if modo == "relatorio":
         return j.relatorio()

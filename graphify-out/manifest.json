@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795478568.6812074,
-    "seen": 1795478631.342053,
-    "ast_hash": "3b8078fc938ccf1dd265df23e1ded691",
+    "mtime": 1795478852.8153043,
+    "seen": 1795478915.0812097,
+    "ast_hash": "6a4e65e948676022ccaa62597a38d6ca",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -780,9 +780,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/ps4/capacidade.json": {
-    "mtime": 1795478156.5363822,
-    "seen": 1795478229.0260472,
-    "ast_hash": "15ea4ca568286426c392e8703c4323a4",
+    "mtime": 1795478851.7280173,
+    "seen": 1795478915.0811813,
+    "ast_hash": "9172470a82cf77f2a879d098c11880e9",
     "semantic_hash": ""
   },
   "controle-ir/capacidades/ps4/conexao.py": {
@@ -804,21 +804,27 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/ps4/principal.py": {
-    "mtime": 1795478156.5254872,
-    "seen": 1795478229.0260568,
-    "ast_hash": "4ddd49c08674d68362e23be648e05c9f",
+    "mtime": 1795478851.718976,
+    "seen": 1795478915.0811882,
+    "ast_hash": "22eb30a59f88816b2fabf010eb6b47d5",
     "semantic_hash": ""
   },
   "testes/test_ps4.py": {
-    "mtime": 1795478567.5865557,
-    "seen": 1795478631.3422844,
-    "ast_hash": "de0cc29c638efb838723bf846325ff38",
+    "mtime": 1795478851.7284365,
+    "seen": 1795478915.0813112,
+    "ast_hash": "fd43b40c8eeecd9a78d31bc1f5c50421",
     "semantic_hash": ""
   },
   "docs/ps4.md": {
     "mtime": 1795475625.5291617,
     "seen": 1795476080.5506942,
     "ast_hash": "8ba1d4aa9e3b459fd8f4e55e9e1bdff2",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/ps4/treinador.py": {
+    "mtime": 1795478822.2058315,
+    "seen": 1795478915.0811899,
+    "ast_hash": "0605c63c745106d24548e3245196bad1",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

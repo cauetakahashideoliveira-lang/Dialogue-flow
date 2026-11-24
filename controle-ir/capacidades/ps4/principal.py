@@ -116,7 +116,8 @@ class Estado:
         self.jog_th = None
         self.jog_parar = threading.Event()
         self.jog_info = {}
-        self.interromper = threading.Event()  # reflexo por quadro corta o golpe em andamento
+        self.interromper = threading.Event()
+        self.guarda_ate = 0.0  # reflexo manda segurar o bloqueio até este instante (estende enquanto o rival ataca)  # reflexo por quadro corta o golpe em andamento
         self.tecnico = {}
 
     def conexao(self):
@@ -286,6 +287,23 @@ def _laco_jogador(cfg):
                     quedas[-1]["reconexao"] = str(e)[:160]
                     time.sleep(1.5)
                 continue
+            if time.monotonic() < E.guarda_ate:
+                # GUARDA: segura R1 até o ataque do rival acabar (máx. 1,5 s), depois pune na hora
+                ini = time.monotonic()
+                try:
+                    with E.trava:
+                        con.apertar("R1")
+                        while time.monotonic() < E.guarda_ate and time.monotonic() - ini < 1.5 \
+                                and not E.jog_parar.is_set():
+                            time.sleep(0.015)
+                        con.soltar("R1")
+                except Exception:  # noqa: BLE001
+                    pass
+                E.jog_info["guardas"] = E.jog_info.get("guardas", 0) + 1
+                E.jog_info["guarda_ms_total"] = E.jog_info.get("guarda_ms_total", 0) + \
+                    int((time.monotonic() - ini) * 1000)
+                defesa = ((j.reflexos or {}).get("defesas") or ["guarda"])[0]
+                j.ultimos = (j.ultimos + [(-1, defesa, 0.0)])[-20:]  # o reflexo pune no passo seguinte
             r = j.passo(con.quadro, agir, explorar=cfg["explorar"], guardar_quadro=guardar)
             if "erro" in r:
                 time.sleep(0.25 if r.get("erro") == "fora da luta" else 0.5)
@@ -328,9 +346,12 @@ def _laco_reflexo(cfg):
             pedaco = slice(int(0.3 * H), int(0.9 * H)), slice(x0, x0 + int(0.24 * W))
             mov = float(np.abs(q[pedaco].astype(np.int16) - ant[pedaco].astype(np.int16)).mean() / 255.0)
             atual = j.ultimos[-1][1] if j.ultimos else None
-            if mov > limiar and atual not in defesas and not E.interromper.is_set():
-                E.interromper.set()
-                E.jog_info["reflexo_cortes"] += 1
+            if mov > limiar:
+                # guarda contínua: segura o bloqueio enquanto o rival perto ataca (+janela após o último movimento)
+                E.guarda_ate = time.monotonic() + float(cfg.get("guarda_ms", 220)) / 1000
+                if atual not in defesas and not E.interromper.is_set():
+                    E.interromper.set()
+                    E.jog_info["reflexo_cortes"] += 1
         ant = q
 
 

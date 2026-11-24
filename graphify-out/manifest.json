@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795479130.8036914,
-    "seen": 1795479133.3330376,
-    "ast_hash": "33e1268215973bf1bb33624fc06ddc2f",
+    "mtime": 1795479571.7973878,
+    "seen": 1795479634.8886926,
+    "ast_hash": "766f4d9939323b458a0bf638764481f2",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -804,9 +804,9 @@
     "semantic_hash": ""
   },
   "controle-ir/capacidades/ps4/principal.py": {
-    "mtime": 1795478851.718976,
-    "seen": 1795478915.0811882,
-    "ast_hash": "22eb30a59f88816b2fabf010eb6b47d5",
+    "mtime": 1795479570.7125223,
+    "seen": 1795479634.8886733,
+    "ast_hash": "5d3e8a0fff59dec6fde92224393859f1",
     "semantic_hash": ""
   },
   "testes/test_ps4.py": {

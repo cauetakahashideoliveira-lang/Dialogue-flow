@@ -1,7 +1,7 @@
 # Graph Report - Dialogue-flow  (2026-11-24)
 
 ## Corpus Check
-- 130 files · ~188,050 words
+- 130 files · ~188,179 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 15 file(s) not represented in the graph (top: (none) 3, .ir 3, .jsonl 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 157,587 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `535fcea1`
+- Built from commit: `786843e3`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -565,16 +565,16 @@ Nodes (3): calcular(), ev(), escolher_pela_conta()
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Servico` connect `Servico` to `Descoberta`, `Sinal`, `Controlador`, `Segurança do controle-ir: administração externa, armação e auditoria`, `Catalogo`, `ServidorMCP`, `Execucao`, `TestTela`, `cli.py`, `TestJogador`, `servico.py`, `Sinal`, `Registro`, `normalizar`, `criar_servidor`, `test_controle_ir.py`, `Aparelhos`, `Variante Gree a partir da captura real (troca só os bits)`, `_iniciar`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
 - **Are the 21 inferred relationships involving `Servico` (e.g. with `Aparelhos` and `ErroAparelho`) actually correct?**
   _`Servico` has 21 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Versão do servidor (celular 1.0.4, repositório 1.0.5)` to the rest of the system?**
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `index.js` be split into smaller, more focused modules?**
   _Cohesion score 0.08208955223880597 - nodes in this community are weakly interconnected._
-- **Why does `Celular` connect `Celular` to `test_controle_ir.py`, `.injetar`, `TestExecutorObjetivo`, `.test_memoria_guarda_so_o_caminho_certo_sem_desvios`, `test_objetivo.py`?**
-  _High betweenness centrality (0.028) - this node is a cross-community bridge._
+- **Why does `TestPiloto` connect `TestPiloto` to `test_controle_ir.py`?**
+  _High betweenness centrality (0.023) - this node is a cross-community bridge._
 - **Should `Descoberta` be split into smaller, more focused modules?**
   _Cohesion score 0.1346153846153846 - nodes in this community are weakly interconnected._
-- **Should `Modo deus — arquitetura evolutiva e mapa de oportunidades` be split into smaller, more focused modules?**
-  _Cohesion score 0.1111111111111111 - nodes in this community are weakly interconnected._
+- **Why does `f()` connect `f` to `tela/principal.py`, `Descoberta`, `tcl112.py`, `.test_memoria_guarda_so_o_caminho_certo_sem_desvios`, `jogador.py`, `json`, `Catalogo`, `Execucao`, `os`, `objetivo.py`, `fechar_anuncio`, `atualizar`, `ps4/principal.py`, `descobrir_rede/principal.py`, `sonar/principal.py`, `modos/principal.py`, `TestSonarFrequencia`, `_objetivo`, `CelularFalso`, `vigia.py`, `sinais.py`, `Conexao`, `Aparelhos`, `bluetooth/principal.py`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._

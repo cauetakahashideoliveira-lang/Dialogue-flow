@@ -189,3 +189,7 @@ xadrez — vitórias contra os robôs de 1200 (blitz), 2500 e **3200 "Máximo" (
 | 5 | Revalidar sensores em hardware da nova instalação. | Testar bipe, calibrar temperatura com referência e repetir sono/sonar com autorização do dono. O simulador valida a lógica; os dados físicos dependem do aparelho. |
 
 A cobertura publicada inclui testes de software e medições históricas no POCO de referência. A instalação em outra conta Cloudflare, o pareamento de outro Android e os ensaios físicos acima são os próximos testes de integração. [Plano das baterias](../benchmarks/2026-11-20-planejador/README.md) · [histórico do laboratório](estado-atual.md)
+
+## Roblox Studio no celular (Winlator)
+
+Estado, armadilhas e próximos passos: [roblox-studio-winlator.md](roblox-studio-winlator.md).

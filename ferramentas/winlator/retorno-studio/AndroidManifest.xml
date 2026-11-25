@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Recebe o retorno do login do Roblox Studio (roblox-studio-auth:) que o Chrome do Android não sabe abrir e o
+     deixa no log do sistema para o Controle IR entregar ao Studio dentro do Winlator. Sem permissões. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="br.controleir.retornostudio">
+    <application android:label="Retorno Roblox Studio" android:allowBackup="false" android:hasCode="true">
+        <activity android:name=".Retorno" android:exported="true" android:excludeFromRecents="true"
+            android:noHistory="true" android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="roblox-studio-auth" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

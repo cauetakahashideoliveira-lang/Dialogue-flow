@@ -40,6 +40,11 @@ código graváveis pelo mesmo usuário que roda os comandos remotos. Histórico 
   (de preferência noutro aparelho). Perfis não destravam.
 - **Travar é definitivo pelo lado remoto:** nega tudo menos consultar/politica/travar, encerra tarefas e cria
   `~/.controle-ir/PARAR`, que encerra os laços do sono e do termômetro. Sobrevive a reinício (arquivo).
+- **Trava com o celular pareado (1.0.129):** a trava local (feita no celular ou pelo conector) guarda a seq do
+  painel em que aconteceu (`travado_seq`). Um estado assinado mais novo, ou seja, armar de novo na Central com a
+  digital, solta essa trava e apaga o `PARAR`, com registro na auditoria (`destravado_pelo_painel`). A EMERGÊNCIA
+  do painel continua travando até o próximo armar. Pelo conector não há saída: nada que ele faz gera estado
+  assinado.
 - **Classe `protegido`:** comandos que citam a config, a política, as aprovações, a auditoria, o ngrok, `~/.ssh`,
   `/proc/*/environ` ou `~/.termux/boot` são negados em qualquer perfil (barreira contra o caminho óbvio, não
   isolamento — ver limites).
@@ -71,6 +76,10 @@ sozinho: quem arma é o painel, com a digital.
   estado velho reaproveitado). Sem estado válido, ou com o token revogado: **desarmado** (falha fechada).
   Pareado, `controle-ir armar` no celular é recusado; `desarmar`/`travar` locais continuam valendo (veto local).
 - **Aplicado × pendente:** o celular confirma (`ack`) a sequência que aplicou; o painel mostra “pendente” até lá.
+  Desde a Central 2026-11-26.5 e o celular 1.0.129, o `ack` também leva o estado **efetivo** (armado, travado,
+  trava local, vetado). “✓ aplicado” só aparece quando esse estado concorda com a Central. Se não concorda, o cartão
+  diz “TRAVADO no celular” ou “desarmado no celular (veto local)”. O relato vale só para a seq confirmada: com um
+  estado mais novo ainda não buscado, o cartão diz “pendente”.
 - **Auditoria:** eventos do painel e do celular (até 100 por busca, textos truncados) num histórico encadeado por
   hash no D1; o botão “Conferir integridade” aponta o primeiro evento adulterado.
 - **Latência medida:** armar/desarmar/emergência chegam ao celular na próxima busca (≤ 30 s + rede); com o
@@ -81,7 +90,7 @@ sozinho: quem arma é o painel, com a digital.
   arquivo e o painel ignora reenvios. Sem rede ou com tempo esgotado, o celular só tenta de novo em 30 s.
 - **iPad/Safari:** as opções da passkey são buscadas antes do toque (o Safari só abre o Face ID logo depois do
   toque); um convite só é gasto quando a passkey nova é aceita.
-- **Evidência:** `node painel/testes/e2e.cjs` (Chromium com autenticador virtual + código real do celular, 30
+- **Evidência:** `node painel/testes/e2e.cjs` (Chromium com autenticador virtual + código real do celular, 88
   verificações) e `testes/test_controle_ir.py::TestPainel`.
 - **Raiz de confiança:** a conta da Cloudflare (quem a controla altera o Worker). Use 2FA nela. Recuperação se
   perder todas as passkeys: no D1 (Cloudflare → D1 → painel → Console) `UPDATE credenciais SET revogada = 1;` e
@@ -155,6 +164,19 @@ Propriedades de segurança (nada afrouxa):
   resposta da primeira se a mesma chamada (corpo idêntico) chegar enquanto ela roda ou até 3 s depois (1.0.46).
 - **Custo:** batidas a cada 25 s respondidas automaticamente pelo objeto sem acordá-lo (hibernação) — zero de
   processamento parado; bateria do celular ~ a de um app de mensagens.
+- **Resiliência (26/11, Central 2026-11-26.5 e celular 1.0.129):**
+  - **A lista de ferramentas nunca sai sem o celular.** A Central guarda o último `tools/list` e o `initialize`
+    do celular. Com o canal caído, espera até 10 s; se ele não voltar, entrega o guardado com o aviso de que o
+    celular está reconectando.
+  - **Uma chamada no meio de uma queda espera o canal** (até 10 s) e repete uma vez, com a mesma assinatura.
+    Depois disso, devolve um aviso claro em português, nunca um erro cru.
+  - **No celular, o canal não morre em silêncio.** Exceção inesperada é registrada e o canal reconecta; o ping sai
+    pelo relógio, mesmo com tráfego contínuo. Um cão de guarda confere a cada 30 s o canal e a sincronização e
+    reinicia a thread que tiver morrido. Os erros da sincronização aparecem no log e em `consultar`
+    (`painel_sync`).
+  - **Deploy da Central derruba os canais** (o Worker novo começa sem conexões). O celular volta sozinho em
+    segundos, e nesse intervalo valem a lista guardada e a espera acima. Para evitar deploys sem necessidade,
+    configure na Cloudflare (Workers → painel → Settings → Build) os *watch paths* como `painel/**`.
 
 #### Planejado (próximas etapas)
 

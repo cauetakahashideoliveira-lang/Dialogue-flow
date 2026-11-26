@@ -42,8 +42,15 @@ def permitido(ferramenta: str, pol: dict, agora: float | None = None) -> tuple[b
     if ferramenta in SEMPRE:
         return True, "sempre"
     if pol.get("travado"):
+        if not pol.get("modo_painel"):
+            volta = COMO_ARMAR
+        elif pol.get("trava_local"):  # trava feita no celular ou pelo conector: o próximo estado assinado a solta
+            volta = ("arme de novo pela Central de Controle, com a digital (isso também solta a trava) ou, no "
+                     "próprio celular (Termux), controle-ir exec destravar")
+        else:
+            volta = "arme de novo pela Central de Controle, com a digital (armar desliga a EMERGÊNCIA)"
         return False, ("execução TRAVADA no celular: só consultar, politica e travar respondem. "
-                       "Para voltar, " + como)
+                       "Para voltar, " + volta)
     if armado(pol, agora):
         return True, "armado"
     if pol.get("desarmado_permite", "ir") == "ir" and ferramenta in BAIXO_RISCO:

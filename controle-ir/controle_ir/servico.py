@@ -40,6 +40,7 @@ class Servico:
         self.ultima_requisicao_claude: float | None = None
         self.url_publica: str | None = None
         self.canal = None  # canal direto com a Central (controle_ir.canal), quando pareado
+        self.sinc = None  # sincronização com a Central (controle_ir.painel.Sincronizador), quando pareado
         self.inicio = agora()
 
     # ------------------------------------------------------------- consulta
@@ -47,7 +48,8 @@ class Servico:
         est = self.cat.estatisticas()
         out = {
             "servidor": {"versao": __version__, "ativo_desde": hora_legivel(self.inicio),
-                         **({"canal": self.canal.estado()} if self.canal else {})},
+                         **({"canal": self.canal.estado()} if self.canal else {}),
+                         **({"painel_sync": self.sinc.resumo()} if self.sinc else {})},
             "emissor": self.emissor.disponivel(),
             "catalogo": {"perfis": est["perfis"], "sinais_unicos": est["sinais_unicos"], "marcas": est["marcas"],
                          "categorias": est["categorias"], "fontes": est["fontes"]},
@@ -520,11 +522,11 @@ class Servico:
         raise ErroUso("acao deve ser listar, ver ou anotar")
 
     def executar_capacidade(self, nome, argumentos=None) -> dict:
-        from .seguranca import armado
+        from .seguranca import armado, permitido
         pol = self.exec.politica.efetiva()
         if pol["travado"] or not armado(pol):  # o guardião do MCP já barra; aqui vale para qualquer outro caminho
-            raise ErroUso("capacidades exigem o sistema armado e destravado: arme no celular (widget “Armar "
-                          "Controle IR” ou controle-ir armar)")
+            raise ErroUso("capacidades exigem o sistema armado e destravado: "
+                          + permitido("executar_capacidade", pol)[1])
         try:
             return self.reg.executar(str(nome), argumentos or {}, {"CONTROLE_IR_DIR": str(self.pasta)})
         except ErroCapacidade as e:
@@ -575,9 +577,10 @@ class Servico:
         modo = self.exec.politica.ler()["aprovacao_remota"]
         if modo != "codigo":
             self.exec.auditar({"evento": "autorizacao_remota", "resultado": "recusada_sem_codigo"})
-            raise ErroUso("aprovação remota desligada: aprove no celular (notificação, widget “Armar Controle IR” "
-                          "ou controle-ir exec destravar). Para aprovar daqui, o dono configura o código do "
-                          "autenticador no celular: controle-ir exec codigo configurar")
+            raise ErroUso("aprovação remota desligada: aprove no celular (notificação ou, no Termux, controle-ir "
+                          "exec destravar) ou, pareado, arme de novo pela Central de Controle, com a digital. Para "
+                          "aprovar daqui, o dono configura o código do autenticador no celular: controle-ir exec "
+                          "codigo configurar")
         if modo == "codigo":
             try:
                 ok = self.exec.autorizacao.verificar(codigo)
@@ -615,19 +618,17 @@ class Servico:
 
     def travar(self) -> dict:
         """Freio de qualquer lugar (só tira poder): nega tudo e encerra as tarefas em andamento."""
-        p = self.exec.politica.ler()
-        p["travado"], p["liberado_ate"] = True, 0
-        self.exec.politica.gravar(p)
-        try:  # os laços em 2º plano das capacidades (sono, termômetro) param ao ver este arquivo
-            (Path(self.pasta) / "PARAR").write_text(str(time.time()))
-        except OSError:
-            pass
-        n = self.exec.parar_todas()
-        self.exec.auditar({"evento": "travado_remotamente", "tarefas_encerradas": n})
+        pol = self.exec.politica
+        r = pol.travar("conector", parar=self.exec.parar_todas, auditar=self.exec.auditar)  # também grava PARAR
+        n = r["tarefas_encerradas"]
         self.exec.notificar({"tipo": "alerta", "texto": f"Execução TRAVADA pelo Claude ({n} tarefa(s) encerrada(s))"})
-        return {"travado": True, "tarefas_encerradas": n,
-                "destravar": "só no celular: widget “Armar Controle IR” ou controle-ir armar · ou "
-                             "autorizar(codigo do autenticador, destravar=true)"}
+        if r.get("travado_seq") is not None:  # pareado
+            destravar = ("o dono arma de novo na Central de Controle, com a digital (isso solta a trava) · ou, no "
+                         "celular (Termux): controle-ir exec destravar")
+        else:
+            destravar = ("só no celular: widget “Armar Controle IR” ou controle-ir armar · ou "
+                         "autorizar(codigo do autenticador, destravar=true)")
+        return {"travado": True, "tarefas_encerradas": n, "destravar": destravar}
 
     def atualizar_sistema(self, ref, motivo=None, aguardar=40) -> dict:
         import re

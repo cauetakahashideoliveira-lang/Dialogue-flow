@@ -11,7 +11,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 const SESSAO_MAX = 12 * 3600, SESSAO_OCIOSA = 30 * 60, PASSKEY_FRESCA = 120, DESAFIO = 300, PAREAMENTO = 600;
 const HORAS_MAX = 24;
-const VERSAO_CENTRAL = '2026-11-26.4';  // suba a cada mudança da Central (aparece em /versao)
+const VERSAO_CENTRAL = '2026-11-26.5';  // suba a cada mudança da Central (aparece em /versao)
 const agora = () => Math.floor(Date.now() / 1000);
 const enc = new TextEncoder();
 
@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS observacao (aparelho TEXT PRIMARY KEY, observar_ate I
   ao_vivo_ate INTEGER NOT NULL DEFAULT 0, em_uso TEXT, em_uso_em INTEGER);
 CREATE TABLE IF NOT EXISTS quadros (aparelho TEXT PRIMARY KEY, jpeg TEXT NOT NULL, quando INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS ferramentas_pc (aparelho TEXT PRIMARY KEY, lista TEXT NOT NULL, quando INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS ferramentas_celular (aparelho TEXT PRIMARY KEY, ferramentas TEXT, inicio TEXT, em INTEGER);
+CREATE TABLE IF NOT EXISTS efetivo (aparelho TEXT PRIMARY KEY, dados TEXT NOT NULL, quando INTEGER NOT NULL);
 `;
 let esquemaPronto = false;
 async function inicializar(env) {
@@ -287,11 +289,14 @@ async function estadoDe(env, aparelho) {
 async function mudarEstado(env, aparelho, mudanca, por, motivo) {
   const e = { ...(await estadoDe(env, aparelho)), ...mudanca };
   e.seq += 1;
-  await env.DB.prepare(`INSERT INTO estado (aparelho, seq, armado_ate, travado, desarmado_permite, motivo, alterado_por, alterado_em)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(aparelho) DO UPDATE SET seq = excluded.seq, armado_ate = excluded.armado_ate,
+  // a seq sobe no próprio banco (atômico): dois pedidos ao mesmo tempo (dois toques em armar) liam a mesma seq e
+  // gravavam o mesmo número com conteúdos diferentes — o celular, que só aplica seq mais nova, ignorava o segundo
+  const novo = await env.DB.prepare(`INSERT INTO estado (aparelho, seq, armado_ate, travado, desarmado_permite, motivo, alterado_por, alterado_em)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(aparelho) DO UPDATE SET seq = MAX(estado.seq + 1, excluded.seq), armado_ate = excluded.armado_ate,
     travado = excluded.travado, desarmado_permite = excluded.desarmado_permite, motivo = excluded.motivo,
-    alterado_por = excluded.alterado_por, alterado_em = excluded.alterado_em`)
-    .bind(aparelho, e.seq, e.armado_ate, e.travado, e.desarmado_permite, motivo, por, agora()).run();
+    alterado_por = excluded.alterado_por, alterado_em = excluded.alterado_em RETURNING seq`)
+    .bind(aparelho, e.seq, e.armado_ate, e.travado, e.desarmado_permite, motivo, por, agora()).first();
+  if (novo && Number.isInteger(novo.seq)) e.seq = novo.seq;
   await registrar(env, 'painel', 'estado_alterado', { aparelho, seq: e.seq, armado_ate: e.armado_ate, travado: e.travado,
     desarmado_permite: e.desarmado_permite, motivo });
   return e;
@@ -318,6 +323,9 @@ async function abrirCanal(req, env) {
   return canalDe(env, ap.id).fetch(new Request('https://canal/conectar', req));
 }
 
+const CANAL_CAIU = 'CANAL_CAIU';  // a conexão caiu com a chamada pendente (vira 503: a Central espera e repete)
+function idDoSocket(ws) { try { return ws.deserializeAttachment()?.id || null; } catch { return null; } }
+
 export class Canal extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -325,15 +333,18 @@ export class Canal extends DurableObject {
     // as batidas do celular ("ping") são respondidas sem acordar o objeto: canal parado não custa nada
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
-  socket() {  // o canal vivo: o celular bate ("ping") a cada 25 s; sem batida há 70 s, a conexão morreu calada
+  socket() {  // o canal vivo: o celular bate ("ping") depois de 25 s parado; sem sinal de vida há 70 s, morreu calada
     // getWebSockets() ainda devolve a conexão que fechamos e cujo outro lado morreu sem responder (fica em CLOSING
-    // até o runtime desistir), e a ordem da lista não é garantida: escolhe a conexão ABERTA com batida mais recente.
+    // até o runtime desistir), e a ordem da lista não é garantida: escolhe a conexão ABERTA com vida mais recente.
     // Antes pegava a última da lista, e uma conexão fantasma (o PC perdeu a internet no meio) escondia a nova.
+    // Vida = batida, abertura OU qualquer mensagem do aparelho (ok/res): com chamadas seguidas o celular não bate, e
+    // contar só a batida fazia a Central fechar como "mudo" um canal saudável no meio do tráfego.
     let ws = null, ultimo = 0;
     for (const s of this.ctx.getWebSockets()) {
       if (s.readyState === 2 || s.readyState === 3) continue;  // CLOSING/CLOSED (a fantasma); só pula o que está fechando
       const batida = this.ctx.getWebSocketAutoResponseTimestamp(s);
-      const t = Math.max(batida ? batida.getTime() : 0, s.deserializeAttachment()?.desde || 0);
+      const a = s.deserializeAttachment() || {};
+      const t = Math.max(batida ? batida.getTime() : 0, a.desde || 0, a.ativo || 0);
       if (!ws || t > ultimo) { ws = s; ultimo = t; }
     }
     if (!ws) return null;
@@ -343,10 +354,15 @@ export class Canal extends DurableObject {
   async fetch(req) {
     const u = new URL(req.url);
     if (u.pathname === '/conectar') {
-      for (const velho of this.ctx.getWebSockets()) try { velho.close(4000, 'substituído por conexão nova'); } catch { }
+      for (const velho of this.ctx.getWebSockets()) {
+        try { velho.close(4000, 'substituído por conexão nova'); } catch { }
+        // o que ia pela conexão velha não volta mais por ela: falha já (a Central espera o canal novo e repete)
+        const sock = idDoSocket(velho);
+        if (sock) this.falharTudo(CANAL_CAIU, sock);
+      }
       const [cliente, servidor] = Object.values(new WebSocketPair());
       this.ctx.acceptWebSocket(servidor);
-      servidor.serializeAttachment({ desde: Date.now() });
+      servidor.serializeAttachment({ desde: Date.now(), id: crypto.randomUUID() });
       return new Response(null, { status: 101, webSocket: cliente });
     }
     if (u.pathname === '/estado') {
@@ -375,7 +391,7 @@ export class Canal extends DurableObject {
           try { ws.close(4002, 'sem confirmação'); } catch { }
           falha(new Error('SEM_CONFIRMACAO'));
         }, 5000);
-        this.pendentes.set(id, { ok, falha, t, sem });
+        this.pendentes.set(id, { ok, falha, t, sem, sock: idDoSocket(ws) });
       });
       try { ws.send(JSON.stringify({ t: 'req', id, h, b: corpo })); } catch {
         clearTimeout(this.pendentes.get(id)?.t); this.pendentes.delete(id);
@@ -386,12 +402,19 @@ export class Canal extends DurableObject {
         return new Response(r.b ?? '', { status: r.s || 200, headers: { 'content-type': r.h?.['content-type'] || 'application/json' } });
       } catch (e) {
         if (e.message === 'SEM_CONFIRMACAO') return new Response('canal mudo', { status: 503 });
+        // perdeu a conexão no meio: 503 também, para a Central esperar o canal e repetir o MESMO pedido (mesma
+        // assinatura: se a primeira já tiver chegado, o aparelho recusa a repetição e nada roda duas vezes)
+        if (e.message === CANAL_CAIU) return new Response('canal caiu no meio da chamada', { status: 503 });
         return Response.json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: String(e.message || e) } }, { status: 504 });
       }
     }
     return new Response('rota desconhecida', { status: 404 });
   }
   async webSocketMessage(ws, msg) {
+    try {  // qualquer mensagem do aparelho é sinal de vida (no máximo uma gravação por segundo)
+      const a = ws.deserializeAttachment() || {}, t = Date.now();
+      if (t - (a.ativo || 0) >= 1000) ws.serializeAttachment({ ...a, ativo: t });
+    } catch { /* sem anexo: vale a batida */ }
     if (typeof msg !== 'string' || msg === 'ping' || msg === 'pong') return;
     let m;
     try { m = JSON.parse(msg); } catch { return; }
@@ -403,15 +426,22 @@ export class Canal extends DurableObject {
     this.pendentes.delete(m.id);
     p.ok(m);
   }
-  falharTudo(motivo) {
-    for (const [id, p] of this.pendentes) { clearTimeout(p.t); clearTimeout(p.sem); p.falha(new Error(motivo)); this.pendentes.delete(id); }
+  falharTudo(motivo, sock = null) {  // sock: só as chamadas que iam por aquela conexão
+    for (const [id, p] of this.pendentes) {
+      if (sock && p.sock !== sock) continue;
+      clearTimeout(p.t); clearTimeout(p.sem); p.falha(new Error(motivo)); this.pendentes.delete(id);
+    }
   }
   async webSocketClose(ws, code, reason) {
     try { ws.close(code, reason); } catch { }
-    if (!this.socket()) this.falharTudo('o canal com o celular caiu no meio da chamada');
+    const sock = idDoSocket(ws);
+    if (sock) this.falharTudo(CANAL_CAIU, sock);
+    if (!this.socket()) this.falharTudo(CANAL_CAIU);
   }
-  async webSocketError() {
-    if (!this.socket()) this.falharTudo('erro no canal com o celular');
+  async webSocketError(ws) {
+    const sock = idDoSocket(ws);
+    if (sock) this.falharTudo(CANAL_CAIU, sock);
+    if (!this.socket()) this.falharTudo(CANAL_CAIU);
   }
 }
 
@@ -501,12 +531,21 @@ async function estadoParaCelular(env, req) {
     observar_ate: o ? o.observar_ate : 0, ao_vivo_ate: o ? o.ao_vivo_ate : 0, canal: true });  // esta Central tem canal direto
 }
 
+const CHAVES_EFETIVO = ['armado', 'travado', 'trava_local', 'vetado'];
 async function ackCelular(env, req, corpo) {
   const ap = await aparelhoDoToken(env, req);
   if (!ap) return erro('aparelho não autorizado', 401);
   const seq = Number(corpo.seq) || 0;
   await env.DB.prepare('UPDATE aparelhos SET aplicado_seq = MAX(aplicado_seq, ?), aplicado_em = ?, versao = ? WHERE id = ?')
     .bind(seq, agora(), String(corpo.versao || ap.versao || '').slice(0, 20), ap.id).run();
+  // estado REAL do aparelho (pode estar travado ou vetado localmente): só as quatro chaves, todas booleanas; o resto é
+  // ignorado. Sem efetivo válido (cliente antigo), apaga o anterior para o painel não mostrar um retrato velho.
+  const ef = corpo.efetivo;
+  if (ef && typeof ef === 'object' && !Array.isArray(ef) && CHAVES_EFETIVO.every(k => typeof ef[k] === 'boolean'))
+    await env.DB.prepare(`INSERT INTO efetivo (aparelho, dados, quando) VALUES (?, ?, ?) ON CONFLICT(aparelho)
+      DO UPDATE SET dados = excluded.dados, quando = excluded.quando`)
+      .bind(ap.id, JSON.stringify({ ...Object.fromEntries(CHAVES_EFETIVO.map(k => [k, ef[k]])), seq }), agora()).run();
+  else await env.DB.prepare('DELETE FROM efetivo WHERE aparelho = ?').bind(ap.id).run();
   if (corpo.em_uso && typeof corpo.em_uso === 'object') {  // o que está em uso no celular agora
     const txt = JSON.stringify(corpo.em_uso).slice(0, 6000);
     await env.DB.prepare(`INSERT INTO observacao (aparelho, em_uso, em_uso_em) VALUES (?, ?, ?) ON CONFLICT(aparelho)
@@ -545,7 +584,20 @@ async function painel(env, s, origem) {
       if (!o || o.observar_ate < t) await empurrar(env, a.id);  // acabou de abrir: relatório agora, não em 30 s
     }
     a.canal = a.revogado ? { conectado: false } : await estadoCanal(env, a.id);
-    a.aplicado = a.aplicado_seq >= a.estado.seq;  // só mostra como aplicado depois que o celular confirmar
+    // "aplicado" só depois que o aparelho confirmar a seq E, se ele relatar o estado real, se esse estado concordar
+    // com a Central (travado ou vetado no próprio celular não é "aplicado")
+    const ef = await env.DB.prepare('SELECT dados, quando FROM efetivo WHERE aparelho = ?').bind(a.id).first();
+    a.efetivo = ef ? { ...JSON.parse(ef.dados), em: ef.quando } : null;
+    const armadaNaCentral = !a.estado.travado && a.estado.armado_ate > t;
+    if (a.efetivo) {
+      // o relato vale para a seq que o aparelho confirmou: com um estado mais novo ainda não buscado, é retrato velho
+      // (o cartão diz "pendente", não "veto local"); e o armado do relato acaba junto com a janela assinada
+      a.efetivo.atual = Number(a.efetivo.seq) >= a.estado.seq;
+      if (a.efetivo.armado && a.efetivo.atual && a.estado.armado_ate <= t) a.efetivo.armado = false;
+    }
+    a.efetivo_concorda = !a.efetivo || !a.efetivo.atual
+      || (a.efetivo.travado === !!a.estado.travado && a.efetivo.armado === armadaNaCentral);
+    a.aplicado = a.aplicado_seq >= a.estado.seq && a.efetivo_concorda;
   }
   const creds = (await env.DB.prepare('SELECT id, nome, criada, ultimo_uso, revogada FROM credenciais ORDER BY criada').all()).results;
   const eventos = (await env.DB.prepare('SELECT id, quando, origem, tipo, dados FROM eventos ORDER BY id DESC LIMIT 150').all()).results;
@@ -839,6 +891,7 @@ async function chamarPC(env, ctx, pc, m, bytes, t0) {
     return resultadoTexto(m.id, { erro: 'o PC está fora do ar: o agente não está conectado à Central (PC desligado, sem internet ou serviço parado)' });
   }
   anotar(`${r.ok ? 'ok' : `HTTP ${r.status}`} · PC`);
+  if (r.status === 401) return resultadoTexto(m.id, { erro: recusouAssinatura('PC') });  // ex.: repetição após queda no meio
   return new Response(r.body, { status: r.status, headers: { 'content-type': r.headers.get('content-type') || 'application/json',
     'cache-control': 'no-store', 'x-via': 'pc' } });
 }
@@ -850,6 +903,79 @@ function lerRpc(texto, tipo) {  // resposta JSON-RPC em JSON ou em SSE (a últim
 const inicioSemCelular = m => ({ protocolVersion: m.params?.protocolVersion || '2025-06-18', capabilities: { tools: {} },
   serverInfo: { name: 'controle-ir', title: 'Central de Controle', version: 'central' },
   instructions: 'O celular está fora do ar agora. O PC Windows do dono responde pelas ferramentas pc_* (desarmado: só pc_consultar e pc_travar). Responda em português.' });
+
+// ---------------------------------------------------------------- celular: lista guardada (C4) e espera (C5)
+// A lista de ferramentas é fixa por conversa: uma conversa aberta numa queda curta do celular (Central republicada,
+// Wi-Fi piscando) ficava para sempre sem as ferramentas dele (26/11, duas vezes). A Central guarda a última lista
+// boa e o último initialize do celular e, quando ele não responde, espera por ele e depois usa o que guardou.
+const ESPERA_CELULAR = 10_000;
+const AVISO_RECONECTANDO = 'Aviso da Central: o celular pode estar reconectando agora; as chamadas a ele esperam e tentam de novo sozinhas.';
+async function comEsquema(env, fn) {  // tabela nova numa Central já em uso: cria o esquema e tenta de novo
+  try { return await fn(); } catch (e) {
+    if (!/no such table/i.test(String(e?.message || e))) throw e;
+    esquemaPronto = false;
+    await inicializar(env);
+    return await fn();
+  }
+}
+const guardarCelular = (env, aparelho, campo, valor) => comEsquema(env, () => env.DB.prepare(  // campo: ferramentas | inicio
+  `INSERT INTO ferramentas_celular (aparelho, ${campo}, em) VALUES (?, ?, ?) ON CONFLICT(aparelho)
+   DO UPDATE SET ${campo} = excluded.${campo}, em = excluded.em`).bind(aparelho, JSON.stringify(valor), agora()).run());
+async function guardadoCelular(env, aparelho) {
+  try {
+    const g = await comEsquema(env, () => env.DB.prepare('SELECT ferramentas, inicio, em FROM ferramentas_celular WHERE aparelho = ?')
+      .bind(aparelho).first());
+    return g ? { ferramentas: g.ferramentas ? JSON.parse(g.ferramentas) : null, inicio: g.inicio ? JSON.parse(g.inicio) : null } : null;
+  } catch { return null; }
+}
+function inicioGuardado(m, g, pc) {  // o initialize do celular, guardado, com uma linha curta no fim das instruções
+  if (g.inicio) return { ...g.inicio, instructions: [g.inicio.instructions, AVISO_RECONECTANDO].filter(Boolean).join('\n') };
+  return { ...inicioSemCelular(m), serverInfo: { name: 'controle-ir', title: 'Central de Controle', version: 'central' },
+    instructions: [AVISO_RECONECTANDO, pc ? 'O PC Windows do dono responde pelas ferramentas pc_* (desarmado: só pc_consultar e pc_travar).' : '',
+      'Responda em português.'].filter(Boolean).join(' ') };
+}
+const haQuanto = t => { const s = Math.max(0, agora() - t); return s < 90 ? `${s} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`; };
+const foraDoAr = ap => `o celular está fora do ar${ap.ultimo_contato ? ` (último contato com a Central há ${haQuanto(ap.ultimo_contato)})` : ''}:`
+  + ` a Central esperou ${ESPERA_CELULAR / 1000} s pelo canal e tentou de novo. A lista de ferramentas continua valendo e as próximas`
+  + ' chamadas tentam de novo sozinhas. Se persistir, abra o Termux no celular ou rode `controle-ir reiniciar`.';
+// HTTP 401 do aparelho numa chamada = assinatura recusada (quase sempre a repetição de uma chamada que já tinha chegado
+// antes de a conexão cair). Vai como resultado de erro: um 401 no /mcp faria o cliente achar que o login venceu.
+const recusouAssinatura = onde => `o ${onde} recusou a assinatura da Central: provavelmente é a repetição de uma chamada que já tinha`
+  + ' chegado antes de a conexão cair (ele não executa duas vezes). Ela pode ter sido executada: confira antes de repetir.';
+const TUNEL_MORTO = new Set([404, 502, 503, 504]);  // ngrok sem o celular do outro lado (ERR_NGROK_3200 é 404) e afins
+const ESPERAM = new Set(['tools/call', 'tools/list', 'initialize']);
+async function pelaCanal(env, ap, cab, bruto) {  // null = sem canal agora (sem conexão, mudo ou caiu no meio)
+  try {
+    const r = await canalDe(env, ap.id).fetch('https://canal/rpc', { method: 'POST', headers: cab, body: bruto });
+    return r.status === 503 ? null : r;
+  } catch { return null; }
+}
+// 1º o canal direto; sem canal, o túnel (ngrok). Se nenhum servir, espera até 10 s o canal do celular voltar e repete
+// UMA vez o MESMO pedido (mesmo id JSON-RPC e mesma assinatura, como o C3 do PC): se o primeiro tiver chegado, o
+// celular recusa a repetição pela proteção contra reenvio — nunca executa duas vezes.
+async function repassarCelular(env, ap, cab, bruto, metodo) {
+  const r = await pelaCanal(env, ap, cab, bruto);
+  if (r) return { r, via: 'canal' };
+  let motivo = 'sem canal direto e sem túnel';
+  if (ap.mcp_url) {
+    try {
+      const rt = await fetch(ap.mcp_url, { method: 'POST', headers: cab, body: bruto });
+      const morto = metodo === 'tools/call' ? TUNEL_MORTO.has(rt.status) : ESPERAM.has(metodo) && !rt.ok;
+      if (!morto) return { r: rt, via: 'túnel' };
+      motivo = `o celular respondeu HTTP ${rt.status} pelo túnel`;
+    } catch (err) { motivo = `o celular não respondeu pelo túnel: ${String(err.message || err).slice(0, 120)}`; }
+  }
+  if (!ESPERAM.has(metodo)) return { r: null, motivo };
+  const fim = Date.now() + ESPERA_CELULAR;
+  while (Date.now() < fim) {
+    await new Promise(z => setTimeout(z, 1000));
+    if ((await estadoCanal(env, ap.id))?.conectado) {
+      const r2 = await pelaCanal(env, ap, cab, bruto);
+      return r2 ? { r: r2, via: 'canal' } : { r: null, motivo };
+    }
+  }
+  return { r: null, motivo };
+}
 
 // Atividade: cada chamada de ferramenta fica registrada (o que, por quê, quais recursos, resultado, tempo)
 const RECURSOS_CAP = { foto: ['câmera'], tela: ['tela'], ouvir_bipe: ['microfone'], sono: ['microfone'],
@@ -909,7 +1035,7 @@ const mcpApi = {
       return new Response(null, { status: 202 });
 
     // O pareamento já criou o esquema. Evita repetir DDL na primeira chamada de cada isolate.
-    const consultar = () => env.DB.prepare(`SELECT a.id, x.mcp_url, e.armado_ate, e.travado, e.desarmado_permite
+    const consultar = () => env.DB.prepare(`SELECT a.id, a.ultimo_contato, x.mcp_url, e.armado_ate, e.travado, e.desarmado_permite
       FROM aparelhos a LEFT JOIN extras x ON x.aparelho = a.id LEFT JOIN estado e ON e.aparelho = a.id
       WHERE a.revogado = 0 AND ${NAO_PC} ORDER BY a.criado LIMIT 1`).first();
     let ap;
@@ -950,50 +1076,49 @@ const mcpApi = {
     const cab = { 'content-type': 'application/json', accept: req.headers.get('accept') || 'application/json, text/event-stream',
       'x-painel-assinatura': await assinarRequisicao(env, bruto), 'ngrok-skip-browser-warning': '1' };
     for (const h of ['mcp-session-id', 'mcp-protocol-version']) if (req.headers.get(h)) cab[h] = req.headers.get(h);
-    // 1º o canal direto (conexão aberta pelo celular: sem túnel); sem canal, o túnel (ngrok) como antes
+    // 1º o canal direto (conexão aberta pelo celular: sem túnel); sem canal, o túnel (ngrok); sem os dois, espera o
+    // canal voltar e repete uma vez (C5)
     const inicioTransporte = Date.now();
-    let r = null, via = 'canal', falha = null;
-    try {
-      const rc = await canalDe(env, ap.id).fetch('https://canal/rpc', { method: 'POST', headers: cab, body: bruto });
-      if (rc.status !== 503) r = rc;
-    } catch { /* objeto do canal indisponível: segue pelo túnel */ }
-    if (!r) {
-      via = 'túnel';
-      if (!ap.mcp_url) falha = rpc(msg?.id, { error: { code: -32000, message: 'o celular está fora do ar (sem canal direto e sem túnel): confira se o serviço controle-ir está ligado' } }, 503);
-      else {
-        try {
-          r = await fetch(ap.mcp_url, { method: 'POST', headers: cab, body: bruto });
-        } catch (err) {
-          falha = rpc(msg?.id, { error: { code: -32000, message: `o celular não respondeu: ${String(err.message || err).slice(0, 120)}` } }, 502);
-        }
-      }
-    }
-    // túnel morto (ngrok sem o celular do outro lado devolve 404 ERR_NGROK_3200, por exemplo): para abrir a conversa
-    // e listar ferramentas, isso também é "celular fora do ar" — sem isso, o conector inteiro cai junto com o celular
-    if (r && !r.ok && pc && (metodo === 'initialize' || metodo === 'tools/list')) {
-      falha = rpc(msg?.id, { error: { code: -32000, message: `o celular respondeu HTTP ${r.status} pelo ${via}` } }, 502);
-      r = null;
-    }
-    if (!r) {  // celular fora do ar: com o PC cadastrado, o conector continua de pé só com ele
-      if (pc && metodo === 'initialize') return rpc(unico.id, { result: inicioSemCelular(unico) });
-      if (listaPC) return rpc(unico.id, { result: { tools: await listaPC } });
-      return falha;
-    }
     const chamada = (Array.isArray(msg) ? msg : [msg]).find(m => m?.method === 'tools/call');
+    const lista = metodo === 'tools/list', inicio = metodo === 'initialize';
+    let { r, via, motivo } = await repassarCelular(env, ap, cab, bruto, chamada ? 'tools/call' : metodo);
+    // canal que respondeu com erro (ex.: 504) também é "celular fora do ar" para abrir a conversa e listar ferramentas
+    if (r && !r.ok && (lista || inicio)) { motivo = `o celular respondeu HTTP ${r.status} pelo ${via}`; r = null; }
+    if (!r) {
+      // celular fora do ar: o que ele respondeu da última vez (C4) unido ao PC; sem nada guardado, só o PC (C1)
+      const g = lista || inicio ? await guardadoCelular(env, ap.id) : null;
+      if (lista && g?.ferramentas) return rpc(unico.id, { result: { tools: [...g.ferramentas.filter(t => !ehPC(t?.name)),
+        ...(listaPC ? await listaPC : [])] } });
+      if (inicio && (g?.inicio || g?.ferramentas)) return rpc(unico.id, { result: inicioGuardado(unico, g, pc) });
+      if (pc && inicio) return rpc(unico.id, { result: inicioSemCelular(unico) });
+      if (listaPC) return rpc(unico.id, { result: { tools: await listaPC } });
+      if (chamada) {  // resultado de erro legível (não erro HTTP): a conversa continua e o Claude sabe o que houve
+        ctx.waitUntil(registrarChamada(env, String(chamada.params?.name || '?'), chamada.params?.arguments, 'celular fora do ar',
+          Date.now() - t0).catch(() => {}));
+        return resultadoTexto(chamada.id, { erro: foraDoAr(ap), fora_do_ar: true, detalhe: motivo });
+      }
+      return rpc(msg?.id, { error: { code: -32000, message: `o celular está fora do ar (${motivo}): confira se o serviço controle-ir está ligado` } }, 503);
+    }
     if (chamada) ctx.waitUntil(registrarChamada(env, String(chamada.params?.name || '?'), chamada.params?.arguments,
       `${r.ok ? 'ok' : `HTTP ${r.status}`} · ${via}`, Date.now() - t0).catch(() => {}));
+    if (chamada && r.status === 401) return resultadoTexto(chamada.id, { erro: recusouAssinatura('celular') });
     const sai = { 'content-type': r.headers.get('content-type') || 'application/json', 'cache-control': 'no-store',
       'server-timing': `central;dur=${inicioTransporte - t0}, transporte;dur=${Date.now() - inicioTransporte}`,
       'x-via': via === 'canal' ? 'canal' : 'tunel' };  // cabeçalho só em ASCII
     if (r.headers.get('mcp-session-id')) sai['mcp-session-id'] = r.headers.get('mcp-session-id');
-    if (listaPC && r.ok) {  // une as ferramentas do PC às do celular
+    if ((lista || inicio) && r.ok) {  // guarda o que o celular respondeu (C4) e une as ferramentas do PC às dele
       const texto = await r.text();
       try {
         const base = lerRpc(texto, sai['content-type']);
-        const extra = await listaPC;
-        if (base?.result?.tools && extra.length) {
-          base.result.tools = [...base.result.tools.filter(t => !ehPC(t?.name)), ...extra];
-          return new Response(JSON.stringify(base), { status: 200, headers: { ...sai, 'content-type': 'application/json' } });
+        if (inicio && base?.result?.serverInfo) ctx.waitUntil(guardarCelular(env, ap.id, 'inicio', base.result).catch(() => {}));
+        if (lista && Array.isArray(base?.result?.tools)) {
+          const doCelular = base.result.tools.filter(t => !ehPC(t?.name));
+          if (doCelular.length) ctx.waitUntil(guardarCelular(env, ap.id, 'ferramentas', doCelular).catch(() => {}));
+          const extra = listaPC ? await listaPC : [];
+          if (extra.length) {
+            base.result.tools = [...doCelular, ...extra];
+            return new Response(JSON.stringify(base), { status: 200, headers: { ...sai, 'content-type': 'application/json' } });
+          }
         }
       } catch { /* resposta que não dá para ler: vai como veio */ }
       return new Response(texto, { status: r.status, headers: sai });

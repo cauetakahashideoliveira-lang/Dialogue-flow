@@ -219,7 +219,9 @@ FERRAMENTAS = [
      "annotations": {**ALTERA, "openWorldHint": True}},
     {"name": "travar", "title": "Travar a execução agora",
      "description": "Freio de emergência: nega qualquer execução e encerra as tarefas em andamento. Não precisa de "
-                    "código; só o celular destrava (widget “Armar Controle IR”) ou autorizar com o código.",
+                    "código. Para soltar: pareado, o dono arma de novo na Central de Controle, com a digital (isso "
+                    "solta a trava) ou roda controle-ir exec destravar no celular (Termux); sem Central, controle-ir "
+                    "armar no celular ou autorizar com o código.",
      "inputSchema": _obj({}), "annotations": ALTERA},
     {"name": "atualizar_sistema", "title": "Atualizar o controle-ir no celular",
      "description": "Baixa do GitHub a versão do commit indicado, instala e reinicia o serviço (pede aprovação no "

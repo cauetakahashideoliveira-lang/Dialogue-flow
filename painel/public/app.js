@@ -54,7 +54,18 @@ function render() {
     const travado = e.travado, armado = !travado && e.armado_ate > agora;
     const st = el('div', travado ? 'TRAVADO (emergência)' : armado ? `ARMADO até ${hora(e.armado_ate)}` : 'Desarmado',
       `estado ${travado ? 'perigo-t' : armado ? 'alerta' : 'ok'}`);
-    const ap = el('div', a.aplicado ? '✓ aplicado no celular' : '… pendente: o celular ainda não confirmou', a.aplicado ? 'ok' : 'alerta');
+    // a verdade do aparelho: o estado real que ele relata (efetivo) pode divergir do que a Central pediu
+    const pc = /^pc-/.test(a.versao || ''), onde = pc ? 'no PC' : 'no celular', ef = a.efetivo;
+    const ap = el('div');
+    if (ef && ef.travado && !travado) {
+      ap.append(el('div', `TRAVADO ${onde}`, 'estado perigo-t'),
+        el('div', !ef.atual ? `Solta quando ${pc ? 'o PC' : 'o celular'} buscar o estado novo (até 30 s).`
+          : pc ? 'Arme com a digital para soltar.' : 'Arme com a digital para soltar (no próprio celular: controle-ir exec destravar)', 'suave'));
+    } else if (ef && ef.atual && armado && !ef.armado) {
+      ap.append(el('div', `desarmado ${onde} (veto local): arme de novo para valer`, 'alerta'));
+    } else {
+      ap.append(el('div', a.aplicado ? `✓ aplicado ${onde}` : `… pendente: ${pc ? 'o PC' : 'o celular'} ainda não confirmou`, a.aplicado ? 'ok' : 'alerta'));
+    }
     const contatoRecente = a.ultimo_contato > 0 && agora - a.ultimo_contato <= 90;
     const relato = a.em_uso_em > 0 && agora - a.em_uso_em <= 90 ? a.em_uso : null;
     const lista = el('ul', null, 'saude');
@@ -71,8 +82,8 @@ function render() {
     indicador('Canal direto', a.canal?.conectado, 'Conectado', 'Desconectado');
     indicador('Emissor IR', relato?.emissor_ir, 'Disponível', 'Indisponível');
     indicador('Shizuku', relato?.shizuku, 'Respondendo', 'Falhou na consulta');
-    indicador('Controle armado no celular', contatoRecente && a.aplicado ? Boolean(armado) : null,
-      'Armado', travado ? 'Travado' : 'Desarmado');
+    indicador(`Controle armado ${onde}`, contatoRecente && (ef?.atual || a.aplicado) ? Boolean(ef?.atual ? ef.armado : armado) : null,
+      'Armado', travado || (ef && ef.travado) ? 'Travado' : 'Desarmado');
     cel.append(el('strong', a.nome), st, ap, lista,
       el('p', `Último contato ${ha(a.ultimo_contato)} · versão ${a.versao || '?'} · túnel de reserva: ${e.tem_mcp ? 'endereço cadastrado' : 'sem endereço'}`, 'suave'));
     $('permite').value = e.desarmado_permite;

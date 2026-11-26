@@ -24,6 +24,13 @@ function celular(codigoPy) {  // roda o código real do controle-ir (controle_ir
   return JSON.parse(execFileSync('python3', ['-c', py], { env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') } }).toString());
 }
 const sincronizar = () => celular(`r=painel.sincronizar(P,'e2e')\nprint(json.dumps({**r,'efetiva':{k:Politica(P).efetiva().get(k) for k in ('armado_ate','travado','painel_seq')}}))`);
+function d1(sql) {  // muda o banco local da Central por fora; falha do wrangler aparece na saída (antes era engolida)
+  try {
+    execFileSync('npx', ['wrangler', 'd1', 'execute', 'painel', '--local', ...persistencia, '--command', sql],
+      { cwd: path.join(RAIZ, 'painel'), stdio: 'pipe', encoding: 'utf8' });
+    return true;
+  } catch (e) { console.log(`  (wrangler d1 falhou: ${(String(e.stdout || '') + String(e.stderr || e.message)).slice(-800)})`); return false; }
+}
 async function semSessao(rota, corpo = {}, cab = {}) {
   const r = await fetch(`${BASE}/api/${rota}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-painel': '1', ...cab }, body: JSON.stringify(corpo) });
   return r.status;
@@ -101,9 +108,52 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   ok(s.efetiva.armado_ate > Date.now() / 1000 + 7000, 'celular ARMADO por ~2 h pelo estado assinado');
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/aplicado no celular/.test(await pagina.textContent('#celulares')), 'depois da confirmação: "aplicado"');
+  // C7: o celular relata o estado REAL dele (efetivo) no ack; travado ou vetado no próprio celular não é "aplicado"
+  const apiPainel = () => pagina.evaluate(() => fetch('/api/painel', { method: 'POST', headers: { 'content-type': 'application/json', 'x-painel': '1' },
+    body: '{}' }).then(r => r.json())).catch(() => ({}));
+  const ackEfetivo = ef => celular(`import os\ncfg=painel.ler(P)\nst,_=painel._http('POST',cfg['url']+'/api/celular/ack',cfg['token'],{'seq':cfg['seq_max'],'versao':'e2e','eventos':[],'arquivo':str(os.stat(os.path.join(P,'auditoria.jsonl')).st_ino),'efetivo':json.loads(${JSON.stringify(JSON.stringify(ef))})})\nprint(json.dumps({'st':st}))`);
+  const cartaoCelular = async () => { await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)'); return pagina.textContent('#celulares'); };
+  ackEfetivo({ armado: false, travado: true, trava_local: true, vetado: false });
+  let apC7 = (await apiPainel()).aparelhos?.[0] || {};
+  let txtC7 = await cartaoCelular();
+  ok(apC7.efetivo?.travado === true && apC7.aplicado === false && /TRAVADO no celular/.test(txtC7) && /controle-ir exec destravar/.test(txtC7)
+    && !/aplicado no celular/.test(txtC7), 'C7 — celular travado localmente: API e cartão mostram "TRAVADO no celular", não "aplicado"');
+  ackEfetivo({ armado: false, travado: false, trava_local: false, vetado: true });
+  apC7 = (await apiPainel()).aparelhos?.[0] || {};
+  txtC7 = await cartaoCelular();
+  ok(apC7.aplicado === false && /desarmado no celular \(veto local\)/.test(txtC7) && !/aplicado no celular/.test(txtC7),
+    'C7 — Central armada e celular vetado: "desarmado no celular (veto local)", não "aplicado"');
+  ackEfetivo({ armado: 'sim', travado: false, trava_local: false, vetado: false, extra: 1 });
+  apC7 = (await apiPainel()).aparelhos?.[0] || {};
+  ok(apC7.efetivo == null && apC7.aplicado === true, 'C7 — efetivo com tipo errado é ignorado (como cliente antigo)');
+  ackEfetivo({ armado: true, travado: false, trava_local: false, vetado: false, outro: 'ignorado' });
+  apC7 = (await apiPainel()).aparelhos?.[0] || {};
+  txtC7 = await cartaoCelular();
+  ok(apC7.efetivo?.armado === true && apC7.efetivo?.outro === undefined && apC7.aplicado === true && /aplicado no celular/.test(txtC7),
+    'C7 — efetivo concordando com a Central: "✓ aplicado no celular"');
+  // a janela assinada acaba sem estado novo: o "armado" do último relato acaba junto (não fica "pendente" nem "Armado")
+  d1(`UPDATE estado SET armado_ate = 1 WHERE aparelho = '${apC7.id}'`);
+  apC7 = (await apiPainel()).aparelhos?.[0] || {};
+  ok(apC7.efetivo?.armado === false && apC7.aplicado === true, 'C7 — janela vencida desde o último relato: efetivo desarmado e "aplicado"');
+  // relato travado da seq atual; a Central arma (seq nova) antes de o celular buscar: o cartão diz que solta ao buscar
+  ackEfetivo({ armado: false, travado: true, trava_local: true, vetado: false });
+  // armar sempre gera uma seq nova (depois de veto/trava no celular, o novo armar é um estado assinado mais novo),
+  // inclusive com dois pedidos ao mesmo tempo
+  await clicar('#btArmar2');  // digital recente
+  const armarJa = () => pagina.evaluate(() => fetch('/api/armar', { method: 'POST', headers: { 'content-type': 'application/json', 'x-painel': '1' },
+    body: JSON.stringify({ horas: 2 }) }).then(r => r.json())).catch(() => ({}));
+  const seqsArmar = [...await Promise.all([armarJa(), armarJa()]), await armarJa()].map(x => x.estados?.[0]?.seq);
+  ok(seqsArmar.every(Number.isInteger) && new Set(seqsArmar).size === 3, `C7 — armar duas vezes (e ao mesmo tempo) gera seqs diferentes (${seqsArmar})`);
+  apC7 = (await apiPainel()).aparelhos?.[0] || {};
+  txtC7 = await cartaoCelular();
+  ok(apC7.efetivo?.atual === false && apC7.aplicado === false && /TRAVADO no celular/.test(txtC7) && /Solta quando o celular buscar/.test(txtC7)
+    && !/veto local/.test(txtC7), 'C7 — relato de seq anterior com estado novo pendente: "solta quando o celular buscar", não "veto local"');
+  s = sincronizar();
+  txtC7 = await cartaoCelular();
+  ok(/aplicado no celular/.test(txtC7) && !/TRAVADO no celular/.test(txtC7), 'C7 — o celular busca o estado novo: "✓ aplicado no celular"');
 
   // 4b. Etapa 1b: o Claude entra pelo painel (OAuth com a digital); o painel repassa ao celular, assinado
-  const FALSO = `import json,sys\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom controle_ir import painel\nP=sys.argv[1];n={'chamadas':0}\nclass H(BaseHTTPRequestHandler):\n  def log_message(s,*a):pass\n  def _r(s,st,d):\n    b=json.dumps(d).encode();s.send_response(st);s.send_header('Content-Type','application/json');s.send_header('Content-Length',str(len(b)));s.end_headers();s.wfile.write(b)\n  def do_GET(s):s._r(200,n)\n  def do_POST(s):\n    b=s.rfile.read(int(s.headers['Content-Length']))\n    if s.path!='/mcp/segredo-teste':return s._r(401,{'erro':'segredo'})\n    if not painel.verificar_requisicao(P,s.headers.get('X-Painel-Assinatura'),b):return s._r(401,{'erro':'assinatura'})\n    m=json.loads(b)\n    if m.get('method')=='tools/list':return s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'tools':[{'name':'controlar','inputSchema':{'type':'object'}}]}})\n    n['chamadas']+=1\n    s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'content':[{'type':'text','text':json.dumps({'via':'celular','ferramenta':(m.get('params') or {}).get('name')})}]}})\nsrv=ThreadingHTTPServer(('127.0.0.1',0),H)\nprint(srv.server_port,flush=True)\nsrv.serve_forever()`;
+  const FALSO = `import json,sys\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom controle_ir import painel\nP=sys.argv[1];n={'chamadas':0}\nclass H(BaseHTTPRequestHandler):\n  def log_message(s,*a):pass\n  def _r(s,st,d):\n    b=json.dumps(d).encode();s.send_response(st);s.send_header('Content-Type','application/json');s.send_header('Content-Length',str(len(b)));s.end_headers();s.wfile.write(b)\n  def do_GET(s):s._r(200,n)\n  def do_POST(s):\n    b=s.rfile.read(int(s.headers['Content-Length']))\n    if s.path!='/mcp/segredo-teste':return s._r(401,{'erro':'segredo'})\n    if not painel.verificar_requisicao(P,s.headers.get('X-Painel-Assinatura'),b):return s._r(401,{'erro':'assinatura'})\n    m=json.loads(b)\n    if m.get('method')=='tools/list':return s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'tools':[{'name':'controlar','inputSchema':{'type':'object'}}]}})\n    if m.get('method')=='initialize':return s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'protocolVersion':'2025-06-18','capabilities':{'tools':{}},'serverInfo':{'name':'controle-ir','version':'e2e-celular'},'instructions':'Instruções do celular (e2e).'}})\n    n['chamadas']+=1\n    s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'content':[{'type':'text','text':json.dumps({'via':'celular','ferramenta':(m.get('params') or {}).get('name')})}]}})\nsrv=ThreadingHTTPServer(('127.0.0.1',0),H)\nprint(srv.server_port,flush=True)\nsrv.serve_forever()`;
   const falso = spawn('python3', ['-c', FALSO, PASTA], {
     env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: ['ignore', 'pipe', 'inherit'],
   });
@@ -202,6 +252,8 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   const nomes = (lista.result?.tools || []).map(t => t.name);
   ok(nomes.includes('controlar') && nomes.includes('pc_executar') && nomes.includes('pc_tela'),
     `um conector só: tools/list une as ferramentas do celular e as do PC (${nomes.length})`);
+  const iniCelular = await (await manutencao({ method: 'initialize', id: 17, params: { protocolVersion: '2025-06-18' } })).json().catch(() => ({}));
+  ok(iniCelular.result?.serverInfo?.version === 'e2e-celular', 'com o celular no ar, initialize vem dele (e a Central guarda)');
   let { j: jx } = await textoDe(await chamarCom('pc_executar', { comando: 'echo pc-ok' }));
   ok(jx.result?.structuredContent?.onde === 'painel' && /PC está DESARMADO/.test(jx.result?.content?.[0]?.text || ''),
     'PC desarmado: pc_executar barrado NA BORDA (estado do PC, não do celular)');
@@ -240,6 +292,8 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/PC-teste/.test(await pagina.textContent('#celulares')) && /pc_executar/.test(await pagina.textContent('#chamadas')),
     'a Central lista o PC e as chamadas pc_* na Atividade');
+  const txtCartoes = await pagina.textContent('#celulares'), cartaoPC = txtCartoes.slice(txtCartoes.indexOf('PC-teste'));
+  ok(/(aplicado no PC|o PC ainda não confirmou)/.test(cartaoPC) && !/no celular/.test(cartaoPC), 'C7 — o cartão do PC diz "no PC", não "no celular"');
   // celular fora do ar com túnel morto (ngrok sem o celular devolve 404): o conector continua de pé com o PC
   const MORTO = "from http.server import BaseHTTPRequestHandler as B, ThreadingHTTPServer as S\nclass H(B):\n  def log_message(s,*a):pass\n  def do_POST(s):\n    s.send_response(404);s.send_header('Content-Length','0');s.end_headers()\nsrv=S(('127.0.0.1',0),H)\nprint(srv.server_port,flush=True)\nsrv.serve_forever()";
   const morto = spawn('python3', ['-c', MORTO], { stdio: ['ignore', 'pipe', 'ignore'] });
@@ -247,17 +301,45 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   const portaMorto = String(await new Promise(z => morto.stdout.once('data', z))).trim();
   celular(`r=painel.sincronizar(P,'e2e',url_mcp=lambda:'http://127.0.0.1:${portaMorto}/mcp/x')\nprint(json.dumps(r))`);
   canal.kill('SIGKILL');  // celular desligado (o canal some; a chamada não fica presa para chegar depois)
-  const iniSem = await (await manutencao({ method: 'initialize', id: 15, params: { protocolVersion: '2025-06-18' } })).json();
-  const listaSem = await (await manutencao({ method: 'tools/list', id: 16 })).json();
+  await new Promise(z => setTimeout(z, 500));
+  const jsonSeguro = async resp => { try { return JSON.parse(await resp.text()); } catch { return {}; } };
+  const abrirConversa = (idIni, idLista) => Promise.all([
+    manutencao({ method: 'initialize', id: idIni, params: { protocolVersion: '2025-06-18' } }).then(jsonSeguro),
+    manutencao({ method: 'tools/list', id: idLista }).then(jsonSeguro)]);
+  // C4: o celular já respondeu initialize e tools/list (a Central guardou); uma conversa NOVA aberta durante a queda
+  //     ainda recebe as ferramentas do celular (a lista é fixa por conversa) e as do PC
+  const [iniG, listaG] = await abrirConversa(18, 19);
+  const nomesG = (listaG.result?.tools || []).map(t => t.name);
+  ok(nomesG.includes('controlar') && nomesG.includes('pc_executar') && nomesG.filter(n => n === 'pc_executar').length === 1,
+    `C4 — celular fora do ar depois de responder uma vez: tools/list NOVO traz as ferramentas guardadas do celular e as pc_* (${nomesG.length})`);
+  ok(iniG.result?.serverInfo?.version === 'e2e-celular' && /Instruções do celular/.test(iniG.result?.instructions || '')
+    && /reconectando/.test(iniG.result?.instructions || ''), 'C4 — initialize guardado do celular, com o aviso de que ele pode estar reconectando');
+  // sem nada guardado do celular, vale o C1: o conector continua de pé só com o PC
+  const apagou = d1('DELETE FROM ferramentas_celular');
+  const [iniSem, listaSem] = await abrirConversa(15, 16);
   const nomesSem = (listaSem.result?.tools || []).map(t => t.name);
-  ok(iniSem.result?.serverInfo?.version === 'central' && nomesSem.includes('pc_executar') && !nomesSem.includes('controlar'),
-    'celular fora do ar e túnel devolvendo 404: initialize e tools/list seguem com o PC (o conector não cai)');
+  ok(apagou && iniSem.result?.serverInfo?.version === 'central' && nomesSem.includes('pc_executar') && !nomesSem.includes('controlar'),
+    'C1 — celular fora do ar, túnel devolvendo 404 e nada guardado: initialize e tools/list seguem com o PC (o conector não cai)');
   ok(/"agente": ?"pc-/.test((await (await chamarCom('pc_consultar')).json()).result?.content?.[0]?.text || ''),
     'e o PC responde normalmente com o celular fora do ar');
+  // C5: fora do ar além da espera, a chamada devolve um aviso claro (resultado com isError, não erro HTTP)
+  let tC5 = Date.now();
+  const rFora = await chamar('controlar'), jFora = await jsonSeguro(rFora), txtFora = jFora.result?.content?.[0]?.text || '';
+  ok(rFora.status === 200 && jFora.result?.isError === true && /celular está fora do ar/.test(txtFora) && /continua valendo/.test(txtFora)
+    && /controle-ir reiniciar/.test(txtFora) && Date.now() - tC5 >= 8000,
+    `C5 — celular fora do ar além da espera: aviso claro em pt-BR com isError (${Date.now() - tC5} ms)`);
+  // C5: o celular cai e volta no meio da chamada: a Central espera o canal e repete UMA vez o mesmo pedido
+  const antesVolta = acordadas(), nAntesC5 = await chamadasNoCelular();
+  setTimeout(() => {
+    canal = spawn('python3', ['-c', CANAL, PASTA], { env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: 'ignore' });
+    filhos.push(canal);
+  }, 1500);
+  tC5 = Date.now();
+  const rVolta = await chamar('controlar'), jVolta = await jsonSeguro(rVolta);
+  ok(rVolta.headers.get('x-via') === 'canal' && /"via": ?"celular"/.test(jVolta.result?.content?.[0]?.text || '')
+    && await chamadasNoCelular() === nAntesC5 + 1,
+    `C5 — o celular cai e volta no meio da chamada: a Central espera o canal e repete uma vez (${Date.now() - tC5} ms)`);
   celular(`r=painel.sincronizar(P,'e2e',url_mcp=lambda:'${endereco}/mcp/segredo-teste')\nprint(json.dumps(r))`);
-  const antesVolta = acordadas();
-  canal = spawn('python3', ['-c', CANAL, PASTA], { env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: 'ignore' });
-  filhos.push(canal);
   morto.kill();
   ok(await esperar(() => acordadas() > antesVolta, 20000), 'o celular volta e reabre o canal sozinho');
   agentePC.kill('SIGKILL');
@@ -275,8 +357,9 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   const antesDoAviso = acordadas();
   await clicar('#btDesarmar');
   ok(await esperar(() => acordadas() > antesDoAviso, 3000), 'desarmar chega ao celular NA HORA pelo canal (antes: até 30 s)');
+  const nAntesBorda = await chamadasNoCelular();
   r = await (await chamar('executar_comando')).json();
-  ok(r.result?.structuredContent?.onde === 'painel' && await chamadasNoCelular() === 2, 'desarmado: terminal barrado NA BORDA (nem chega ao celular)');
+  ok(r.result?.structuredContent?.onde === 'painel' && await chamadasNoCelular() === nAntesBorda, 'desarmado: terminal barrado NA BORDA (nem chega ao celular)');
   r = await (await chamar('controlar')).json();
   ok(/"via": ?"celular"/.test(r.result?.content?.[0]?.text || ''), 'desarmado: infravermelho continua passando');
   // 4c. Atividade, "em uso agora" e tela ao vivo (sem nenhuma aprovação a mais)
@@ -286,6 +369,16 @@ async function semSessao(rota, corpo = {}, cab = {}) {
     'Atividade do Claude lista cada chamada (ok e barrada) com os recursos');
   const indicadorCanal = pagina.locator('#celulares .saude li').filter({ hasText: 'Canal direto' });
   ok(await indicadorCanal.locator('strong').textContent() === 'Conectado', 'a Central mostra o canal direto ativo');
+  // C6: tráfego contínuo é vida. Com chamadas seguidas o celular não manda "ping" (só bate depois de 25 s parado);
+  //     as confirmações e respostas (ok/res) têm de contar, senão a Central fecha um canal saudável como "mudo" (70 s)
+  const viasC6 = [], fimC6 = Date.now() + 75_000;
+  while (Date.now() < fimC6) {
+    const rr = await chamar('controlar');
+    viasC6.push(rr.headers.get('x-via')); await rr.text();
+    await new Promise(z => setTimeout(z, 700));
+  }
+  ok(viasC6.length > 30 && viasC6.every(v => v === 'canal'),
+    `C6 — 75 s de chamadas seguidas sem batida: o canal não é fechado como mudo (${viasC6.filter(v => v === 'canal').length}/${viasC6.length} pelo canal)`);
   celular(`import os,time\nos.makedirs(os.path.join(P,'tarefas'),exist_ok=True)\nopen(os.path.join(P,'tarefas','9.json'),'w').write(json.dumps({'id':'9','status':'executando','comando':'termux-camera-photo -c 0 /tmp/x.jpg','inicio':time.time()}))\nfrom controle_ir import observador\nr=painel.sincronizar(P,'e2e',em_uso=lambda o,v: observador.em_uso(P,False,v))\nprint(json.dumps(r))`);
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/termux-camera-photo/.test(await pagina.textContent('#emUso')) && /câmera/.test(await pagina.textContent('#emUso')),
@@ -314,7 +407,7 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   falso.kill();
 
   // 5. Sem digital recente, armar é recusado; a interface pede a digital e conclui
-  execFileSync('npx', ['wrangler', 'd1', 'execute', 'painel', '--local', ...persistencia, '--command', 'UPDATE sessoes SET passkey_em = passkey_em - 600'], { cwd: path.join(RAIZ, 'painel'), stdio: 'ignore' });
+  d1('UPDATE sessoes SET passkey_em = passkey_em - 600');
   const cookies = await pagina.context().cookies();
   const comSessao = (rota, corpo) => fetch(`${BASE}/api/${rota}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-painel': '1',
     cookie: cookies.map(c => `${c.name}=${c.value}`).join('; ') }, body: JSON.stringify(corpo) }).then(r => r.status);
@@ -340,10 +433,8 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   // 8. Histórico encadeado: íntegro, e a adulteração é detectada
   ok(/íntegro/.test(await clicar('#btIntegridade')), 'histórico íntegro');
   ok(/stado_alterado|EMERG/.test(await pagina.textContent('#eventos')), 'histórico mostra as mudanças de estado');
-  execFileSync('npx', ['wrangler', 'd1', 'execute', 'painel', '--local', ...persistencia, '--command',
-    `UPDATE eventos SET dados = '{"armado_ate":0,"adulterado":1}' WHERE id = (SELECT MIN(id) FROM eventos WHERE tipo = 'estado_alterado')`],
-    { cwd: path.join(RAIZ, 'painel'), stdio: 'ignore' });
-  ok(/alterado no evento \d+/.test(await clicar('#btIntegridade')), 'adulteração do histórico é detectada');
+  const adulterou = d1(`UPDATE eventos SET dados = '{"armado_ate":0,"adulterado":1}' WHERE id = (SELECT MIN(id) FROM eventos WHERE tipo = 'estado_alterado')`);
+  ok(adulterou && /alterado no evento \d+/.test(await clicar('#btIntegridade')), 'adulteração do histórico é detectada');
 
   await navegador.close();
   console.log(falhas ? `\n${falhas} falha(s)` : '\nTudo certo');

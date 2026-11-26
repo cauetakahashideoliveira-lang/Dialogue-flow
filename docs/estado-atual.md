@@ -2,6 +2,38 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 26/11 noite — incidente "sessão nova sem as ferramentas do celular" e correção (Central 2026-11-26.5, celular 1.0.129)
+
+**O que o dono viu:**
+- uma sessão nova do claude.ai só tinha as ferramentas `pc_*`;
+- o celular dizia "TRAVADO" mesmo depois de armar pela Central;
+- foi preciso reiniciar o conector e o serviço;
+- o painel mostrava "aplicado" com o celular travado.
+
+**Causas, confirmadas nos eventos da sessão e no código:**
+1. Com o canal do celular caído (cada merge na branch padrão faz deploy da Central e derruba os canais), o
+   `tools/list` saía só com o PC. O claude.ai fixa a lista por conversa, então a sessão inteira ficava sem o celular.
+2. Pareado, a trava local não tinha saída pela Central: armar com a digital não a soltava.
+3. O `ack` não levava o estado real, e o painel dizia "aplicado" com o celular travado ou vetado.
+4. No celular, uma exceção inesperada matava o laço do canal. Nenhum vigia reiniciava a thread, e os erros da
+   sincronização sumiam.
+5. A mensagem da EMERGÊNCIA mandava "desligar a EMERGÊNCIA na Central", e esse botão não existe.
+
+**Correções:** regressões C4, C5, C7 e S3 a S8 em [regressoes.md](regressoes.md); comportamento em
+[seguranca.md](seguranca.md) §2, §3a e §3d.
+- Central (e2e com 88 verificações): lista e `initialize` do celular guardados, espera de 10 s e uma nova
+  tentativa, aviso legível e estado efetivo no cartão.
+- Celular (352 testes): trava solta pelo armar com a digital, canal que sobrevive a erro, ping pelo relógio, cão
+  de guarda e erros no log e no `consultar`.
+
+**Para instalar no celular:**
+- Se o celular ainda estiver travado na versão antiga, rode `controle-ir exec destravar` no Termux.
+- Depois, rode `controle-ir atualizar <commit do merge>` e confira `consultar` → versão 1.0.129 e `painel_sync`
+  sem erro.
+
+**Recomendado na Cloudflare:** *watch paths* `painel/**` no build do Worker, para que um merge sem mudança na
+Central não derrube os canais.
+
 ## 26/11 manhã — PC depois do reinício, fábrica de agentes
 
 Registro completo: `docs/entregas/2026-11-26-pc-windows.md`, `docs/pc-windows.md` e `docs/fabrica.md` no

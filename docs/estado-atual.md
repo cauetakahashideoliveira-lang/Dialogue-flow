@@ -2,6 +2,29 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 26/11 manhã — PC depois do reinício, fábrica de agentes
+
+Registro completo: `docs/entregas/2026-11-26-pc-windows.md`, `docs/pc-windows.md` e `docs/fabrica.md` no
+repositório Roblox (PR #2).
+
+- **Avast fora:** o dono clicou em "Desinstalar"; o Avast recusa cliques automáticos de propósito. O **Microsoft
+  Defender** assumiu (tempo real ligado). Exclusões não foram aplicadas, por medição: a varredura dos 4,36 GB do
+  modelo do Ollama levou 1 s.
+- **Inicialização limpa:** Discord, EA app e CurseForge desligados pelo `StartupApproved` (reversível no
+  Gerenciador de Tarefas). Depois do boot: 26,7 GB livres de 31,8.
+- **Volta automática verificada num boot real (08:16):** agente e canal, Ollama, Wi-Fi em 5 GHz e Defender
+  voltaram sem ninguém mexer. A Central está na 2026-11-26.4, e o agente foi atualizado para 402113c pelo
+  `pc_atualizar`.
+- **Benchmark depois:**
+  - IA local: 57 tok/s (+4%) e carga do modelo em 8 s (−32%);
+  - disco e rede iguais à base;
+  - rede pela mediana de 3 amostras (62 Mbps, 44 ms). Uma amostra só tinha enganado a comparação: R24 no Roblox.
+- **Fábrica de agentes** (`ferramentas/fabrica` no Roblox): tarefas em paralelo no Ollama ou na API do Claude.
+  - Recursos: teto rígido, cache e lote com 50%.
+  - Pela chave do ambiente da nuvem (`ANTHROPIC_KEY_ESTUDIO`): 4 tarefas no Haiku 5.5 por US$ 0,0023, e um agente
+    com ferramentas num worktree por US$ 0,0013.
+  - No PC, a chave precisa ser digitada uma vez com o `chave-api.ps1`.
+
 ## 26/11 madrugada — missão do PC: tela azul, botão, otimização e ambiente
 
 Registro completo, com benchmark, inventário e recomendações: `docs/entregas/2026-11-26-pc-windows.md` e

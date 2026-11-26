@@ -11,7 +11,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 const SESSAO_MAX = 12 * 3600, SESSAO_OCIOSA = 30 * 60, PASSKEY_FRESCA = 120, DESAFIO = 300, PAREAMENTO = 600;
 const HORAS_MAX = 24;
-const VERSAO_CENTRAL = '2026-11-26.2';  // suba a cada mudança da Central (aparece em /versao)
+const VERSAO_CENTRAL = '2026-11-26.4';  // suba a cada mudança da Central (aparece em /versao)
 const agora = () => Math.floor(Date.now() / 1000);
 const enc = new TextEncoder();
 
@@ -331,7 +331,7 @@ export class Canal extends DurableObject {
     // Antes pegava a última da lista, e uma conexão fantasma (o PC perdeu a internet no meio) escondia a nova.
     let ws = null, ultimo = 0;
     for (const s of this.ctx.getWebSockets()) {
-      if (s.readyState !== 1) continue;  // 1 = OPEN
+      if (s.readyState === 2 || s.readyState === 3) continue;  // CLOSING/CLOSED (a fantasma); só pula o que está fechando
       const batida = this.ctx.getWebSocketAutoResponseTimestamp(s);
       const t = Math.max(batida ? batida.getTime() : 0, s.deserializeAttachment()?.desde || 0);
       if (!ws || t > ultimo) { ws = s; ultimo = t; }
@@ -779,11 +779,25 @@ const pcAtivo = env => env.DB.prepare(`SELECT a.id, e.armado_ate, e.travado FROM
   .first().catch(() => null);
 const resultadoTexto = (id, dados) => rpc(id, { result: { content: [{ type: 'text', text: JSON.stringify(dados) }],
   structuredContent: dados, isError: true } });
-async function repassarPC(env, pc, bytes) {  // 503 = o PC não está no canal agora
+async function repassarPC(env, pc, bytes, assinatura) {  // 503 = o PC não está no canal agora
   try {
     return await canalDe(env, pc.id).fetch('https://canal/rpc', { method: 'POST', body: bytes,
-      headers: { 'content-type': 'application/json', accept: 'application/json', 'x-painel-assinatura': await assinarRequisicao(env, bytes) } });
+      headers: { 'content-type': 'application/json', accept: 'application/json', 'x-painel-assinatura': assinatura || await assinarRequisicao(env, bytes) } });
   } catch { return new Response('sem canal', { status: 503 }); }
+}
+// O Wi-Fi do PC cai por segundos (26/11: 11 quedas em 24 h). Com 503, espera o canal voltar (até 10 s) e repete UMA vez
+// a MESMA requisição com a MESMA assinatura: se a primeira tiver chegado (só a confirmação se perdeu), o PC recusa a
+// repetição pela proteção contra reenvio — nunca executa duas vezes.
+async function repassarPCComRetomada(env, pc, bytes) {
+  const assinatura = await assinarRequisicao(env, bytes);
+  const r = await repassarPC(env, pc, bytes, assinatura);
+  if (r.status !== 503) return r;
+  const fim = Date.now() + 10_000;
+  while (Date.now() < fim) {
+    await new Promise(z => setTimeout(z, 1000));
+    if ((await estadoCanal(env, pc.id))?.conectado) return repassarPC(env, pc, bytes, assinatura);
+  }
+  return r;
 }
 async function ferramentasPC(env, pc) {
   // ao vivo; fora do ar, a última lista conhecida (a lista do conector é fixa por conversa: assim as ferramentas
@@ -819,7 +833,7 @@ async function chamarPC(env, ctx, pc, m, bytes, t0) {
     anotar('bloqueado');
     return resultadoTexto(m.id, { erro: motivo.replace('o sistema está DESARMADO', 'o PC está DESARMADO'), bloqueado: true, onde: 'painel' });
   }
-  const r = await repassarPC(env, pc, bytes);
+  const r = await repassarPCComRetomada(env, pc, bytes);
   if (r.status === 503) {
     anotar('PC fora do ar');
     return resultadoTexto(m.id, { erro: 'o PC está fora do ar: o agente não está conectado à Central (PC desligado, sem internet ou serviço parado)' });

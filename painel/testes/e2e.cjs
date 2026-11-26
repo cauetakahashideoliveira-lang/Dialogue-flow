@@ -188,7 +188,7 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   await clicar('#btParear');
   const codigoPC = (await pagina.textContent('#pareamento')).match(/ ([A-Z0-9]{8})$/)[1];
   execFileSync('python3', ['-m', 'agente_pc', 'parear', BASE, codigoPC, '--nome', 'PC-teste'], { env: envPC, stdio: 'ignore' });
-  const agentePC = spawn('python3', ['-m', 'agente_pc', 'ligar'], { env: envPC, stdio: 'ignore' });
+  let agentePC = spawn('python3', ['-m', 'agente_pc', 'ligar'], { env: envPC, stdio: 'ignore' });
   filhos.push(agentePC);
   const chamarCom = (nome, args = {}) => fetch(`${BASE}/mcp`, { method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json', authorization: `Bearer ${tok.access_token}` },
@@ -228,6 +228,15 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   fs.rmSync(PASTA_PC2, { recursive: true, force: true });
   ok(await esperar(async () => (await chamarCom('pc_consultar')).headers.get('x-via') === 'pc', 20000),
     'o PC original descongela e volta a atender pelo canal');
+  // retomada (26/11): o Wi-Fi do PC cai por segundos; a chamada feita nessa hora espera o canal voltar e é repetida
+  // uma vez, com a mesma assinatura (antes voltava "PC fora do ar" na hora)
+  agentePC.kill('SIGKILL');
+  await new Promise(z => setTimeout(z, 500));  // o canal do PC some
+  setTimeout(() => { agentePC = spawn('python3', ['-m', 'agente_pc', 'ligar'], { env: envPC, stdio: 'ignore' }); filhos.push(agentePC); }, 1500);
+  const tRet = Date.now();
+  const { d: dr } = await textoDe(await chamarCom('pc_executar', { comando: 'echo retomada-ok', aguardar: 20 }));
+  ok(dr.status === 'concluida' && /retomada-ok/.test(dr.saida?.texto || ''),
+    `PC caiu e voltou no meio: a Central esperou o canal e repetiu a chamada (${Date.now() - tRet} ms)`);
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/PC-teste/.test(await pagina.textContent('#celulares')) && /pc_executar/.test(await pagina.textContent('#chamadas')),
     'a Central lista o PC e as chamadas pc_* na Atividade');

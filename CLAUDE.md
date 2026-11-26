@@ -15,6 +15,9 @@
 - Autonomia: no modo autônomo (`politica.perfil=="autonomo"`) aja sem pedir a cada passo; pare só no claramente
   arriscado/irreversível. Só o celular muda o modo. Nunca ajude a acessar rede/conta/equipamento de terceiros.
 - Responda ao usuário em português. Testes: `python3 -m unittest discover -s testes`.
+- **Todo erro corrigido vira teste de regressão** ([docs/regressoes.md](docs/regressoes.md)). O teste precisa falhar
+  sem a correção (confira desfazendo uma vez), entrar no CI e ganhar uma linha na tabela. O mesmo erro não volta
+  pelo mesmo motivo. E2e local: `E2E_CHROMIUM=/opt/pw-browsers/chromium npm run test:e2e` em `painel/`.
 - Pacote do celular: `ferramentas/empacotar.sh` gera `dist/controle-ir.zip` (baixado pelo Termux).
 - Botão novo para ar Gree (oscilação, visor): `ferramentas/gree_variante.py` (parte da captura real do perfil).
 - Ar TCL112 (o Brastemp Clean do quarto 2 é TCL, não Whirlpool): `ferramentas/tcl112.py` gera quadros e o perfil completo.

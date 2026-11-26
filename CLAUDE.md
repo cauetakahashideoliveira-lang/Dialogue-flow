@@ -32,7 +32,7 @@
   conferir com `consultar`. Se o conector der "Not Found" após atualizar, peça `controle-ir desligar; pkill ngrok;
   controle-ir ligar` (a 1.0.15+ já limpa o ngrok órfão sozinha).
 - **Capacidades embutidas:** estado_celular, diagnostico_rede, descobrir_rede, ouvir_bipe, foto, termometro, tela,
-  sono, sonar, bluetooth, modos (`controle-ir/capacidades/`, com testes em `testes/`). **modos** (1.0.99): ajustes do
+  sono, sonar, bluetooth, modos, ps4 (`controle-ir/capacidades/`, com testes em `testes/`). **modos** (1.0.99): ajustes do
   próprio celular direto no Android (toque por `cmd audio set-ringer-mode` via Shizuku; volumes pelo `termux-volume`,
   porque o `--set` do shell é ignorado no HyperOS); guarda e restaura, aprende método+condições e cria atalho no widget.
 - **Instruções do conector:** o Claude Code lê só os primeiros 4096 caracteres. `mcp.py` monta AJA PRIMEIRO →
@@ -73,6 +73,8 @@
   Shizuku. Testes de desempenho só em telas de leitura (Sobre o telefone, Bluetooth sem alternar, Armazenamento)
   e com `modelo:false` quando o caminho não for conhecido. O `acao=objetivo` (1.0.79+) já recusa interruptores
   sem `permitir` e usa cada pista uma vez.
+- **PS4** (1.0.109+, `controle-ir/capacidades/ps4/`, `docs/ps4.md`): DualShock virtual pelo Remote Play (pyremoteplay),
+  habilidades e jogador que aprende (Q-learning sobre a tela; o Claude é o técnico). Só jogo offline.
 - **Piloto** (1.0.51+, `capacidades/tela/piloto.py`, `acao=piloto`): laço rápido NO celular (o Claude fica fora do
   laço, como treinador): corrida memória/modelo local/Haiku, alvo semântico, gravador. Modelo local e quiz de teste:
   `docs/estado-atual.md` (19/11 noite). Para o estudo e o piloto do botão Stockfish no POCO, veja o README. Apps bloqueados (banco/senha) não

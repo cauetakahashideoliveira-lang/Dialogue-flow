@@ -1,8 +1,8 @@
 {
   "controle-ir/controle_ir/__init__.py": {
-    "mtime": 1795605016.0949414,
-    "seen": 1795697810.799841,
-    "ast_hash": "92bf897ceb2cab689cf38fce9af8642e",
+    "mtime": 1795698335.8221776,
+    "seen": 1795698347.45083,
+    "ast_hash": "f74fb07bf1fad0cf06ebb2efc6b853a9",
     "semantic_hash": ""
   },
   "controle-ir/controle_ir/__main__.py": {
@@ -162,9 +162,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795667814.0209746,
-    "seen": 1795697810.7999582,
-    "ast_hash": "b52d4c1625a7e184d8518f3834332d99",
+    "mtime": 1795698335.8061776,
+    "seen": 1795698347.4527156,
+    "ast_hash": "fe21ec3cf2d29e79e3e94481cdd26413",
     "semantic_hash": ""
   },
   "docs/estado-atual.md": {
@@ -867,6 +867,54 @@
     "mtime": 1795667811.0464106,
     "seen": 1795697810.7999873,
     "ast_hash": "e098d6eb0ba66feb826986c275d8c999",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/ps4/capacidade.json": {
+    "mtime": 1795698335.8061776,
+    "seen": 1795698347.4505482,
+    "ast_hash": "9172470a82cf77f2a879d098c11880e9",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/ps4/conexao.py": {
+    "mtime": 1795698335.8092968,
+    "seen": 1795698347.4505506,
+    "ast_hash": "084a5103b13c89869f60dbc69f2f50cb",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/ps4/controle.py": {
+    "mtime": 1795698335.8092968,
+    "seen": 1795698347.450552,
+    "ast_hash": "138465983f50337880d891c4bd0d6415",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/ps4/jogador.py": {
+    "mtime": 1795698335.8092968,
+    "seen": 1795698347.4505537,
+    "ast_hash": "ba41de701a1ac43eae94208dcb1050b0",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/ps4/principal.py": {
+    "mtime": 1795698335.8092968,
+    "seen": 1795698347.4505548,
+    "ast_hash": "ed28e36830e8748ffa040d11c85407d1",
+    "semantic_hash": ""
+  },
+  "controle-ir/capacidades/ps4/treinador.py": {
+    "mtime": 1795698335.8092968,
+    "seen": 1795698347.4505558,
+    "ast_hash": "6fd86370538c1dcf35650402d12a520c",
+    "semantic_hash": ""
+  },
+  "testes/test_ps4.py": {
+    "mtime": 1795698335.8541775,
+    "seen": 1795698347.452675,
+    "ast_hash": "f0eeecbe6d69f914860aded1652b5248",
+    "semantic_hash": ""
+  },
+  "docs/ps4.md": {
+    "mtime": 1795698335.8221776,
+    "seen": 1795698347.4532027,
+    "ast_hash": "8ba1d4aa9e3b459fd8f4e55e9e1bdff2",
     "semantic_hash": ""
   },
   "painel/package-lock.json": {

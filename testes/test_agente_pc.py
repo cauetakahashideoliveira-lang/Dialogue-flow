@@ -198,6 +198,56 @@ class TestAgentePC(unittest.TestCase):
 
 
 class TestUnidades(unittest.TestCase):
+    def test_saude_mostra_o_canal_quando_informado(self):
+        import threading
+        with tempfile.TemporaryDirectory() as d:
+            pasta = Path(d)
+            cfg = config.ler(pasta)
+            g = Guardiao(pasta, lambda: config.ler(pasta), lambda c: config.gravar(c, pasta))
+            f = Ferramentas(pasta, g.auditar, g.estado, g.travar)
+            for canal, esperado in ((None, None), (lambda: {"conectado": False, "erro": "sem rede"}, {"conectado": False, "erro": "sem rede"})):
+                srv = criar_servidor(pasta, 0, cfg["segredo"], ServidorMCP(f, g), g, canal=canal)
+                threading.Thread(target=srv.serve_forever, daemon=True).start()
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{srv.server_address[1]}/saude", timeout=5) as r:
+                        saude = json.loads(r.read())
+                finally:
+                    srv.shutdown()
+                    srv.server_close()
+                self.assertTrue(saude["ok"])
+                self.assertEqual(saude.get("canal"), esperado)
+
+    def test_atualizar_sem_ref_sai_do_head_destacado(self):
+        """Depois de um pc_atualizar(ref=...) o repositório fica destacado; o próximo, sem ref, volta à branch padrão."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+
+            def git(*a, cwd=None):
+                return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=principal",
+                                       *a], cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+
+            def commit(texto):
+                (d / "trabalho" / "a.txt").write_text(texto)
+                git("add", "-A", cwd=d / "trabalho")
+                git("commit", "-qm", texto, cwd=d / "trabalho")
+                git("push", "-q", "origin", "principal", cwd=d / "trabalho")
+
+            git("init", "-q", "--bare", str(d / "origem.git"))
+            git("clone", "-q", str(d / "origem.git"), str(d / "trabalho"))
+            commit("1")
+            git("clone", "-q", str(d / "origem.git"), str(d / "pc"))
+            git("checkout", "-q", "--detach", "HEAD", cwd=d / "pc")
+            commit("2")
+            antigo, ferr_mod.REPO = ferr_mod.REPO, d / "pc"
+            try:
+                f = Ferramentas(d / "agente", lambda r: None, lambda: {}, lambda m: None, ao_reiniciar=lambda: None)
+                r = f.pc_atualizar()
+            finally:
+                ferr_mod.REPO = antigo
+            self.assertEqual(git("symbolic-ref", "--short", "HEAD", cwd=d / "pc"), "principal")
+            self.assertEqual(r["para"], git("rev-parse", "--short", "HEAD", cwd=d / "trabalho"))
+
     def test_sendkeys_escapa_especiais(self):
         from agente_pc.tela import escapar_sendkeys
         self.assertEqual(escapar_sendkeys("a+b (1)\n"), "a{+}b {(}1{)}{ENTER}")

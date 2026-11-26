@@ -73,7 +73,7 @@ if ($Url -and $Codigo) {
     Passo '4/5 Pareamento: pulado (sem -Url e -Codigo)'
 }
 
-Passo '5/5 Tarefa agendada (liga no logon, oculta, como administrador)'
+Passo '5/5 Tarefa agendada (liga no logon, oculta, como administrador) e botão Ligar Agente PC'
 $usuario = "$env:USERDOMAIN\$env:USERNAME"
 $acao = New-ScheduledTaskAction -Execute 'powershell.exe' `
     -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$repo\pc\iniciar.ps1`""
@@ -83,6 +83,16 @@ $ajustes = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoin
     -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName $tarefa -Action $acao -Trigger $gatilho -Principal $quem -Settings $ajustes -Force | Out-Null
 Start-ScheduledTask -TaskName $tarefa
+# Botão na área de trabalho: liga o agente se ele cair e mostra se conectou (sem pedir administrador)
+$atalho = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Ligar Agente PC.lnk'
+$lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($atalho)
+$lnk.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$repo\pc\ligar.ps1`""
+$lnk.WorkingDirectory = $repo
+$lnk.IconLocation = "$env:SystemRoot\System32\shell32.dll,27"
+$lnk.Description = 'Liga o agente do PC da Central de Controle e mostra se conectou'
+$lnk.Save()
+Write-Host "   botão na área de trabalho: $atalho"
 
 $cfg = Join-Path $dados 'config.json'
 $fim = (Get-Date).AddSeconds(30)
@@ -96,7 +106,7 @@ while ((Get-Date) -lt $fim -and -not $saude) {
 }
 if (-not $saude) { throw "O agente não respondeu. Veja o registro: $dados\agente.log" }
 & $py -m agente_pc estado
-Write-Host "`nPronto. O agente liga sozinho a cada logon." -ForegroundColor Green
+Write-Host "`nPronto. O agente liga sozinho a cada logon (e pelo botão 'Ligar Agente PC')." -ForegroundColor Green
 if ($saude.pareado) {
     Write-Host 'Na Central: arme com a digital para liberar as ferramentas pc_*. No Claude, abra uma conversa nova.'
 } else {

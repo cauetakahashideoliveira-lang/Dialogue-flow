@@ -29,7 +29,7 @@ Claude ── conector Controle Geral (OAuth com a digital) ──► Central (W
 | `pc_ler_arquivo` / `pc_escrever_arquivo` / `pc_editar_arquivo` / `pc_listar` | Arquivos: leitura por linhas, imagens como imagem, binário em base64, troca exata de trecho (mantém `\r\n` e BOM). |
 | `pc_tela` | Captura da tela (todos os monitores ou um), em JPEG. |
 | `pc_entrada` | Mouse e teclado: clicar, duplo, direito, arrastar, rolar, digitar e teclas no formato SendKeys. As coordenadas são as da última `pc_tela`. |
-| `pc_atualizar` | `git pull` (ou `ref`) do repositório no PC e reinício do agente. |
+| `pc_atualizar` | `git pull` (ou `ref`, que deixa o repositório destacado nesse commit) e reinício do agente. Sem `ref`, volta para a branch padrão se estiver destacado. |
 | `pc_travar` | Encerra as tarefas e bloqueia o PC até o dono armar de novo na Central. Sempre responde. |
 
 ## Instalar no PC
@@ -53,6 +53,22 @@ conhece o PC (este PR publicado).
    `pc_consultar`.
 
 Para atualizar depois: `pc_atualizar` pelo Claude, ou rode o instalador de novo sem `-Url` e `-Codigo`.
+
+## Religar o PC e o botão "Ligar Agente PC"
+
+- **Depois que o PC desligar:** ligue e entre no Windows. A tarefa agendada liga o agente sozinha, oculta, de 10 a
+  30 s depois do logon. Não precisa abrir terminal. Depois, arme na Central com a digital, se o prazo tiver vencido.
+- **Botão na área de trabalho, "Ligar Agente PC"** (`pc/ligar.ps1`, criado pelo instalador):
+  - liga o agente se ele tiver caído, sem pedir administrador, porque dispara a tarefa agendada, que já roda
+    como administrador;
+  - espera o agente responder e mostra numa janela se o PC está conectado à Central;
+  - se o agente já estiver ligado, só confere.
+
+  O `/saude` local informa o estado do canal (`{"canal": {"conectado": …}}`) desde a pc-1.0.2.
+- **Para voltar sozinho depois de uma queda de energia** (opcional, decisão do dono, feito uma vez no PC):
+  - BIOS: "Restore on AC Power Loss" em **Power On**, para o PC ligar quando a energia voltar;
+  - logon automático do Windows (por exemplo, o Autologon da Sysinternals). A senha fica só no PC, nunca no
+    chat. Sem isso, alguém precisa entrar no Windows depois de religar.
 
 ## Manter ligado
 

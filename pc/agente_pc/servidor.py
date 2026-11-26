@@ -142,7 +142,9 @@ def _resultado(dados: dict, erro: bool) -> dict:
 
 
 def criar_servidor(pasta: Path, porta: int, segredo: str, mcp: ServidorMCP, guardiao: Guardiao,
-                   exigir_assinatura: bool = True) -> ThreadingHTTPServer:
+                   exigir_assinatura: bool = True, canal=None) -> ThreadingHTTPServer:
+    """canal: função que devolve {"conectado": bool, "erro"?: str}, mostrada em /saude (o botão Ligar Agente PC
+    a usa para dizer se o PC está conectado à Central)."""
     class Manipulador(BaseHTTPRequestHandler):
         server_version = "agente-pc"
 
@@ -161,7 +163,10 @@ def criar_servidor(pasta: Path, porta: int, segredo: str, mcp: ServidorMCP, guar
 
         def do_GET(self):
             if self.path == "/saude":
-                return self._json(200, {"ok": True, "versao": __version__, "pareado": bool(painel.ler(pasta))})
+                saude = {"ok": True, "versao": __version__, "pareado": bool(painel.ler(pasta))}
+                if canal:
+                    saude["canal"] = canal()
+                return self._json(200, saude)
             return self._json(404, {"erro": "não encontrado"})
 
         def do_POST(self):

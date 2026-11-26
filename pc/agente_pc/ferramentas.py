@@ -249,7 +249,14 @@ class Ferramentas:
             r = git("fetch", "origin", ref)
             r = r if r.returncode else git("checkout", "--detach", "FETCH_HEAD")
         else:
-            r = git("pull", "--ff-only")
+            r = git("symbolic-ref", "-q", "HEAD")
+            if r.returncode:  # HEAD destacado (houve um pc_atualizar com ref): volta para a branch padrão do origin
+                padrao = git("symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD").stdout.strip()
+                if not padrao.startswith("origin/"):
+                    raise ValueError("HEAD destacado e sem a branch padrão do origin: use pc_atualizar(ref=...)")
+                r = git("fetch", "origin")
+                r = r if r.returncode else git("checkout", padrao.split("/", 1)[1])
+            r = r if r.returncode else git("pull", "--ff-only")
         if r.returncode:
             raise ValueError(f"git falhou: {(r.stderr or r.stdout).strip()[-400:]}")
         depois = git("rev-parse", "--short", "HEAD").stdout.strip()

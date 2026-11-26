@@ -101,8 +101,14 @@ def ligar(_a) -> int:
             c = canal_ref.get("c")
             return c.estado() if c else {"conectado": False, "nota": "PC não pareado"}
 
+    def canal_resumo():  # leve (sem medir ida e volta): é o que o /saude mostra
+        c = canal_ref.get("c")
+        if not c:
+            return {"conectado": False, "erro": "PC não pareado"}
+        return {"conectado": bool(c.conectado), **({"erro": c.ultimo_erro} if c.ultimo_erro and not c.conectado else {})}
+
     ferramentas = Ferramentas(pasta, g.auditar, g.estado, g.travar, canal=CanalPreguicoso())
-    srv = criar_servidor(pasta, int(cfg["porta"]), cfg["segredo"], ServidorMCP(ferramentas, g), g)
+    srv = criar_servidor(pasta, int(cfg["porta"]), cfg["segredo"], ServidorMCP(ferramentas, g), g, canal=canal_resumo)
     threading.Thread(target=srv.serve_forever, name="http", daemon=True).start()
     log(f"agente {__version__} em 127.0.0.1:{cfg['porta']} (pasta {pasta})"
         + ("; PC mantido acordado enquanto o agente roda" if manter_acordado() else ""))

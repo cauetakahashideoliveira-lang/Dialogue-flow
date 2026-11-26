@@ -217,6 +217,23 @@ class TestUnidades(unittest.TestCase):
                 self.assertTrue(saude["ok"])
                 self.assertEqual(saude.get("canal"), esperado)
 
+    def test_comando_que_termina_antes_da_espera_nao_quebra_o_pedir(self):
+        """A6 (26/11): no CI, um comando rápido terminou e o _vigiar tirou o evento de fim do dicionário antes de o
+        pedir esperar nele: KeyError: '1'. Aqui a thread roda inteira antes de o start() voltar (o pior caso)."""
+        import threading
+        from unittest import mock
+
+        class ThreadQueTerminaNoStart(threading.Thread):
+            def start(self):
+                self.run()
+
+        with tempfile.TemporaryDirectory() as d:
+            t = tarefas_mod.Tarefas(Path(d))
+            with mock.patch.object(tarefas_mod.threading, "Thread", ThreadQueTerminaNoStart):
+                r = t.pedir("echo ok", aguardar=5)
+            self.assertEqual(r["status"], "concluida")
+            self.assertNotIn(r["id"], t.fim)  # o _vigiar limpou o evento, e o pedir não dependeu dele
+
     def test_ps1_preso_nao_derruba_o_fim_da_tarefa(self):
         """Regressão (26/11): o antivírus segurava o .ps1 e o unlink lançava PermissionError na thread que fecha a
         tarefa; o evento de fim nunca era sinalizado. Agora o .ps1 fica para depois e a tarefa termina normalmente."""

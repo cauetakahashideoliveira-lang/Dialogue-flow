@@ -133,13 +133,16 @@ class Tarefas:
             self._salvar(t)
             return self.resumo(t)
         t["pid"] = p.pid
+        # A6 (26/11): o evento fica numa variável. Um comando rápido termina e o _vigiar tira o evento do dicionário
+        # antes de o pedir chegar à espera (KeyError: '1' no CI); a espera não pode depender do dicionário.
+        fim = threading.Event()
         with self.trava:
-            self.tarefas[ident], self.procs[ident], self.fim[ident] = t, p, threading.Event()
+            self.tarefas[ident], self.procs[ident], self.fim[ident] = t, p, fim
         self._salvar(t)
         self.auditar({"evento": "pc_comando", "id": ident, "comando": comando[:300], "motivo": t["motivo"]})
         threading.Thread(target=self._vigiar, args=(ident, p, log, tempo_limite), name=f"tarefa-{ident}",
                          daemon=True).start()
-        self.fim[ident].wait(max(0.0, min(float(aguardar if aguardar is not None else 30), 55.0)))
+        fim.wait(max(0.0, min(float(aguardar if aguardar is not None else 30), 55.0)))
         return self.resumo(t)
 
     def _vigiar(self, ident: str, p: subprocess.Popen, log, tempo_limite: float):

@@ -131,6 +131,12 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   txtC7 = await cartaoCelular();
   ok(apC7.efetivo?.armado === true && apC7.efetivo?.outro === undefined && apC7.aplicado === true && /aplicado no celular/.test(txtC7),
     'C7 — efetivo concordando com a Central: "✓ aplicado no celular"');
+  // a janela assinada acaba sem estado novo: o "armado" do último relato acaba junto (não fica "pendente" nem "Armado")
+  d1(`UPDATE estado SET armado_ate = 1 WHERE aparelho = '${apC7.id}'`);
+  apC7 = (await apiPainel()).aparelhos?.[0] || {};
+  ok(apC7.efetivo?.armado === false && apC7.aplicado === true, 'C7 — janela vencida desde o último relato: efetivo desarmado e "aplicado"');
+  // relato travado da seq atual; a Central arma (seq nova) antes de o celular buscar: o cartão diz que solta ao buscar
+  ackEfetivo({ armado: false, travado: true, trava_local: true, vetado: false });
   // armar sempre gera uma seq nova (depois de veto/trava no celular, o novo armar é um estado assinado mais novo),
   // inclusive com dois pedidos ao mesmo tempo
   await clicar('#btArmar2');  // digital recente
@@ -138,6 +144,13 @@ async function semSessao(rota, corpo = {}, cab = {}) {
     body: JSON.stringify({ horas: 2 }) }).then(r => r.json())).catch(() => ({}));
   const seqsArmar = [...await Promise.all([armarJa(), armarJa()]), await armarJa()].map(x => x.estados?.[0]?.seq);
   ok(seqsArmar.every(Number.isInteger) && new Set(seqsArmar).size === 3, `C7 — armar duas vezes (e ao mesmo tempo) gera seqs diferentes (${seqsArmar})`);
+  apC7 = (await apiPainel()).aparelhos?.[0] || {};
+  txtC7 = await cartaoCelular();
+  ok(apC7.efetivo?.atual === false && apC7.aplicado === false && /TRAVADO no celular/.test(txtC7) && /Solta quando o celular buscar/.test(txtC7)
+    && !/veto local/.test(txtC7), 'C7 — relato de seq anterior com estado novo pendente: "solta quando o celular buscar", não "veto local"');
+  s = sincronizar();
+  txtC7 = await cartaoCelular();
+  ok(/aplicado no celular/.test(txtC7) && !/TRAVADO no celular/.test(txtC7), 'C7 — o celular busca o estado novo: "✓ aplicado no celular"');
 
   // 4b. Etapa 1b: o Claude entra pelo painel (OAuth com a digital); o painel repassa ao celular, assinado
   const FALSO = `import json,sys\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom controle_ir import painel\nP=sys.argv[1];n={'chamadas':0}\nclass H(BaseHTTPRequestHandler):\n  def log_message(s,*a):pass\n  def _r(s,st,d):\n    b=json.dumps(d).encode();s.send_response(st);s.send_header('Content-Type','application/json');s.send_header('Content-Length',str(len(b)));s.end_headers();s.wfile.write(b)\n  def do_GET(s):s._r(200,n)\n  def do_POST(s):\n    b=s.rfile.read(int(s.headers['Content-Length']))\n    if s.path!='/mcp/segredo-teste':return s._r(401,{'erro':'segredo'})\n    if not painel.verificar_requisicao(P,s.headers.get('X-Painel-Assinatura'),b):return s._r(401,{'erro':'assinatura'})\n    m=json.loads(b)\n    if m.get('method')=='tools/list':return s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'tools':[{'name':'controlar','inputSchema':{'type':'object'}}]}})\n    if m.get('method')=='initialize':return s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'protocolVersion':'2025-06-18','capabilities':{'tools':{}},'serverInfo':{'name':'controle-ir','version':'e2e-celular'},'instructions':'Instruções do celular (e2e).'}})\n    n['chamadas']+=1\n    s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'content':[{'type':'text','text':json.dumps({'via':'celular','ferramenta':(m.get('params') or {}).get('name')})}]}})\nsrv=ThreadingHTTPServer(('127.0.0.1',0),H)\nprint(srv.server_port,flush=True)\nsrv.serve_forever()`;

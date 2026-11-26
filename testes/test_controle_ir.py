@@ -894,6 +894,20 @@ class TestPainel(unittest.TestCase):
         self.gravar_estado(*self.assinado(seq=3), seq_max=5)  # estado antigo reapresentado
         self.assertFalse(permitido("executar_comando", self.pol.efetiva())[0])
 
+    def test_mensagem_de_travado_mostra_a_saida_que_existe(self):
+        # S8: a EMERGÊNCIA mandava "desligar a EMERGÊNCIA na Central", e a Central não tem esse botão (armar desliga)
+        from controle_ir.seguranca import permitido
+        emergencia = {"modo_painel": True, "travado": True, "trava_local": False}
+        ok, motivo = permitido("executar_comando", emergencia)
+        self.assertFalse(ok)
+        self.assertIn("arme de novo pela Central de Controle", motivo)
+        self.assertIn("armar desliga a EMERGÊNCIA", motivo)
+        self.assertNotIn("desligue a EMERGÊNCIA", motivo)
+        ok, motivo = permitido("executar_comando", {**emergencia, "trava_local": True})
+        self.assertFalse(ok)
+        self.assertIn("isso também solta a trava", motivo)
+        self.assertIn("controle-ir exec destravar", motivo)
+
     def test_armar_local_recusado_e_desarmar_local_veta(self):
         self.gravar_estado(*self.assinado(seq=4))
         with self.assertRaises(ValueError):

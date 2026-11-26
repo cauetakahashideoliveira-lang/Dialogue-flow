@@ -56,6 +56,15 @@
   `Canal`); chamadas sem túnel e avisos na hora; sem canal, volta ao ngrok sozinho (`docs/seguranca.md` §3d).
   `consultar` mostra `servidor.canal`. Tela: `acao=grade` lê/resolve grades NxN no celular (9x9, 16x16 com
   letras); `acao=rotina` guarda chamadas longas e repete N vezes; reflexos por app dispensam avisos de jogos.
+- **Celular sumido ou travado (Central 2026-11-26.5, celular 1.0.129, `docs/regressoes.md` C4/C5/C7, S3–S8):**
+  - Sem canal, a Central entrega a lista guardada do celular, com o aviso "reconectando". As chamadas esperam até
+    10 s e repetem uma vez. Se o aviso continuar, peça ao dono para conferir o serviço no Termux; não peça para
+    reiniciar o conector à toa.
+  - "TRAVADO" com o celular pareado: o dono arma de novo na Central, com a digital, e isso solta a trava. O
+    `controle-ir exec destravar`, no Termux, também solta.
+  - O cartão da Central mostra o estado real do celular ("TRAVADO no celular", "veto local"). `consultar` →
+    `painel_sync` mostra o último erro da sincronização.
+  - Mudança em `painel/` faz deploy no merge, e o deploy derruba os canais por alguns segundos.
 - Pedidos de aprovação do conector vêm das permissões dele no claude.ai (claude.ai/customize/connectors →
   Controle Geral → “Sempre permitir”; a regra da organização `org_ask_ceiling` pode travar); não tente contornar. Ferramentas novas do conector só aparecem em conversas novas (lista fixa por conversa).
 - **`/god-mode`** (`.claude/skills/god-mode/`, adaptação AGPL do G0DM0D3): AutoTune, notas, STM, `perguntar` e

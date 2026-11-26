@@ -59,8 +59,9 @@ function render() {
     const ap = el('div');
     if (ef && ef.travado && !travado) {
       ap.append(el('div', `TRAVADO ${onde}`, 'estado perigo-t'),
-        el('div', pc ? 'Arme com a digital para soltar.' : 'Arme com a digital para soltar (no próprio celular: controle-ir exec destravar)', 'suave'));
-    } else if (ef && armado && !ef.armado) {
+        el('div', !ef.atual ? `Solta quando ${pc ? 'o PC' : 'o celular'} buscar o estado novo (até 30 s).`
+          : pc ? 'Arme com a digital para soltar.' : 'Arme com a digital para soltar (no próprio celular: controle-ir exec destravar)', 'suave'));
+    } else if (ef && ef.atual && armado && !ef.armado) {
       ap.append(el('div', `desarmado ${onde} (veto local): arme de novo para valer`, 'alerta'));
     } else {
       ap.append(el('div', a.aplicado ? `✓ aplicado ${onde}` : `… pendente: ${pc ? 'o PC' : 'o celular'} ainda não confirmou`, a.aplicado ? 'ok' : 'alerta'));
@@ -81,7 +82,7 @@ function render() {
     indicador('Canal direto', a.canal?.conectado, 'Conectado', 'Desconectado');
     indicador('Emissor IR', relato?.emissor_ir, 'Disponível', 'Indisponível');
     indicador('Shizuku', relato?.shizuku, 'Respondendo', 'Falhou na consulta');
-    indicador(`Controle armado ${onde}`, contatoRecente && (ef || a.aplicado) ? Boolean(ef ? ef.armado : armado) : null,
+    indicador(`Controle armado ${onde}`, contatoRecente && (ef?.atual || a.aplicado) ? Boolean(ef?.atual ? ef.armado : armado) : null,
       'Armado', travado || (ef && ef.travado) ? 'Travado' : 'Desarmado');
     cel.append(el('strong', a.nome), st, ap, lista,
       el('p', `Último contato ${ha(a.ultimo_contato)} · versão ${a.versao || '?'} · túnel de reserva: ${e.tem_mcp ? 'endereço cadastrado' : 'sem endereço'}`, 'suave'));

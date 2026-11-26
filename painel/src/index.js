@@ -11,7 +11,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 const SESSAO_MAX = 12 * 3600, SESSAO_OCIOSA = 30 * 60, PASSKEY_FRESCA = 120, DESAFIO = 300, PAREAMENTO = 600;
 const HORAS_MAX = 24;
-const VERSAO_CENTRAL = '2026-11-26.4';  // suba a cada mudança da Central (aparece em /versao)
+const VERSAO_CENTRAL = '2026-11-26.5';  // suba a cada mudança da Central (aparece em /versao)
 const agora = () => Math.floor(Date.now() / 1000);
 const enc = new TextEncoder();
 
@@ -544,7 +544,7 @@ async function ackCelular(env, req, corpo) {
   if (ef && typeof ef === 'object' && !Array.isArray(ef) && CHAVES_EFETIVO.every(k => typeof ef[k] === 'boolean'))
     await env.DB.prepare(`INSERT INTO efetivo (aparelho, dados, quando) VALUES (?, ?, ?) ON CONFLICT(aparelho)
       DO UPDATE SET dados = excluded.dados, quando = excluded.quando`)
-      .bind(ap.id, JSON.stringify(Object.fromEntries(CHAVES_EFETIVO.map(k => [k, ef[k]]))), agora()).run();
+      .bind(ap.id, JSON.stringify({ ...Object.fromEntries(CHAVES_EFETIVO.map(k => [k, ef[k]])), seq }), agora()).run();
   else await env.DB.prepare('DELETE FROM efetivo WHERE aparelho = ?').bind(ap.id).run();
   if (corpo.em_uso && typeof corpo.em_uso === 'object') {  // o que está em uso no celular agora
     const txt = JSON.stringify(corpo.em_uso).slice(0, 6000);
@@ -589,7 +589,14 @@ async function painel(env, s, origem) {
     const ef = await env.DB.prepare('SELECT dados, quando FROM efetivo WHERE aparelho = ?').bind(a.id).first();
     a.efetivo = ef ? { ...JSON.parse(ef.dados), em: ef.quando } : null;
     const armadaNaCentral = !a.estado.travado && a.estado.armado_ate > t;
-    a.efetivo_concorda = !a.efetivo || (a.efetivo.travado === !!a.estado.travado && a.efetivo.armado === armadaNaCentral);
+    if (a.efetivo) {
+      // o relato vale para a seq que o aparelho confirmou: com um estado mais novo ainda não buscado, é retrato velho
+      // (o cartão diz "pendente", não "veto local"); e o armado do relato acaba junto com a janela assinada
+      a.efetivo.atual = Number(a.efetivo.seq) >= a.estado.seq;
+      if (a.efetivo.armado && a.efetivo.atual && a.estado.armado_ate <= t) a.efetivo.armado = false;
+    }
+    a.efetivo_concorda = !a.efetivo || !a.efetivo.atual
+      || (a.efetivo.travado === !!a.estado.travado && a.efetivo.armado === armadaNaCentral);
     a.aplicado = a.aplicado_seq >= a.estado.seq && a.efetivo_concorda;
   }
   const creds = (await env.DB.prepare('SELECT id, nome, criada, ultimo_uso, revogada FROM credenciais ORDER BY criada').all()).results;

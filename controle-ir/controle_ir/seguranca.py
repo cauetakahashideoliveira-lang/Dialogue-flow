@@ -48,7 +48,7 @@ def permitido(ferramenta: str, pol: dict, agora: float | None = None) -> tuple[b
             volta = ("arme de novo pela Central de Controle, com a digital (isso também solta a trava) ou, no "
                      "próprio celular (Termux), controle-ir exec destravar")
         else:
-            volta = "desligue a EMERGÊNCIA na Central de Controle e arme lá, com a digital"
+            volta = "arme de novo pela Central de Controle, com a digital (armar desliga a EMERGÊNCIA)"
         return False, ("execução TRAVADA no celular: só consultar, politica e travar respondem. "
                        "Para voltar, " + volta)
     if armado(pol, agora):

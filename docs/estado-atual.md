@@ -2,6 +2,54 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 26/11 — PC Windows na Central (agente_pc) — PASSAGEM PARA A PRÓXIMA SESSÃO
+
+**Estado (26/11 ~23:05):** PC pareado, armado e operado de ponta a ponta pelo conector Controle Geral.
+`pc_consultar`, `pc_executar` (PowerShell como administrador) e `pc_tela` testados no Windows real.
+Detalhes do agente: [pc.md](pc.md). PRs #26–#29.
+
+**O PC (PcGiga):**
+
+| Item | Valor |
+|---|---|
+| Sistema | Windows 11 (10.0.26200), usuário `felip`, placa-mãe H610M-HVS/M.2 R2.0 |
+| CPU | i5-13400F (10 núcleos / 16 threads) |
+| Memória | 32 GB |
+| GPU | RTX 4060 Ti 8 GB (compute 8.9), driver 591.86, CUDA 13.1 |
+| Disco | C: 953 GB, 498 GB livres |
+| Agente | `%LOCALAPPDATA%\agente-pc`, porta local 47630, tarefa agendada "Agente PC - Central" |
+| Central | `https://painel-casa.cauetakahashideoliveira.workers.dev`; `/versao` mostra a versão publicada (`2026-11-26.1`) |
+
+- **Já instalado:** Git, GitHub CLI (logado), Python 3.12.10, Claude Code 2.1.332 (sem login: não é usado), winget.
+- **Repositórios:** `C:\dev\dialogue-flow` e `C:\dev\roblox`, este na branch padrão (`9a2a399`). O trabalho do
+  Winlator está no PR #2 do Roblox, ainda não mesclado.
+- **Falta:** Node.js, rokit/rojo/lune/stylua, Roblox Studio, Ollama, VS Code. O WSL não está instalado.
+
+**Como operar o PC:**
+- Em conversa nova, use as ferramentas `pc_*`, se aparecerem na lista.
+- Em conversa antiga, ou se não aparecerem, use `executar_capacidade(nome="pc_consultar"|"pc_executar"|…,
+  argumentos={…})`: a Central encaminha ao PC (#28).
+- O PC precisa estar **armado**: a Central arma todos os aparelhos juntos, por até 24 h, com a digital.
+
+**Lições desta sessão:**
+1. Com o serviço do celular parado, a Central caía no túnel ngrok morto (404) e o conector inteiro caía, nas conversas
+   novas com erro 405. O #27 corrige isso. Se o celular cair: `controle-ir desligar; pkill ngrok; controle-ir ligar`
+   no Termux. O Termux:Boot ainda não está instalado.
+2. A cada deploy da Central, os canais caem. O celular voltou sozinho; o PC 1.0.0 não voltou, e foi preciso
+   reiniciar a tarefa. A 1.0.1 (#29) reconecta em até 1 min, impede a suspensão do PC e registra quedas no
+   `agente.log`.
+3. A lista de ferramentas é fixa por conversa. As `pc_*` só aparecem em conversa aberta depois de o PC estar
+   conectado; antes disso, use a ponte do item acima.
+
+**Próximo passo (aprovado em proposta, não começado):**
+1. Ambiente Roblox no PC:
+   - Node LTS e rokit, depois `rokit install` em `C:\dev\roblox`;
+   - Roblox Studio (o dono faz o login da conta uma vez);
+   - `rojo plugin install` e o MCP do Studio;
+   - teste bridge-01 → bridge-02 (`/rbx-studio-check`).
+2. IA local: Ollama com `qwen2.5-coder:7b` (cabe nos 8 GB de VRAM), servindo os agentes e o `/god-mode`.
+3. Fechar o WhatsApp Web antes de usar `pc_tela`/`pc_entrada` (a tela é capturada inteira).
+
 ## 23/11 — agente de tela: visão em páginas web, resposta, grafo de telas e vigias (1.0.102)
 
 **Teste real que motivou (POCO, Chrome):** objetivo "pesquisar a cotação do dólar e ler o valor".

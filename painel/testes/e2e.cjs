@@ -178,6 +178,8 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   await pagina.unroute('https://claude.ai/**');
   await pagina.goto(BASE); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/Claude \(teste\) → claude\.ai/.test(await pagina.textContent('#acessos')), 'painel lista o acesso autorizado');
+  const versao = await (await fetch(`${BASE}/versao`)).json();
+  ok(versao.recursos?.includes('pc-ponte') && /^\d{4}-\d{2}-\d{2}/.test(versao.central || ''), `/versao publica a versão da Central (${versao.central})`);
   // 4b''. PC (agente_pc, código real): segundo aparelho no MESMO conector, ferramentas pc_* pelo canal dele,
   //       com o estado de armado próprio
   const PASTA_PC = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-'));

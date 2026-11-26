@@ -11,6 +11,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 const SESSAO_MAX = 12 * 3600, SESSAO_OCIOSA = 30 * 60, PASSKEY_FRESCA = 120, DESAFIO = 300, PAREAMENTO = 600;
 const HORAS_MAX = 24;
+const VERSAO_CENTRAL = '2026-11-26.1';  // suba a cada mudança da Central (aparece em /versao)
 const agora = () => Math.floor(Date.now() / 1000);
 const enc = new TextEncoder();
 
@@ -569,6 +570,8 @@ const painelApp = {
       await inicializar(env);
       return await autorizar(req, env, u);
     }
+    // versão publicada (sem segredo nenhum): para conferir de fora se o deploy chegou
+    if (rota === '/versao') return json({ central: VERSAO_CENTRAL, recursos: ['pc', 'pc-sem-celular', 'pc-ponte'] });
     if (!rota.startsWith('/api/')) return env.ASSETS.fetch(req);
     try {
       await inicializar(env);

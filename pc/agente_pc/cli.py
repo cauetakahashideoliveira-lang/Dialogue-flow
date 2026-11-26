@@ -24,6 +24,19 @@ from .ferramentas import Ferramentas
 from .servidor import Guardiao, ServidorMCP, criar_servidor
 
 
+class CanalPC(Canal):
+    """O canal do celular, com o laço blindado: uma falha inesperada reinicia o laço em vez de matar a conexão."""
+
+    def _laco(self):
+        while not self.parar.is_set():
+            try:
+                super()._laco()
+            except Exception as e:  # noqa: BLE001
+                self.ultimo_erro = f"{type(e).__name__}: {e}"[:160]
+                self.log("canal: laço reiniciado depois de", self.ultimo_erro)
+                self.parar.wait(5)
+
+
 def log(*a):
     print(time.strftime("%Y-%m-%d %H:%M:%S"), *a, flush=True)
 
@@ -67,6 +80,15 @@ def desligar(_a) -> int:
     return 0
 
 
+def manter_acordado() -> bool:
+    """Windows: impede a suspensão enquanto o agente roda (como um player de vídeo); a tela ainda pode apagar."""
+    if os.name != "nt":
+        return False
+    import ctypes
+    ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+    return bool(ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED))
+
+
 def ligar(_a) -> int:
     pasta = config.pasta()
     (pasta / "DESLIGAR").unlink(missing_ok=True)
@@ -82,7 +104,8 @@ def ligar(_a) -> int:
     ferramentas = Ferramentas(pasta, g.auditar, g.estado, g.travar, canal=CanalPreguicoso())
     srv = criar_servidor(pasta, int(cfg["porta"]), cfg["segredo"], ServidorMCP(ferramentas, g), g)
     threading.Thread(target=srv.serve_forever, name="http", daemon=True).start()
-    log(f"agente {__version__} em 127.0.0.1:{cfg['porta']} (pasta {pasta})")
+    log(f"agente {__version__} em 127.0.0.1:{cfg['porta']} (pasta {pasta})"
+        + ("; PC mantido acordado enquanto o agente roda" if manter_acordado() else ""))
     g.auditar({"evento": "pc_agente_ligado", "versao": __version__})
 
     def reduzir(motivo):
@@ -95,12 +118,30 @@ def ligar(_a) -> int:
 
     if painel.ler(pasta):
         sinc = painel.Sincronizador(pasta, __version__, reduzir, log=log, em_uso=em_uso).iniciar()
-        canal_ref["c"] = Canal(pasta, int(cfg["porta"]), cfg["segredo"], ao_sincronizar=sinc.acordar, log=log).iniciar()
+        canal_ref["c"] = CanalPC(pasta, int(cfg["porta"]), cfg["segredo"], ao_sincronizar=sinc.acordar, log=log).iniciar()
         sinc.ao_ver_canal = canal_ref["c"].acordar
     else:
         log("PC ainda não pareado: rode 'python -m agente_pc parear <URL> <CÓDIGO>' e reinicie")
+    ultimo_relato, ultimo_erro, fora_desde = 0.0, "", None
     while not (pasta / "DESLIGAR").exists():
         time.sleep(5)
+        c = canal_ref.get("c")
+        if not c:
+            continue
+        if c.conectado:
+            if fora_desde:
+                log(f"canal de volta depois de {int(time.time() - fora_desde)} s fora")
+            fora_desde = None
+            continue
+        fora_desde = fora_desde or time.time()
+        if c.ultimo_erro and c.ultimo_erro != ultimo_erro:  # cada motivo novo de queda vai para o registro
+            ultimo_erro = c.ultimo_erro
+            log("canal caiu:", ultimo_erro)
+        if time.time() - fora_desde > 60:  # fora há mais de 1 min: tenta de novo agora (pula a espera longa)
+            c.acordar()
+        if time.time() - ultimo_relato > 300:
+            ultimo_relato = time.time()
+            log(f"canal desconectado da Central há {int(time.time() - fora_desde)} s:", c.ultimo_erro or "tentando")
     ferramentas.tarefas.parar_todas()
     log("desligado a pedido")
     return 0

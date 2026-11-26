@@ -98,7 +98,7 @@ O atualizador atual faz download anônimo. Use uma origem pública para esse cam
 
 ## Central de Controle no Cloudflare
 
-O gateway MCP escolhe o primeiro aparelho cadastrado que esteja sem revogação, por ordem de criação. Para desenvolver e operar um segundo ambiente de forma independente, use a Central da conta do novo dev e pareie o telefone dele ali. O teste local usa um Worker e um banco próprios a cada execução.
+O gateway MCP escolhe o primeiro celular cadastrado que esteja sem revogação, por ordem de criação. Um PC (agente com versão `pc-…`, [docs/pc.md](pc.md)) entra no mesmo conector: a Central une as ferramentas `pc_*` à lista e as encaminha pelo canal do PC. Para desenvolver e operar um segundo ambiente de forma independente, use a Central da conta do novo dev e pareie o telefone dele ali. O teste local usa um Worker e um banco próprios a cada execução.
 
 - Worker `painel-casa` (`painel/wrangler.jsonc`). Recursos: D1 `painel` (`painel/schema.sql`), KV `OAUTH_KV`,
   Durable Object `Canal` (migração `v1`), assets em `public/`.

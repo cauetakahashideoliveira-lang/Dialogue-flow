@@ -103,7 +103,7 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   ok(/aplicado no celular/.test(await pagina.textContent('#celulares')), 'depois da confirmação: "aplicado"');
 
   // 4b. Etapa 1b: o Claude entra pelo painel (OAuth com a digital); o painel repassa ao celular, assinado
-  const FALSO = `import json,sys\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom controle_ir import painel\nP=sys.argv[1];n={'chamadas':0}\nclass H(BaseHTTPRequestHandler):\n  def log_message(s,*a):pass\n  def _r(s,st,d):\n    b=json.dumps(d).encode();s.send_response(st);s.send_header('Content-Type','application/json');s.send_header('Content-Length',str(len(b)));s.end_headers();s.wfile.write(b)\n  def do_GET(s):s._r(200,n)\n  def do_POST(s):\n    b=s.rfile.read(int(s.headers['Content-Length']))\n    if s.path!='/mcp/segredo-teste':return s._r(401,{'erro':'segredo'})\n    if not painel.verificar_requisicao(P,s.headers.get('X-Painel-Assinatura'),b):return s._r(401,{'erro':'assinatura'})\n    n['chamadas']+=1;m=json.loads(b)\n    s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'content':[{'type':'text','text':json.dumps({'via':'celular','ferramenta':(m.get('params') or {}).get('name')})}]}})\nsrv=ThreadingHTTPServer(('127.0.0.1',0),H)\nprint(srv.server_port,flush=True)\nsrv.serve_forever()`;
+  const FALSO = `import json,sys\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom controle_ir import painel\nP=sys.argv[1];n={'chamadas':0}\nclass H(BaseHTTPRequestHandler):\n  def log_message(s,*a):pass\n  def _r(s,st,d):\n    b=json.dumps(d).encode();s.send_response(st);s.send_header('Content-Type','application/json');s.send_header('Content-Length',str(len(b)));s.end_headers();s.wfile.write(b)\n  def do_GET(s):s._r(200,n)\n  def do_POST(s):\n    b=s.rfile.read(int(s.headers['Content-Length']))\n    if s.path!='/mcp/segredo-teste':return s._r(401,{'erro':'segredo'})\n    if not painel.verificar_requisicao(P,s.headers.get('X-Painel-Assinatura'),b):return s._r(401,{'erro':'assinatura'})\n    m=json.loads(b)\n    if m.get('method')=='tools/list':return s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'tools':[{'name':'controlar','inputSchema':{'type':'object'}}]}})\n    n['chamadas']+=1\n    s._r(200,{'jsonrpc':'2.0','id':m.get('id'),'result':{'content':[{'type':'text','text':json.dumps({'via':'celular','ferramenta':(m.get('params') or {}).get('name')})}]}})\nsrv=ThreadingHTTPServer(('127.0.0.1',0),H)\nprint(srv.server_port,flush=True)\nsrv.serve_forever()`;
   const falso = spawn('python3', ['-c', FALSO, PASTA], {
     env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: ['ignore', 'pipe', 'inherit'],
   });
@@ -178,6 +178,50 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   await pagina.unroute('https://claude.ai/**');
   await pagina.goto(BASE); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/Claude \(teste\) → claude\.ai/.test(await pagina.textContent('#acessos')), 'painel lista o acesso autorizado');
+  // 4b''. PC (agente_pc, código real): segundo aparelho no MESMO conector, ferramentas pc_* pelo canal dele,
+  //       com o estado de armado próprio
+  const PASTA_PC = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-'));
+  const envPC = { ...process.env, AGENTE_PC_DIR: PASTA_PC, AGENTE_PC_PORTA: String(41000 + Math.floor(Math.random() * 9000)),
+    PYTHONPATH: [path.join(RAIZ, 'pc'), path.join(RAIZ, 'controle-ir')].join(path.delimiter) };
+  await clicar('#btParear');
+  const codigoPC = (await pagina.textContent('#pareamento')).match(/ ([A-Z0-9]{8})$/)[1];
+  execFileSync('python3', ['-m', 'agente_pc', 'parear', BASE, codigoPC, '--nome', 'PC-teste'], { env: envPC, stdio: 'ignore' });
+  const agentePC = spawn('python3', ['-m', 'agente_pc', 'ligar'], { env: envPC, stdio: 'ignore' });
+  filhos.push(agentePC);
+  const chamarCom = (nome, args = {}) => fetch(`${BASE}/mcp`, { method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json', authorization: `Bearer ${tok.access_token}` },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: nome, arguments: args } }) });
+  const textoDe = async resp => { const j = await resp.json(); return { j, d: JSON.parse(j.result?.content?.[0]?.text || '{}') }; };
+  let pcOk = await esperar(async () => (await chamarCom('pc_consultar')).headers.get('x-via') === 'pc', 15000);
+  ok(pcOk, 'PC pareado e conectado pelo canal: pc_consultar chega ao agente do PC');
+  let { d: dc } = await textoDe(await chamarCom('pc_consultar'));
+  ok(/^pc-/.test(dc.agente || '') && dc.seguranca?.armado === false && dc.pc?.memoria, 'pc_consultar: retrato do PC; recém-pareado, DESARMADO');
+  const lista = await (await manutencao({ method: 'tools/list', id: 12 })).json();
+  const nomes = (lista.result?.tools || []).map(t => t.name);
+  ok(nomes.includes('controlar') && nomes.includes('pc_executar') && nomes.includes('pc_tela'),
+    `um conector só: tools/list une as ferramentas do celular e as do PC (${nomes.length})`);
+  let { j: jx } = await textoDe(await chamarCom('pc_executar', { comando: 'echo pc-ok' }));
+  ok(jx.result?.structuredContent?.onde === 'painel' && /PC está DESARMADO/.test(jx.result?.content?.[0]?.text || ''),
+    'PC desarmado: pc_executar barrado NA BORDA (estado do PC, não do celular)');
+  await clicar('#btArmar2');
+  pcOk = await esperar(async () => { const { d } = await textoDe(await chamarCom('pc_executar', { comando: 'echo pc-ok', aguardar: 20 }));
+    return d.status === 'concluida' && /pc-ok/.test(d.saida?.texto || ''); }, 15000);
+  ok(pcOk, 'armado com a digital: o comando roda no PC e a saída volta (assinatura conferida pelo agente)');
+  await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
+  ok(/PC-teste/.test(await pagina.textContent('#celulares')) && /pc_executar/.test(await pagina.textContent('#chamadas')),
+    'a Central lista o PC e as chamadas pc_* na Atividade');
+  agentePC.kill('SIGKILL');
+  pcOk = await esperar(async () => /fora do ar/.test(JSON.stringify((await textoDe(await chamarCom('pc_consultar'))).d)), 90000);
+  ok(pcOk, 'PC desligado: a chamada explica que ele está fora do ar (sem travar o conector)');
+  const lista2 = await (await manutencao({ method: 'tools/list', id: 13 })).json();
+  ok((lista2.result?.tools || []).some(t => t.name === 'pc_executar'), 'com o PC fora do ar, as ferramentas dele continuam na lista (última conhecida)');
+  await clicar('text=Revogar PC-teste');
+  const lista3 = await (await manutencao({ method: 'tools/list', id: 14 })).json();
+  ok(!(lista3.result?.tools || []).some(t => t.name.startsWith('pc_')) && (await textoDe(await chamarCom('pc_consultar'))).j.result?.isError,
+    'PC revogado na Central: as ferramentas pc_* somem e a chamada é recusada');
+  fs.rmSync(PASTA_PC, { recursive: true, force: true });
+  await new Promise(z => setTimeout(z, 600));
+
   const antesDoAviso = acordadas();
   await clicar('#btDesarmar');
   ok(await esperar(() => acordadas() > antesDoAviso, 3000), 'desarmar chega ao celular NA HORA pelo canal (antes: até 30 s)');

@@ -181,6 +181,10 @@ class Canal:
         self.chamadas = collections.deque(maxlen=60)
         self.rtts = collections.deque(maxlen=20)
         self._ping_em = 0.0
+        self.batida = BATIDA  # s entre pings, contados por tempo (não por silêncio)
+        self.espera_minima = 2.0  # s antes de reconectar (dobra a cada falha, até 60 s)
+        self.quedas = collections.deque(maxlen=10)  # motivo de cada queda, com hora
+        self.thread: threading.Thread | None = None
 
     @property
     def conectado(self) -> bool:
@@ -191,6 +195,7 @@ class Canal:
             self.medir_rtt(3, 1.5)
         return {"conectado": self.conectado, "desde": int(self.conectado_desde) if self.conectado else None,
                 "atendidas": self.atendidas, **({"erro": self.ultimo_erro} if self.ultimo_erro else {}),
+                **({"quedas": list(self.quedas)[-5:]} if self.quedas else {}),
                 **({"desempenho": self.desempenho()} if self.chamadas or self.rtts else {})}
 
     def desempenho(self) -> dict:
@@ -226,7 +231,8 @@ class Canal:
         return feitas
 
     def iniciar(self):
-        threading.Thread(target=self._laco, name="canal", daemon=True).start()
+        self.thread = threading.Thread(target=self._laco, name="canal", daemon=True)
+        self.thread.start()
         return self
 
     def acordar(self):
@@ -243,47 +249,77 @@ class Canal:
         u = "wss://" + u[8:] if u.startswith("https://") else "ws://" + u.split("://", 1)[-1]
         return f"{u}/api/celular/canal", cfg["token"]
 
+    def _queda(self, e: BaseException):
+        """Registra o motivo da queda (tipo + mensagem, com hora) no estado e no log do serviço."""
+        self.ultimo_erro = f"{type(e).__name__}: {e}"[:160]
+        self.quedas.append({"quando": time.strftime("%d/%m %H:%M:%S"), "motivo": self.ultimo_erro})
+        self.log("canal", f"caiu: {self.ultimo_erro}")
+
     def _laco(self):
-        espera = 2.0
+        """Nunca morre: qualquer erro é registrado e o canal reconecta depois de uma espera crescente."""
+        espera = self.espera_minima
         while not self.parar.is_set():
-            url, token = self._endereco()
-            if not url:
-                self.parar.wait(60)
-                continue
             try:
+                url, token = self._endereco()
+                if not url:
+                    self.parar.wait(60)
+                    continue
                 self.ws = WebSocket(url, {"Authorization": f"Bearer {token}"})
-                self.conectado_desde, self.ultimo_erro, espera = time.time(), "", 2.0
+                self.conectado_desde, self.ultimo_erro, espera = time.time(), "", self.espera_minima
                 self.log("canal", "conectado à Central")
                 if self.ao_sincronizar:  # acabou de conectar: sincroniza (a Central passa a saber que o canal existe)
                     self.ao_sincronizar()
                 self._atender()
             except (OSError, ConnectionError, ValueError) as e:
-                self.ultimo_erro = str(e)[:160]
+                self._queda(e)
                 if "404" in self.ultimo_erro or "405" in self.ultimo_erro:
                     espera = 300.0  # Central sem canal (versão antiga): tenta de vez em quando
                 elif "401" in self.ultimo_erro or "403" in self.ultimo_erro:
                     espera = 120.0
+            except Exception as e:  # noqa: BLE001 — erro inesperado não pode matar a thread do canal
+                self._queda(e)
             finally:
-                if self.ws:
-                    self.ws.fechar()
-                self.ws = None
+                ws, self.ws = self.ws, None
+                if ws:
+                    try:
+                        ws.fechar()
+                    except Exception:  # noqa: BLE001
+                        pass
+            if self.parar.is_set():
+                break
             if self.despertar.wait(espera):  # espera (ou a Central avisou que o canal existe: tenta já)
-                espera = 2.0
+                espera = self.espera_minima
             self.despertar.clear()
             espera = min(espera * 2, 60.0) if espera < 120 else espera
+
+    def _batidas(self, ws, fim: threading.Event):
+        """Ping a cada `batida` s POR TEMPO, mesmo com mensagens chegando: a Central dá o canal por morto sem
+        ping em 70 s, e antes o ping só saía depois de 25 s sem receber nada."""
+        while not fim.wait(self.batida) and not self.parar.is_set() and self.ws is ws:
+            try:
+                self._ping_em = time.monotonic()
+                ws.enviar("ping")
+            except OSError:
+                return  # a leitura percebe a conexão quebrada e o laço reconecta
 
     def _atender(self):
         ws = self.ws
         ws.s.settimeout(BATIDA)
         ultimo = time.time()
+        fim = threading.Event()
+        threading.Thread(target=self._batidas, args=(ws, fim), name="canal-batida", daemon=True).start()
+        try:
+            self._receber(ws, ultimo)
+        finally:
+            fim.set()
+
+    def _receber(self, ws, ultimo: float):
         while not self.parar.is_set():
             try:
                 op, dados = ws.receber()
             except socket.timeout:
                 if time.time() - ultimo > SILENCIO:
                     raise ConnectionError("canal mudo: reconectando")
-                self._ping_em = time.monotonic()
-                ws.enviar("ping")
                 continue
             ultimo = time.time()
             if op == 1 and dados == b"pong" and self._ping_em:

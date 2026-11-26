@@ -407,7 +407,8 @@ def painel_cli(a) -> int:
     print(json.dumps({"pareado": bool(cfg), "painel": cfg and cfg.get("url"), "aparelho": cfg and cfg.get("aparelho"),
                       "revogado": cfg and cfg.get("revogado"), "estado_valido": e,
                       "efetiva": {k: v for k, v in Politica(PASTA).efetiva().items()
-                                  if k in ("armado_ate", "travado", "desarmado_permite", "painel_seq")}},
+                                  if k in ("armado_ate", "travado", "trava_local", "travado_seq",
+                                           "desarmado_permite", "painel_seq")}},
                      ensure_ascii=False, indent=1))
     return 0
 
@@ -440,12 +441,9 @@ def exec_cli(a) -> int:
             _termux("termux-notification-remove", f"controle-ir-exec-{a.aprovar}")
         _aviso(f"Execução liberada por {minutos} min (exceto atualizações)")
         return 0
-    if a.acao == "travar":
-        p["travado"], p["liberado_ate"] = True, 0
-        pol.gravar(p)
-        (PASTA / "PARAR").write_text(str(time.time()))  # laços das capacidades em 2º plano param
-        r = _api("exec_parar_todas", sair=False)
-        _aviso(f"Execução TRAVADA ({r.get('paradas', 0)} tarefa(s) encerrada(s))")
+    if a.acao == "travar":  # botão Travar da notificação e widget "Travar Controle IR": o mesmo caminho do conector
+        r = pol.travar("celular", parar=lambda: _api("exec_parar_todas", sair=False).get("paradas", 0))
+        _aviso(f"Execução TRAVADA ({r['tarefas_encerradas']} tarefa(s) encerrada(s))")
         return 0
     if a.acao == "destravar":
         p["travado"] = False
@@ -952,15 +950,20 @@ def _iniciar(args, trava):
                 relato["emissor_ir"] = (EmissorSimulado() if args.simulado else EmissorTermux()).disponivel()["disponivel"]
             return relato
 
-        sinc = painel_mod.Sincronizador(PASTA, __version__, reduzir,
+        def log_servico(*a):  # no modo --fundo a saída vai para ~/.controle-ir/servico.log
+            print(time.strftime("%H:%M:%S"), *a, flush=True)
+
+        sinc = painel_mod.Sincronizador(PASTA, __version__, reduzir, log=log_servico,
                                         url_mcp=lambda: f"{servico.url_publica}/mcp/{c['segredo']}"
                                         if servico.url_publica else None,
                                         em_uso=relatar_uso,
                                         quadro=observador.quadro).iniciar()
+        servico.sinc = sinc  # último resultado da sincronização aparece em consultar (servidor.painel_sync)
         # canal direto com a Central (WebSocket aberto pelo celular): chamadas sem túnel e avisos na hora
-        servico.canal = Canal(PASTA, porta, c["segredo"], ao_sincronizar=sinc.acordar,
-                              log=lambda *a: print(time.strftime("%H:%M:%S"), *a, flush=True)).iniciar()
+        servico.canal = Canal(PASTA, porta, c["segredo"], ao_sincronizar=sinc.acordar, log=log_servico).iniciar()
         sinc.ao_ver_canal = servico.canal.acordar
+        # cão de guarda: a cada 30 s, reinicia a thread do canal ou do painel que tiver morrido
+        painel_mod.CaoDeGuarda({"canal": servico.canal, "painel": sinc}, log=log_servico).iniciar()
     inicio = time.time()
 
     def gravar_estado(url=None):

@@ -564,6 +564,95 @@ class TestCanal(unittest.TestCase):
                          ("consultar", "tools/call"))
         self.assertEqual(nome_da_chamada(b"lixo"), (None, None))
 
+    def test_canal_sobrevive_a_erro_inesperado_e_reconecta(self):
+        """S6: uma exceção fora de (OSError, ConnectionError, ValueError) matava a thread "canal" para sempre;
+        agora é registrada (tipo + mensagem, com hora) e o canal reconecta."""
+        from controle_ir import canal as canal_mod
+        from controle_ir import painel as painel_mod
+        pasta = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, pasta, True)
+        painel_mod.gravar(pasta, {"url": "https://central.exemplo", "aparelho": "a1", "token": "t",
+                                  "chave_publica": "x"})
+        tentativas, reconectou, linhas = [], threading.Event(), []
+
+        def falso(url, cab):
+            tentativas.append(url)
+            if len(tentativas) == 1:
+                raise RuntimeError("quadro inesperado")
+            reconectou.set()
+            raise ConnectionError("fim do teste")
+
+        with mock.patch.object(canal_mod, "WebSocket", falso):
+            cn = canal_mod.Canal(pasta, 1, "s", log=lambda *a: linhas.append(" ".join(map(str, a))))
+            cn.espera_minima = 0.05
+            cn.iniciar()
+            try:
+                self.assertTrue(reconectou.wait(5), "o canal não reconectou depois do erro inesperado")
+                self.assertTrue(cn.thread.is_alive())
+            finally:
+                cn.parar.set()
+                cn.despertar.set()
+                cn.thread.join(3)
+        self.assertIn("RuntimeError", "\n".join(linhas))
+        self.assertIn("quadro inesperado", cn.quedas[0]["motivo"])
+        self.assertTrue(cn.quedas[0]["quando"])
+
+    def test_ping_sai_no_horario_mesmo_com_trafego(self):
+        """S6: o ping saía só depois de 25 s sem receber nada; com tráfego contínuo a Central (que dá o canal por
+        morto sem ping em 70 s) derrubava o canal. Agora sai por tempo."""
+        from controle_ir import canal as canal_mod
+
+        class WsFalso:
+            def __init__(s):
+                s.enviados, s.s = [], mock.Mock()
+
+            def enviar(s, dados, op=1):
+                s.enviados.append(dados)
+
+            def receber(s):
+                time.sleep(0.02)
+                return 1, b'{"t": "aviso"}'
+
+        cn = canal_mod.Canal(Path(tempfile.mkdtemp()), 1, "s")
+        cn.batida = 0.2
+        ws = WsFalso()
+        cn.ws = ws
+        t = threading.Thread(target=cn._atender, daemon=True)
+        t.start()
+        time.sleep(1.1)
+        cn.parar.set()
+        t.join(3)
+        self.assertGreaterEqual(sum(1 for d in ws.enviados if d == "ping"), 3)
+
+    def test_cao_de_guarda_reinicia_thread_morta(self):
+        """S7: thread do canal (ou do painel) que morreu é reiniciada pelo cão de guarda, com registro no log."""
+        from controle_ir import canal as canal_mod
+        from controle_ir import painel as painel_mod
+
+        class CanalQueMorre(canal_mod.Canal):
+            rodadas = 0
+
+            def _laco(s):
+                s.rodadas += 1
+                if s.rodadas == 1:
+                    return  # a thread morre
+                s.parar.wait(10)
+
+        cn = CanalQueMorre(Path(tempfile.mkdtemp()), 1, "s").iniciar()
+        self.addCleanup(cn.parar.set)
+        cn.thread.join(3)
+        self.assertFalse(cn.thread.is_alive())
+        linhas = []
+        cao = painel_mod.CaoDeGuarda({"canal": cn}, log=lambda *a: linhas.append(" ".join(map(str, a))),
+                                     intervalo=0.05).iniciar()
+        self.addCleanup(cao.parar.set)
+        fim = time.time() + 3
+        while not (cn.rodadas == 2 and cn.thread.is_alive()) and time.time() < fim:
+            time.sleep(0.02)
+        self.assertEqual(cn.rodadas, 2)
+        self.assertTrue(cn.thread.is_alive())
+        self.assertIn("cão de guarda: reiniciei canal", "\n".join(linhas))
+
 
 class TestServidorMCP(unittest.TestCase):
     @classmethod
@@ -927,6 +1016,172 @@ class TestPainel(unittest.TestCase):
         self.assertTrue(self.pol.efetiva()["so_pelo_painel"])
         self.assertEqual(post(corpo), 403)  # URL do ngrok vazada não basta mais
         self.assertEqual(post(corpo, {"X-Painel-Assinatura": self.assinar_req(corpo)}), 200)
+
+    # ------------------------------------------------------------- trava local × estado do painel (S3, S4)
+    def servir_painel(self):
+        """Painel falso: GET devolve o último estado da lista; POST (ack) guarda o corpo recebido."""
+        estados, recebidos = [], []
+
+        class P(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                txt, sig = estados[-1]
+                self._r(200, {"estado": txt, "assinatura": sig})
+
+            def do_POST(self):
+                recebidos.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                self._r(200, {"ok": True})
+
+            def _r(self, st, d):
+                b = json.dumps(d).encode()
+                self.send_response(st)
+                self.send_header("Content-Length", str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), P)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        self.p.gravar(self.pasta, {**self.cfg, "url": f"http://127.0.0.1:{srv.server_address[1]}"})
+        return estados, recebidos
+
+    def test_trava_local_solta_quando_o_painel_arma_de_novo(self):
+        """S3: pareado, a trava local (ferramenta travar) guarda a seq aplicada; um estado assinado mais novo
+        (o dono armou de novo na Central, com a digital) solta a trava, apaga o PARAR e audita. Antes, o celular
+        ficava travado para sempre mesmo com o painel dizendo "aplicado no celular"."""
+        estados, _ = self.servir_painel()
+        estados.append(self.assinado(seq=5))
+        self.p.sincronizar(self.pasta, "teste")
+        self.s.travar()
+        self.assertEqual(self.pol.ler()["travado_seq"], 5)
+        self.assertTrue((Path(self.pasta) / "PARAR").exists())
+        self.p.sincronizar(self.pasta, "teste")  # o mesmo estado (seq 5) não solta nada
+        self.assertTrue(self.s.politica()["travado"])
+        estados.append(self.assinado(seq=6))  # o dono armou de novo na Central
+        self.p.sincronizar(self.pasta, "teste")
+        pol = self.s.politica()
+        self.assertFalse(pol["travado"])
+        self.assertTrue(pol["armado"])
+        self.assertFalse(self.pol.ler()["travado"])  # limpo no politica.json
+        self.assertFalse((Path(self.pasta) / "PARAR").exists())
+        aud = [json.loads(ln) for ln in (Path(self.pasta) / "auditoria.jsonl").read_text().splitlines()]
+        self.assertIn({"evento": "destravado_pelo_painel", "seq": 6},
+                      [{k: a.get(k) for k in ("evento", "seq")} for a in aud])
+
+    def test_emergencia_mais_nova_continua_travando(self):
+        """S3: um estado mais novo de EMERGÊNCIA (travado no painel) não solta a trava local; o próximo estado
+        normal, sim."""
+        estados, _ = self.servir_painel()
+        estados.append(self.assinado(seq=5))
+        self.p.sincronizar(self.pasta, "teste")
+        self.s.travar()
+        estados.append(self.assinado(seq=6, travado=1, armado_ate=0))
+        self.p.sincronizar(self.pasta, "teste")
+        self.assertTrue(self.s.politica()["travado"])
+        self.assertTrue((Path(self.pasta) / "PARAR").exists())
+        estados.append(self.assinado(seq=7))
+        self.p.sincronizar(self.pasta, "teste")
+        self.assertFalse(self.s.politica()["travado"])
+        self.assertTrue(self.s.politica()["armado"])
+
+    def test_trava_antiga_sem_seq_e_migrada(self):
+        """S3: trava gravada por versão anterior (pareado, travado, sem travado_seq) passa a valer até a seq
+        aplicada naquele momento (gravada uma vez); o próximo estado assinado a solta."""
+        estados, _ = self.servir_painel()
+        estados.append(self.assinado(seq=26))
+        self.p.sincronizar(self.pasta, "teste")
+        p = self.pol.ler()
+        p["travado"] = True  # como a versão anterior deixava
+        self.pol.gravar(p)
+        self.assertTrue(self.pol.efetiva()["travado"])
+        self.assertEqual(json.loads((Path(self.pasta) / "politica.json").read_text())["travado_seq"], 26)
+        self.p.sincronizar(self.pasta, "teste")  # depois do reinício, a mesma seq 26: continua travado
+        self.assertTrue(self.s.politica()["travado"])
+        estados.append(self.assinado(seq=27))
+        self.p.sincronizar(self.pasta, "teste")
+        self.assertFalse(self.s.politica()["travado"])
+
+    def test_exec_travar_no_celular_guarda_seq_e_audita(self):
+        """S3: `controle-ir exec travar` (botão Travar da notificação e widget) passa pelo mesmo caminho da
+        ferramenta: guarda travado_seq, grava PARAR e o evento travado_localmente (antes não auditava)."""
+        import argparse
+        from controle_ir import cli
+        estados, _ = self.servir_painel()
+        estados.append(self.assinado(seq=3))
+        self.p.sincronizar(self.pasta, "teste")
+        antes = cli.PASTA
+        cli.PASTA = Path(self.pasta)
+        self.addCleanup(setattr, cli, "PASTA", antes)
+        with mock.patch.object(cli, "_api", return_value={"paradas": 0}), mock.patch.object(cli, "_aviso"):
+            cli.exec_cli(argparse.Namespace(acao="travar", valor=None, aprovar=None, n=20))
+        self.assertIn('"travado_localmente"', (Path(self.pasta) / "auditoria.jsonl").read_text())
+        self.assertEqual(self.pol.ler()["travado_seq"], 3)
+        self.assertTrue((Path(self.pasta) / "PARAR").exists())
+        self.assertTrue(self.s.politica()["travado"])
+
+    def test_ack_leva_o_estado_efetivo(self):
+        """S4: o ack diz à Central o que vale de fato no celular (armado, travado, trava_local, vetado), para o
+        painel não mostrar "aplicado" com o celular ainda travado."""
+        estados, recebidos = self.servir_painel()
+        estados.append(self.assinado(seq=1))
+        self.p.sincronizar(self.pasta, "teste")
+        self.assertEqual(recebidos[-1]["efetivo"],
+                         {"armado": True, "travado": False, "trava_local": False, "vetado": False})
+        self.s.travar()
+        self.p.sincronizar(self.pasta, "teste")
+        self.assertEqual(recebidos[-1]["efetivo"],
+                         {"armado": False, "travado": True, "trava_local": True, "vetado": False})
+        estados.append(self.assinado(seq=2))
+        self.p.sincronizar(self.pasta, "teste")
+        self.assertEqual(recebidos[-1]["efetivo"],
+                         {"armado": True, "travado": False, "trava_local": False, "vetado": False})
+        self.pol.desarmar()  # veto local no celular
+        self.p.sincronizar(self.pasta, "teste")
+        self.assertEqual(recebidos[-1]["efetivo"],
+                         {"armado": False, "travado": False, "trava_local": False, "vetado": True})
+
+    def test_erros_da_sincronizacao_no_log_e_no_consultar(self):
+        """S5: rodada que falha (HTTP ou exceção) é registrada no log do serviço e o último resultado aparece em
+        consultar (servidor.painel_sync). Antes o Sincronizador era criado sem log e as falhas eram mudas."""
+        import contextlib
+        import io
+
+        class S(self.p.Sincronizador):
+            def __init__(s, respostas, **kw):
+                super().__init__(self.pasta, "teste", **kw)
+                s.respostas = respostas
+
+            def _rodada(s):
+                r = s.respostas.pop(0)
+                if not s.respostas:
+                    s.parar.set()
+                s.despertar.set()  # sem esperar os 30 s entre rodadas
+                if isinstance(r, Exception):
+                    raise r
+                return r
+
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):  # sem log= explícito: vai para a saída (servico.log)
+            S([{"pareado": True, "erro": "HTTP 503", "offline": True}, RuntimeError("quebrou")])._laco()
+        self.assertIn("HTTP 503", saida.getvalue())
+        self.assertIn("RuntimeError", saida.getvalue())
+        linhas = []
+        sinc = S([{"pareado": True, "erro": "HTTP 502", "offline": True}],
+                 log=lambda *a: linhas.append(" ".join(map(str, a))))
+        sinc._laco()
+        self.assertIn("HTTP 502", "\n".join(linhas))
+        self.s.sinc = sinc
+        ps = self.s.consultar()["servidor"]["painel_sync"]
+        self.assertFalse(ps["ok"])
+        self.assertIn("HTTP 502", ps["erro"])
+        self.assertTrue(ps["quando"])
+        sinc.respostas = [{"pareado": True, "seq": 7, "armado_ate": 0, "travado": 0}]
+        sinc.parar.clear()
+        sinc._laco()
+        ps = self.s.consultar()["servidor"]["painel_sync"]
+        self.assertEqual((ps["ok"], ps["seq"]), (True, 7))
 
 
 class TestImagensAninhadas(unittest.TestCase):

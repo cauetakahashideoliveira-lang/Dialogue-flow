@@ -75,6 +75,13 @@ def classificar(comando: str) -> str:
     return "livre"
 
 
+def registrar_auditoria(pasta, registro: dict):
+    """Uma linha no histórico local (auditoria.jsonl), que o celular envia à Central."""
+    with open(Path(pasta) / "auditoria.jsonl", "a") as f:
+        f.write(json.dumps({"quando": time.strftime("%Y-%m-%d %H:%M:%S"), **registro},
+                           ensure_ascii=False, default=str)[:4000] + "\n")
+
+
 class Politica:
     def __init__(self, pasta: Path):
         self.arq = Path(pasta) / "politica.json"
@@ -88,6 +95,8 @@ class Politica:
         p["classes"] = {**PADRAO, **{k: v for k, v in (p.get("classes") or {}).items() if k in CLASSES}}
         p["classes"]["protegido"] = "negar"
         p.setdefault("travado", False)
+        if not p["travado"]:  # a seq da trava só tem sentido enquanto ela existe (destravar a descarta)
+            p.pop("travado_seq", None)
         p.setdefault("liberado_ate", 0)
         # aprovação vinda do Claude: "codigo" = exige o código do app autenticador; "desligada" = só no celular.
         # O antigo "chat" (bastava o agente chamar autorizar) virou "desligada": o agente não aprova a si mesmo.
@@ -126,21 +135,79 @@ class Politica:
         os.chmod(tmp, 0o600)
         os.replace(tmp, self.arq)
 
+    def _migrar_trava(self, p: dict, cfg: dict | None) -> dict:
+        """Pareado: trava de versão anterior (sem travado_seq) passa a valer até a seq aplicada agora (gravado
+        uma vez). Sem isso a trava local não teria como cair pelo painel."""
+        if p["travado"] and p.get("travado_seq") is None:
+            p["travado_seq"] = int((cfg or {}).get("seq_max", 0))
+            self.gravar(p)
+        return p
+
     def efetiva(self) -> dict:
-        """Política com o estado do painel aplicado. Pareado, a armação só vale se vier assinada pelo painel."""
+        """Política com o estado do painel aplicado. Pareado, a armação só vale se vier assinada pelo painel.
+
+        Pareado, a trava LOCAL (travar pelo conector ou no celular) guarda a seq aplicada naquele momento
+        (`travado_seq`) e só vale enquanto nenhum estado assinado mais novo foi aplicado: armar de novo na Central,
+        com a digital, a solta. EMERGÊNCIA no painel trava pelo próprio estado."""
         from . import painel
         p = self.ler()
-        if p.get("modo_painel") or painel.ler(self.arq.parent):
+        cfg = painel.ler(self.arq.parent)
+        if p.get("modo_painel") or cfg:
+            self._migrar_trava(p, cfg)
             p["modo_painel"] = True
             e = painel.estado_valido(self.arq.parent)
             veto = int(p.get("veto_seq", -1))
             p["armado_ate"] = int(e["armado_ate"]) if e and int(e["seq"]) > veto else 0
-            p["travado"] = bool(p["travado"] or (e and e.get("travado")))
+            trava_local = bool(p["travado"]) and (e is None or int(e["seq"]) <= int(p["travado_seq"]))
+            p["trava_local"] = trava_local
+            p["travado"] = bool(trava_local or (e and e.get("travado")))
             p["desarmado_permite"] = e.get("desarmado_permite", "ir") if e else "ir"
             p["painel_seq"] = e["seq"] if e else None
-            cfg = painel.ler(self.arq.parent) or {}
-            p["so_pelo_painel"] = bool(cfg.get("so_pelo_painel"))  # último valor assinado (fica mesmo sem rede)
+            p["so_pelo_painel"] = bool((cfg or {}).get("so_pelo_painel"))  # último valor assinado (fica sem rede)
         return p
+
+    def travar(self, origem: str, parar=None, auditar=None) -> dict:
+        """Freio (só tira poder), único caminho da trava local: ferramenta travar (origem "conector") e
+        `controle-ir exec travar` (origem "celular": botão da notificação e widget). Grava a trava, cria PARAR (os
+        laços em 2º plano das capacidades param), encerra as tarefas (`parar` devolve quantas) e audita. Pareado,
+        guarda a seq do painel aplicada agora: um estado assinado mais novo solta a trava."""
+        from . import painel
+        p = self.ler()
+        p["travado"], p["liberado_ate"] = True, 0
+        cfg = painel.ler(self.arq.parent)
+        if p.get("modo_painel") or cfg:
+            p["travado_seq"] = int((cfg or {}).get("seq_max", 0))
+        self.gravar(p)
+        try:
+            (self.arq.parent / "PARAR").write_text(str(time.time()))
+        except OSError:
+            pass
+        n = 0
+        if parar:
+            try:
+                n = int(parar() or 0)
+            except Exception:  # noqa: BLE001 — a trava já vale; contar as tarefas é só informação
+                n = 0
+        registro = {"evento": "travado_remotamente" if origem == "conector" else "travado_localmente",
+                    "origem": origem, "tarefas_encerradas": n,
+                    **({"travado_seq": p["travado_seq"]} if "travado_seq" in p else {})}
+        (auditar or (lambda r: registrar_auditoria(self.arq.parent, r)))(registro)
+        return {"travado": True, "tarefas_encerradas": n, "travado_seq": p.get("travado_seq")}
+
+    def soltar_pelo_painel(self, seq: int, emergencia: bool = False) -> bool:
+        """Chamado ao aplicar um estado assinado: se ele é mais novo que a trava local, limpa a trava no arquivo,
+        apaga PARAR e audita. Numa EMERGÊNCIA não mexe (continua travado; o próximo estado normal solta)."""
+        p = self.ler()
+        ts = p.get("travado_seq")
+        if emergencia or not p["travado"] or ts is None or int(seq) <= int(ts):
+            return False
+        p["travado"] = False
+        p.pop("travado_seq", None)
+        self.gravar(p)
+        (self.arq.parent / "PARAR").unlink(missing_ok=True)
+        registrar_auditoria(self.arq.parent, {"evento": "destravado_pelo_painel", "seq": int(seq),
+                                              "travado_seq": int(ts)})
+        return True
 
     def decidir(self, classe: str) -> str:
         from .seguranca import armado
@@ -163,10 +230,13 @@ class Politica:
                 "armado_ate": time.strftime("%d/%m %H:%M", time.localtime(float(p["armado_ate"])))
                 if armado(p) else None,
                 "desarmado_permite": p["desarmado_permite"],
-                "painel": {"pareado": True, "seq": p.get("painel_seq"), "so_pelo_painel": p.get("so_pelo_painel")}
+                "painel": {"pareado": True, "seq": p.get("painel_seq"), "so_pelo_painel": p.get("so_pelo_painel"),
+                           "trava_local": bool(p.get("trava_local"))}
                 if p.get("modo_painel") else None,
-                "como_mudar": ("pela Central de Controle (armar com a digital, desarmar, EMERGÊNCIA); no celular: "
-                               "controle-ir desarmar · controle-ir exec travar. Pelo conector: travar.")
+                "como_mudar": ("pela Central de Controle: armar com a digital (também solta a trava feita no "
+                               "celular ou pelo conector), desarmar, EMERGÊNCIA. No celular (Termux): controle-ir "
+                               "desarmar · controle-ir exec travar · controle-ir exec destravar. Pelo conector: só "
+                               "travar.")
                 if p.get("modo_painel") else
                               "só no celular: controle-ir armar [horas] · controle-ir desarmar · "
                               "controle-ir exec classe <classe> permitir|perguntar|negar · controle-ir exec "
@@ -315,9 +385,7 @@ class Execucao:
 
     def auditar(self, registro: dict):
         with self.trava:
-            with open(self.pasta / "auditoria.jsonl", "a") as f:
-                f.write(json.dumps({"quando": time.strftime("%Y-%m-%d %H:%M:%S"), **registro},
-                                   ensure_ascii=False, default=str)[:4000] + "\n")
+            registrar_auditoria(self.pasta, registro)
 
     def _novo_id(self) -> str:
         with self.trava:

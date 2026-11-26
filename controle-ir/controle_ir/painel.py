@@ -149,6 +149,13 @@ def sincronizar(pasta, versao: str, ao_reduzir=None, url_mcp=None, em_uso=None) 
     cfg = ler(pasta)
     if not cfg:
         return {"pareado": False}
+    # celular (tem politica.json): a trava local acompanha a seq do painel. O agente do PC usa este mesmo módulo
+    # com a trava dele (travado_seq na config própria) e não ganha politica.json por isso.
+    pol = None
+    if (Path(pasta) / "politica.json").exists():
+        from .execucao import Politica
+        pol = Politica(pasta)
+        pol.efetiva()  # migra trava antiga (sem travado_seq) para a seq aplicada ANTES deste estado novo
     antes = estado_valido(pasta)
     st, r = _http("GET", f"{cfg['url']}/api/celular/estado", cfg["token"])
     if st == 401:  # revogado no painel: falha fechada
@@ -158,13 +165,17 @@ def sincronizar(pasta, versao: str, ao_reduzir=None, url_mcp=None, em_uso=None) 
             ao_reduzir("celular revogado no painel")
         return {"pareado": True, "revogado": True}
     if st != 200:
-        return {"pareado": True, "erro": f"HTTP {st}", "offline": True}
+        motivo = r.get("erro") if isinstance(r, dict) else None
+        return {"pareado": True, "erro": f"HTTP {st}" + (f": {str(motivo)[:160]}" if motivo else ""),
+                "offline": True}
     e = verificar(cfg, r["estado"], r["assinatura"])
     if int(e["seq"]) < int(cfg.get("seq_max", 0)):
         raise ValueError("o painel devolveu um estado mais antigo que o já aplicado")
     cfg.update(estado=r["estado"], assinatura=r["assinatura"], seq_max=int(e["seq"]), verificado_em=time.time(),
                revogado=False, so_pelo_painel=int(e.get("so_pelo_painel") or 0))
     gravar(pasta, cfg)
+    if pol:  # estado assinado mais novo que a trava local (o dono armou de novo, com a digital): solta a trava
+        pol.soltar_pelo_painel(int(e["seq"]), emergencia=bool(e.get("travado")))
     agora = time.time()
     armado_antes = bool(antes and not antes.get("travado") and antes.get("armado_ate", 0) > agora)
     armado_agora = not e.get("travado") and e.get("armado_ate", 0) > agora
@@ -173,6 +184,12 @@ def sincronizar(pasta, versao: str, ao_reduzir=None, url_mcp=None, em_uso=None) 
     desde = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(cfg["pareado_em"])) if cfg.get("pareado_em") else ""
     eventos, novo_offset, arquivo = _eventos_novos(pasta, int(cfg.get("offset", 0)), desde)
     corpo = {"seq": e["seq"], "versao": versao, "eventos": eventos, "arquivo": arquivo}
+    if pol:  # o que vale de fato no celular: a Central não mostra "aplicado" com o celular ainda travado
+        from .seguranca import armado
+        ef = pol.efetiva()
+        corpo["efetivo"] = {"armado": armado(ef), "travado": bool(ef["travado"]),
+                            "trava_local": bool(ef.get("trava_local")),
+                            "vetado": int(ef.get("veto_seq", -1)) >= int(e["seq"])}
     observar = float(r.get("observar_ate") or 0) > agora  # painel aberto: relatório completo (com Shizuku)
     ao_vivo = float(r.get("ao_vivo_ate") or 0) > agora
     if em_uso:
@@ -188,7 +205,11 @@ def sincronizar(pasta, versao: str, ao_reduzir=None, url_mcp=None, em_uso=None) 
         cfg = ler(pasta) or cfg
         cfg["offset"] = novo_offset
         gravar(pasta, cfg)
-    return {"pareado": True, "seq": e["seq"], "armado_ate": e["armado_ate"], "travado": e["travado"],
+    erro_ack = {}
+    if st2 != 200:  # o estado valeu, mas a Central não soube: continua mostrando "pendente"
+        motivo = r2.get("erro") if isinstance(r2, dict) else None
+        erro_ack = {"erro_ack": f"HTTP {st2}" + (f": {str(motivo)[:160]}" if motivo else "")}
+    return {"pareado": True, "seq": e["seq"], "armado_ate": e["armado_ate"], "travado": e["travado"], **erro_ack,
             "eventos_enviados": len(eventos) if st2 == 200 else 0,
             "eventos_aceitos": r2.get("recebidos", 0) if st2 == 200 else 0,
             "ao_vivo_ate": float(r.get("ao_vivo_ate") or 0), "observar_ate": float(r.get("observar_ate") or 0),
@@ -230,31 +251,50 @@ class Sincronizador:
     def __init__(self, pasta, versao: str, ao_reduzir=None, log=None, url_mcp=None, em_uso=None, quadro=None):
         self.pasta, self.versao, self.ao_reduzir, self.url_mcp = Path(pasta), versao, ao_reduzir, url_mcp
         self.em_uso, self.quadro = em_uso, quadro
-        self.log = log or (lambda *a: None)
+        self.log = log or _log_padrao  # falha de sincronização nunca é muda: sem log próprio, vai para a saída
         self.parar = threading.Event()
         self.despertar = threading.Event()
         self.ultimo: dict = {}
+        self.resultado: dict = {}  # último resultado (ok/erro, quando, seq), mostrado em consultar
+        self.thread: threading.Thread | None = None
         self.ao_ver_canal = None  # a Central passou a ter canal direto: o canal do celular tenta conectar já
 
     def iniciar(self):
-        threading.Thread(target=self._laco, name="painel", daemon=True).start()
+        self.thread = threading.Thread(target=self._laco, name="painel", daemon=True)
+        self.thread.start()
         return self
 
     def acordar(self):
         """Sincroniza agora (a Central avisou pelo canal: armado, desarmado, painel aberto…), sem esperar 30 s."""
         self.despertar.set()
 
+    def resumo(self) -> dict:
+        return dict(self.resultado) if self.resultado else {"ok": None, "quando": None}
+
+    def _registrar(self, r: dict):
+        """Guarda o resultado da rodada; erro (HTTP, motivo, exceção, ack recusado) vai para o log do serviço."""
+        erro = r.get("erro") or r.get("erro_ack") or ("celular revogado no painel" if r.get("revogado") else None) \
+            or (None if r.get("pareado", True) else "não pareado")
+        falhava = self.resultado.get("ok") is False
+        self.resultado = {"ok": not erro, "quando": time.strftime("%d/%m %H:%M:%S"),
+                          "seq": r.get("seq", self.resultado.get("seq")), **({"erro": str(erro)[:200]} if erro else {})}
+        if erro:
+            self.log("painel", f"sincronização falhou: {erro}")
+        elif falhava:
+            self.log("painel", f"sincronização voltou ao normal (seq {r.get('seq')})")
+
     def _laco(self):
         while not self.parar.is_set():
             try:
                 self.ultimo = self._rodada()
+                self._registrar(self.ultimo)
                 if self.ao_ver_canal and self.ultimo.get("canal_na_central"):
                     self.ao_ver_canal()
                 if self.quadro and self.ultimo.get("ao_vivo_ate", 0) > time.time():
                     self._transmitir()
             except Exception as e:  # noqa: BLE001 — erro de rede ou assinatura: mantém falha fechada
-                self.ultimo = {"erro": str(e)[:200]}
-                self.log("painel", self.ultimo["erro"])
+                self.ultimo = {"erro": f"{type(e).__name__}: {e}"[:200]}
+                self._registrar(self.ultimo)
             self.despertar.wait(INTERVALO)  # 30 s, ou na hora se a Central avisar pelo canal
             self.despertar.clear()
 
@@ -274,5 +314,47 @@ class Sincronizador:
                     break
             if time.time() >= proxima:  # confirma com o painel se ainda é para transmitir
                 self.ultimo = self._rodada()
+                self._registrar(self.ultimo)
                 proxima = time.time() + 10
             self.parar.wait(max(0.3, QUADRO - (time.time() - t0)))
+
+
+class CaoDeGuarda:
+    """Confere a cada `intervalo` s se as threads vigiadas (canal, painel) estão vivas e reinicia a que morreu.
+
+    `vigiados`: nome → objeto com `thread`, `parar` (Event) e `iniciar()` (Canal e Sincronizador). Quem foi parado
+    de propósito (`parar` ligado) não é reiniciado."""
+
+    def __init__(self, vigiados: dict, log=None, intervalo: float = 30.0):
+        self.vigiados, self.intervalo = dict(vigiados), float(intervalo)
+        self.log = log or _log_padrao
+        self.parar = threading.Event()
+        self.reinicios: dict[str, int] = {}
+
+    def iniciar(self):
+        threading.Thread(target=self._laco, name="cao-de-guarda", daemon=True).start()
+        return self
+
+    def conferir(self):
+        for nome, obj in self.vigiados.items():
+            t = getattr(obj, "thread", None)
+            if obj.parar.is_set() or (t is not None and t.is_alive()):
+                continue
+            try:
+                obj.iniciar()
+                self.reinicios[nome] = self.reinicios.get(nome, 0) + 1
+                self.log(f"cão de guarda: reiniciei {nome}")
+            except Exception as e:  # noqa: BLE001 — tenta de novo na próxima volta
+                self.log(f"cão de guarda: não consegui reiniciar {nome}: {type(e).__name__}: {e}"[:200])
+
+    def _laco(self):
+        while not self.parar.wait(self.intervalo):
+            try:
+                self.conferir()
+            except Exception as e:  # noqa: BLE001 — o cão de guarda também não morre
+                self.log(f"cão de guarda: {type(e).__name__}: {e}"[:200])
+
+
+def _log_padrao(*a):
+    """Registro do serviço: no modo --fundo a saída vai para ~/.controle-ir/servico.log."""
+    print(time.strftime("%H:%M:%S"), *a, flush=True)

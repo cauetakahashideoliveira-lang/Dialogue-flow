@@ -25,6 +25,12 @@ Registro completo, com benchmark, inventário e recomendações: `docs/entregas/
 - **Ambiente:** Node 26.13.1, Rokit 1.2.0 (Rojo 7.7.1, StyLua 2.6.0, Lune 0.11.1) e `lune run verificar` ok no
   PC. Ollama e Studio: ver a entrega.
 - **Canal:** uma queda "a Central fechou o canal" às 00:23:11, que voltou em 2 s sozinha.
+- **Conexão fantasma (00:57 → 01:1x):** a internet do PC piscou (`getaddrinfo failed`) durante o download do
+  Ollama. A conexão velha morreu sem fechar e ficou em CLOSING no Durable Object. O PC reconectou (o `agente.log`
+  mostrava "canal conectado"), mas a Central pegava "a última" de `getWebSockets()`, que não tem ordem garantida e
+  ainda inclui conexões em CLOSING. Resultado: "PC fora do ar" para toda chamada. A Central **2026-11-26.2**
+  escolhe a conexão ABERTA com a batida mais recente (teste e2e "conexão fantasma"), e o deploy limpa as
+  fantasmas.
 - **Recomendações para o dono:**
   - cabo de rede (hoje só Wi-Fi USB, sinal 59%);
   - Avast (apareceu na pilha) ou exclusões;

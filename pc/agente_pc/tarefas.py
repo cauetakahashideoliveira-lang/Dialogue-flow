@@ -159,7 +159,10 @@ class Tarefas:
         with self.trava:
             self.procs.pop(ident, None)
             ev = self.fim.pop(ident, None)
-        (self.dir / f"{ident}.ps1").unlink(missing_ok=True)
+        try:  # o antivírus (ou um neto do processo) pode segurar o .ps1: apagar fica para depois
+            (self.dir / f"{ident}.ps1").unlink(missing_ok=True)
+        except OSError:
+            pass
         if ev:
             ev.set()
 

@@ -2,6 +2,42 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 26/11 madrugada — missão do PC: tela azul, botão, otimização e ambiente
+
+Registro completo, com benchmark, inventário e recomendações: `docs/entregas/2026-11-26-pc-windows.md` e
+`docs/pc-windows.md` no repositório Roblox. Kit em `ferramentas/pc/` de lá.
+
+- **Por que o PC saiu do ar às 23h:** tela azul 0xC2 (BAD_POOL_CALLER), causada pelo driver `zt9101d_drv.sys` do
+  adaptador Wi-Fi USB genérico ZTOP, que estava plugado mas sem uso. O dispositivo foi desativado. Depois do
+  reinício automático, o agente só voltou com o logon (00:01).
+- **Botão "Ligar Agente PC"** na área de trabalho (agente pc-1.0.2, PR #30): liga o agente sem administrador e
+  mostra se conectou. O `/saude` informa o canal.
+- **Git no PC pelo login do `gh`** (`gh auth setup-git`): o gerenciador de credenciais do Windows falha no
+  contexto do agente (tarefa agendada) e o repositório Roblox é privado.
+- **O winget trava no contexto do agente** (download do WinINet parado). Node e Ollama vêm das fontes oficiais,
+  com assinatura conferida.
+- **Otimização (reversível):**
+  - disco sempre ligado;
+  - inicialização rápida desligada;
+  - caminhos longos;
+  - **Windows Update sem reinício com usuário logado**: havia um reinício pendente que derrubaria o agente
+    entre 7h e 13h.
+- **Ambiente:** Node 26.13.1, Rokit 1.2.0 (Rojo 7.7.1, StyLua 2.6.0, Lune 0.11.1) e `lune run verificar` ok no
+  PC. Ollama e Studio: ver a entrega.
+- **Canal:** uma queda "a Central fechou o canal" às 00:23:11, que voltou em 2 s sozinha.
+- **Conexão fantasma (00:57 → 01:1x):** a internet do PC piscou (`getaddrinfo failed`) durante o download do
+  Ollama. A conexão velha morreu sem fechar e ficou em CLOSING no Durable Object. O PC reconectou (o `agente.log`
+  mostrava "canal conectado"), mas a Central pegava "a última" de `getWebSockets()`, que não tem ordem garantida e
+  ainda inclui conexões em CLOSING. Resultado: "PC fora do ar" para toda chamada. A Central **2026-11-26.2**
+  escolhe a conexão ABERTA com a batida mais recente (teste e2e "conexão fantasma"), e o deploy limpa as
+  fantasmas.
+- **Recomendações para o dono:**
+  - cabo de rede (hoje só Wi-Fi USB, sinal 59%);
+  - Avast (apareceu na pilha) ou exclusões;
+  - reiniciar uma vez;
+  - BIOS de 2022;
+  - religar sozinho (BIOS e logon automático).
+
 ## 26/11 — PC Windows na Central (agente_pc) — PASSAGEM PARA A PRÓXIMA SESSÃO
 
 **Estado (26/11 ~23:05):** PC pareado, armado e operado de ponta a ponta pelo conector Controle Geral.

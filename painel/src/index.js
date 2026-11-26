@@ -11,7 +11,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 const SESSAO_MAX = 12 * 3600, SESSAO_OCIOSA = 30 * 60, PASSKEY_FRESCA = 120, DESAFIO = 300, PAREAMENTO = 600;
 const HORAS_MAX = 24;
-const VERSAO_CENTRAL = '2026-11-26.1';  // suba a cada mudança da Central (aparece em /versao)
+const VERSAO_CENTRAL = '2026-11-26.2';  // suba a cada mudança da Central (aparece em /versao)
 const agora = () => Math.floor(Date.now() / 1000);
 const enc = new TextEncoder();
 
@@ -326,11 +326,17 @@ export class Canal extends DurableObject {
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
   socket() {  // o canal vivo: o celular bate ("ping") a cada 25 s; sem batida há 70 s, a conexão morreu calada
-    const todos = this.ctx.getWebSockets();
-    const ws = todos.length ? todos[todos.length - 1] : null;
+    // getWebSockets() ainda devolve a conexão que fechamos e cujo outro lado morreu sem responder (fica em CLOSING
+    // até o runtime desistir), e a ordem da lista não é garantida: escolhe a conexão ABERTA com batida mais recente.
+    // Antes pegava a última da lista, e uma conexão fantasma (o PC perdeu a internet no meio) escondia a nova.
+    let ws = null, ultimo = 0;
+    for (const s of this.ctx.getWebSockets()) {
+      if (s.readyState !== 1) continue;  // 1 = OPEN
+      const batida = this.ctx.getWebSocketAutoResponseTimestamp(s);
+      const t = Math.max(batida ? batida.getTime() : 0, s.deserializeAttachment()?.desde || 0);
+      if (!ws || t > ultimo) { ws = s; ultimo = t; }
+    }
     if (!ws) return null;
-    const batida = this.ctx.getWebSocketAutoResponseTimestamp(ws);
-    const ultimo = Math.max(batida ? batida.getTime() : 0, ws.deserializeAttachment()?.desde || 0);
     if (Date.now() - ultimo > 70_000) { try { ws.close(4001, 'canal mudo'); } catch { } return null; }
     return ws;
   }

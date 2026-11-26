@@ -212,6 +212,22 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   const { d: dp } = await textoDe(await chamarCom('executar_capacidade', { nome: 'pc_executar', argumentos: { comando: 'echo via-ponte', aguardar: 20 } }));
   ok(dp.status === 'concluida' && /via-ponte/.test(dp.saida?.texto || '') && await chamadasNoCelular() === 2,
     'conversa antiga (sem pc_* na lista): executar_capacidade(nome="pc_executar") chega ao PC, não ao celular');
+  // conexão fantasma (26/11): o PC perde a rede sem fechar o WebSocket e reconecta; a conexão velha fica em CLOSING e
+  // ainda aparece em getWebSockets() — a Central tem de usar a conexão ABERTA mais recente, não a última da lista
+  const PASTA_PC2 = fs.mkdtempSync(path.join(os.tmpdir(), 'pc2-'));
+  fs.copyFileSync(path.join(PASTA_PC, 'painel.json'), path.join(PASTA_PC2, 'painel.json'));
+  process.kill(agentePC.pid, 'SIGSTOP');  // congelado: a conexão parece aberta, mas ninguém responde nem fecha
+  const agentePC2 = spawn('python3', ['-m', 'agente_pc', 'ligar'], { stdio: 'ignore',
+    env: { ...envPC, AGENTE_PC_DIR: PASTA_PC2, AGENTE_PC_PORTA: String(Number(envPC.AGENTE_PC_PORTA) + 1) } });
+  filhos.push(agentePC2);
+  pcOk = await esperar(async () => { const { d } = await textoDe(await chamarCom('pc_executar', { comando: 'echo fantasma-ok', aguardar: 20 }));
+    return d.status === 'concluida' && /fantasma-ok/.test(d.saida?.texto || ''); }, 25000);
+  ok(pcOk, 'conexão fantasma (PC congelado sem fechar) e reconexão: a Central usa a conexão aberta mais recente');
+  agentePC2.kill('SIGKILL');
+  process.kill(agentePC.pid, 'SIGCONT');
+  fs.rmSync(PASTA_PC2, { recursive: true, force: true });
+  ok(await esperar(async () => (await chamarCom('pc_consultar')).headers.get('x-via') === 'pc', 20000),
+    'o PC original descongela e volta a atender pelo canal');
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/PC-teste/.test(await pagina.textContent('#celulares')) && /pc_executar/.test(await pagina.textContent('#chamadas')),
     'a Central lista o PC e as chamadas pc_* na Atividade');

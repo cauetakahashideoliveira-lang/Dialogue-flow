@@ -85,6 +85,10 @@ Para atualizar depois: `pc_atualizar` pelo Claude, ou rode o instalador de novo 
 
 ## Limites
 
+- **Git com repositório privado:** no contexto do agente (tarefa agendada), o gerenciador de credenciais do
+  Windows não responde. Configure o git para usar o login do `gh`: `gh auth setup-git`.
+- **winget:** pode travar no contexto do agente, com o download do WinINet parado. Prefira o instalador oficial
+  baixado com `curl.exe`, com `Get-AuthenticodeSignature` antes de executar.
 - A janela do UAC (área de trabalho segura) não aparece em `pc_tela` nem aceita `pc_entrada`. O agente já roda
   como administrador, então os comandos não pedem UAC.
 - Sem o celular no ar, o conector continua de pé só com o PC (`initialize` e `tools/list` respondidos pela

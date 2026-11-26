@@ -168,7 +168,7 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   const acordadas = () => fs.existsSync(MARCA) ? fs.readFileSync(MARCA, 'utf8').length : 0;
   const esperar = async (cond, ms = 8000) => { const fim = Date.now() + ms; while (Date.now() < fim) { if (await cond()) return true; await new Promise(z => setTimeout(z, 150)); } return false; };
   const CANAL = `import sys,time,os\nfrom controle_ir.canal import Canal\nP=sys.argv[1]\nm=os.path.join(P,'acordou.txt')\ndef ac():\n  open(m,'a').write('x')\nCanal(P,${porta},'segredo-teste',ao_sincronizar=ac).iniciar()\nwhile True: time.sleep(1)`;
-  const canal = spawn('python3', ['-c', CANAL, PASTA], { env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: 'ignore' });
+  let canal = spawn('python3', ['-c', CANAL, PASTA], { env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: 'ignore' });
   filhos.push(canal);
   ok(await esperar(() => acordadas() >= 1), 'canal direto aberto pelo celular, com o token do aparelho');
   let rc = await chamar('controlar');
@@ -210,6 +210,26 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/PC-teste/.test(await pagina.textContent('#celulares')) && /pc_executar/.test(await pagina.textContent('#chamadas')),
     'a Central lista o PC e as chamadas pc_* na Atividade');
+  // celular fora do ar com túnel morto (ngrok sem o celular devolve 404): o conector continua de pé com o PC
+  const MORTO = "from http.server import BaseHTTPRequestHandler as B, ThreadingHTTPServer as S\nclass H(B):\n  def log_message(s,*a):pass\n  def do_POST(s):\n    s.send_response(404);s.send_header('Content-Length','0');s.end_headers()\nsrv=S(('127.0.0.1',0),H)\nprint(srv.server_port,flush=True)\nsrv.serve_forever()";
+  const morto = spawn('python3', ['-c', MORTO], { stdio: ['ignore', 'pipe', 'ignore'] });
+  filhos.push(morto);
+  const portaMorto = String(await new Promise(z => morto.stdout.once('data', z))).trim();
+  celular(`r=painel.sincronizar(P,'e2e',url_mcp=lambda:'http://127.0.0.1:${portaMorto}/mcp/x')\nprint(json.dumps(r))`);
+  canal.kill('SIGKILL');  // celular desligado (o canal some; a chamada não fica presa para chegar depois)
+  const iniSem = await (await manutencao({ method: 'initialize', id: 15, params: { protocolVersion: '2025-06-18' } })).json();
+  const listaSem = await (await manutencao({ method: 'tools/list', id: 16 })).json();
+  const nomesSem = (listaSem.result?.tools || []).map(t => t.name);
+  ok(iniSem.result?.serverInfo?.version === 'central' && nomesSem.includes('pc_executar') && !nomesSem.includes('controlar'),
+    'celular fora do ar e túnel devolvendo 404: initialize e tools/list seguem com o PC (o conector não cai)');
+  ok(/"agente": ?"pc-/.test((await (await chamarCom('pc_consultar')).json()).result?.content?.[0]?.text || ''),
+    'e o PC responde normalmente com o celular fora do ar');
+  celular(`r=painel.sincronizar(P,'e2e',url_mcp=lambda:'${endereco}/mcp/segredo-teste')\nprint(json.dumps(r))`);
+  const antesVolta = acordadas();
+  canal = spawn('python3', ['-c', CANAL, PASTA], { env: { ...process.env, PYTHONPATH: path.join(RAIZ, 'controle-ir') }, stdio: 'ignore' });
+  filhos.push(canal);
+  morto.kill();
+  ok(await esperar(() => acordadas() > antesVolta, 20000), 'o celular volta e reabre o canal sozinho');
   agentePC.kill('SIGKILL');
   pcOk = await esperar(async () => /fora do ar/.test(JSON.stringify((await textoDe(await chamarCom('pc_consultar'))).d)), 90000);
   ok(pcOk, 'PC desligado: a chamada explica que ele está fora do ar (sem travar o conector)');

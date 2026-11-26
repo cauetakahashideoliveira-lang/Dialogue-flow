@@ -26,3 +26,7 @@ CREATE TABLE IF NOT EXISTS observacao (aparelho TEXT PRIMARY KEY, observar_ate I
   ao_vivo_ate INTEGER NOT NULL DEFAULT 0, em_uso TEXT, em_uso_em INTEGER);
 CREATE TABLE IF NOT EXISTS quadros (aparelho TEXT PRIMARY KEY, jpeg TEXT NOT NULL, quando INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS ferramentas_pc (aparelho TEXT PRIMARY KEY, lista TEXT NOT NULL, quando INTEGER NOT NULL);
+-- última lista boa de tools/list e último initialize do celular: usados quando ele não responde (conversa nova numa queda)
+CREATE TABLE IF NOT EXISTS ferramentas_celular (aparelho TEXT PRIMARY KEY, ferramentas TEXT, inicio TEXT, em INTEGER);
+-- estado REAL relatado pelo aparelho no ack ({armado, travado, trava_local, vetado}) e a hora do ack
+CREATE TABLE IF NOT EXISTS efetivo (aparelho TEXT PRIMARY KEY, dados TEXT NOT NULL, quando INTEGER NOT NULL);

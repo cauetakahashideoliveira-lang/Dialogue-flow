@@ -51,6 +51,14 @@ class TestParidadeDoBloqueio(unittest.TestCase):
         self.assertEqual(self.sempre, set(seguranca.SEMPRE))
         self.assertEqual(self.baixo, set(seguranca.BAIXO_RISCO))
 
+    def test_pc_mesmas_ferramentas_sempre_liberadas(self):
+        """O PC (agente_pc) tem a lista própria; a Central barra na borda com a mesma."""
+        sys.path.insert(0, str(RAIZ / "pc"))
+        from agente_pc import ferramentas, servidor
+        self.assertEqual(_conjunto_js("SEMPRE_PC", self.fonte, {}), servidor.SEMPRE)
+        self.assertLessEqual(servidor.SEMPRE, ferramentas.NOMES)
+        self.assertFalse(self.sempre & servidor.SEMPRE)
+
     def test_listas_so_tem_ferramentas_que_existem(self):
         fixas = {f["name"] for f in mcp.FERRAMENTAS}
         self.assertLessEqual(set(seguranca.BAIXO_RISCO), fixas)

@@ -45,6 +45,10 @@
   (`https://<painel>/mcp`, OAuth com a digital, bloqueio na borda). Conector em uso: **Controle Geral** (o antigo
   “Controle master”, pela URL do ngrok, é recusado desde que “só pelo painel” foi ligado). Mudança no painel = PR que o dono aprova (merge);
   teste local com estado descartável em `painel/`: `npm ci`, `npx playwright install --with-deps chromium` e `npm run test:e2e`.
+- **PC na Central** (`pc/agente_pc`, [docs/pc.md](docs/pc.md)): o PC Windows é um segundo aparelho, no MESMO conector,
+  com as ferramentas `pc_*` (PowerShell, arquivos, tela, mouse e teclado, placa de vídeo). Ele tem armado próprio:
+  desarmado, só `pc_consultar` e `pc_travar`. Para instalar, use `pc/instalar.ps1`. Testes: `testes/test_agente_pc.py`
+  e a seção 4b'' do e2e do painel.
 - **Canal direto** (1.0.46+): o celular mantém um WebSocket com a Central (`controle_ir/canal.py`, Durable Object
   `Canal`); chamadas sem túnel e avisos na hora; sem canal, volta ao ngrok sozinho (`docs/seguranca.md` §3d).
   `consultar` mostra `servidor.canal`. Tela: `acao=grade` lê/resolve grades NxN no celular (9x9, 16x16 com

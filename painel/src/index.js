@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS chamadas (id INTEGER PRIMARY KEY AUTOINCREMENT, quand
 CREATE TABLE IF NOT EXISTS observacao (aparelho TEXT PRIMARY KEY, observar_ate INTEGER NOT NULL DEFAULT 0,
   ao_vivo_ate INTEGER NOT NULL DEFAULT 0, em_uso TEXT, em_uso_em INTEGER);
 CREATE TABLE IF NOT EXISTS quadros (aparelho TEXT PRIMARY KEY, jpeg TEXT NOT NULL, quando INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS ferramentas_pc (aparelho TEXT PRIMARY KEY, lista TEXT NOT NULL, quando INTEGER NOT NULL);
 `;
 let esquemaPronto = false;
 async function inicializar(env) {
@@ -629,7 +630,7 @@ const painelApp = {
       }
       if (rota === '/api/integridade') return json(await integridade(env));
       if (rota === '/api/tela/ao_vivo') {  // ligar renova por 2 min (a página renova enquanto estiver aberta)
-        const ap = (await env.DB.prepare('SELECT id FROM aparelhos WHERE revogado = 0 ORDER BY criado LIMIT 1').first())?.id;
+        const ap = (await env.DB.prepare(`SELECT id FROM aparelhos a WHERE revogado = 0 AND ${NAO_PC} ORDER BY criado LIMIT 1`).first())?.id;
         if (!ap) return erro('nenhum celular cadastrado', 400);
         const ate = corpo.ligar ? agora() + 120 : 0;
         await env.DB.prepare(`INSERT INTO observacao (aparelho, ao_vivo_ate, observar_ate) VALUES (?, ?, ?) ON CONFLICT(aparelho)
@@ -746,6 +747,7 @@ ${ok ? '<button id="btAutorizar">Autorizar com a digital</button>' : '<p class="
 // ---------------------------------------------------------------- /mcp: repasse ao celular, com bloqueio na borda
 // Mesmo critério do celular (controle_ir/seguranca.py): o que não passa aqui nem chega ao celular.
 const SEMPRE = new Set(['consultar', 'politica', 'travar']);
+const SEMPRE_PC = new Set(['pc_consultar', 'pc_travar']);  // igual a agente_pc/servidor.py
 const BAIXO_RISCO = new Set([...SEMPRE, 'procurar_perfis', 'opcoes', 'controlar', 'registrar_estado', 'buscar', 'progresso',
   'pausar', 'retomar', 'retestar', 'confirmar', 'distinguir', 'salvar_aparelho', 'editar_aparelho', 'importar', 'exportar',
   'enviar_sinal']);
@@ -757,6 +759,74 @@ function bloqueioNaBorda(nome, e) {
   return `o sistema está DESARMADO: “${nome}” precisa dele armado. Para usar, arme pela Central de Controle, com a digital.`;
 }
 const rpc = (id, result, status = 200) => json({ jsonrpc: '2.0', id: id ?? null, ...result }, status);
+
+// ---------------------------------------------------------------- PC (agente_pc, docs/pc.md)
+// O PC é um segundo aparelho da Central (versão "pc-…"), com estado de armado próprio. Fica no MESMO conector:
+// tools/list une as ferramentas pc_* às do celular e cada tools/call pc_* vai pelo canal do PC, assinada.
+const NAO_PC = "COALESCE(a.versao, '') NOT LIKE 'pc-%'";
+const ehPC = nome => String(nome || '').startsWith('pc_');
+const pcAtivo = env => env.DB.prepare(`SELECT a.id, e.armado_ate, e.travado FROM aparelhos a
+  LEFT JOIN estado e ON e.aparelho = a.id WHERE a.revogado = 0 AND a.versao LIKE 'pc-%' ORDER BY a.criado DESC LIMIT 1`)
+  .first().catch(() => null);
+const resultadoTexto = (id, dados) => rpc(id, { result: { content: [{ type: 'text', text: JSON.stringify(dados) }],
+  structuredContent: dados, isError: true } });
+async function repassarPC(env, pc, bytes) {  // 503 = o PC não está no canal agora
+  try {
+    return await canalDe(env, pc.id).fetch('https://canal/rpc', { method: 'POST', body: bytes,
+      headers: { 'content-type': 'application/json', accept: 'application/json', 'x-painel-assinatura': await assinarRequisicao(env, bytes) } });
+  } catch { return new Response('sem canal', { status: 503 }); }
+}
+async function ferramentasPC(env, pc) {
+  // ao vivo; fora do ar, a última lista conhecida (a lista do conector é fixa por conversa: assim as ferramentas
+  // do PC aparecem mesmo se ele estiver desligado na hora, e a chamada explica que ele está fora do ar)
+  const r = await repassarPC(env, pc, enc.encode(JSON.stringify({ jsonrpc: '2.0', id: 'central', method: 'tools/list' })));
+  if (r.ok) {
+    try {
+      const lista = ((await r.json())?.result?.tools || []).filter(t => ehPC(t?.name));
+      if (lista.length) {
+        await env.DB.prepare(`INSERT INTO ferramentas_pc (aparelho, lista, quando) VALUES (?, ?, ?) ON CONFLICT(aparelho)
+          DO UPDATE SET lista = excluded.lista, quando = excluded.quando`).bind(pc.id, JSON.stringify(lista), agora()).run()
+          .catch(() => {});
+        return lista;
+      }
+    } catch { /* resposta estranha: usa a guardada */ }
+  }
+  try {
+    const c = await env.DB.prepare('SELECT lista FROM ferramentas_pc WHERE aparelho = ?').bind(pc.id).first();
+    return c ? JSON.parse(c.lista) : [];
+  } catch { return []; }
+}
+async function chamarPC(env, ctx, pc, m, bytes, t0) {
+  const nome = String(m.params?.name || ''), args = m.params?.arguments;
+  const anotar = status => ctx.waitUntil(registrarChamada(env, nome, args, status, Date.now() - t0).catch(() => {}));
+  if (!pc) {
+    anotar('sem PC');
+    return resultadoTexto(m.id, { erro: 'nenhum PC cadastrado na Central (instale o agente do PC: docs/pc.md)' });
+  }
+  const motivo = SEMPRE_PC.has(nome) ? null
+    : bloqueioNaBorda(nome, { armado_ate: pc.armado_ate || 0, travado: pc.travado || 0, desarmado_permite: 'nada' });
+  if (motivo) {
+    await registrar(env, 'painel', 'bloqueado_na_borda', { ferramenta: nome.slice(0, 60), aparelho: 'PC' });
+    anotar('bloqueado');
+    return resultadoTexto(m.id, { erro: motivo.replace('o sistema está DESARMADO', 'o PC está DESARMADO'), bloqueado: true, onde: 'painel' });
+  }
+  const r = await repassarPC(env, pc, bytes);
+  if (r.status === 503) {
+    anotar('PC fora do ar');
+    return resultadoTexto(m.id, { erro: 'o PC está fora do ar: o agente não está conectado à Central (PC desligado, sem internet ou serviço parado)' });
+  }
+  anotar(`${r.ok ? 'ok' : `HTTP ${r.status}`} · PC`);
+  return new Response(r.body, { status: r.status, headers: { 'content-type': r.headers.get('content-type') || 'application/json',
+    'cache-control': 'no-store', 'x-via': 'pc' } });
+}
+function lerRpc(texto, tipo) {  // resposta JSON-RPC em JSON ou em SSE (a última linha "data:")
+  if (!String(tipo || '').includes('event-stream')) return JSON.parse(texto);
+  const dados = texto.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).filter(Boolean);
+  return JSON.parse(dados[dados.length - 1]);
+}
+const inicioSemCelular = m => ({ protocolVersion: m.params?.protocolVersion || '2025-06-18', capabilities: { tools: {} },
+  serverInfo: { name: 'controle-ir', title: 'Central de Controle', version: 'central' },
+  instructions: 'O celular está fora do ar agora. O PC Windows do dono responde pelas ferramentas pc_* (desarmado: só pc_consultar e pc_travar). Responda em português.' });
 
 // Atividade: cada chamada de ferramenta fica registrada (o que, por quê, quais recursos, resultado, tempo)
 const RECURSOS_CAP = { foto: ['câmera'], tela: ['tela'], ouvir_bipe: ['microfone'], sono: ['microfone'],
@@ -770,7 +840,8 @@ function descrever(nome, args = {}) {
   const cap = nome.startsWith('cap_') ? nome.slice(4) : nome === 'executar_capacidade' ? String(args.nome || '') : '';
   (RECURSOS_CAP[cap] || []).forEach(x => r.add(x));
   let resumo = '';
-  if (nome === 'executar_comando') {
+  if (nome.startsWith('pc_')) r.add('PC');
+  if (nome === 'executar_comando' || nome === 'pc_executar') {
     r.add('terminal');
     const c = String(args.comando || '');
     for (const [k, ps] of Object.entries(PALAVRAS)) if (ps.some(p => c.toLowerCase().includes(p))) r.add(k);
@@ -783,7 +854,11 @@ function descrever(nome, args = {}) {
     if (args.ouvir) r.add('microfone');
     resumo = [args.aparelho, args.definir && JSON.stringify(args.definir), args.teclas && args.teclas.join(','), args.macro]
       .filter(Boolean).join(' · ');
-  } else if (nome === 'atualizar_sistema') { r.add('sistema'); resumo = String(args.ref || '').slice(0, 12); }
+  } else if (nome === 'atualizar_sistema' || nome === 'pc_atualizar') { r.add('sistema'); resumo = String(args.ref || '').slice(0, 12); }
+  else if (nome === 'pc_tela' || nome === 'pc_entrada') { r.add('tela'); resumo = String(args.acao || 'captura'); }
+  else if (['pc_escrever_arquivo', 'pc_editar_arquivo', 'pc_ler_arquivo', 'pc_listar'].includes(nome)) {
+    r.add('arquivos'); resumo = String(args.caminho || '');
+  }
   else resumo = JSON.stringify(args);
   return { resumo: resumo.slice(0, 200), motivo: String(args.motivo || '').slice(0, 200), recursos: [...r].join(',') };
 }
@@ -813,14 +888,22 @@ const mcpApi = {
     // O pareamento já criou o esquema. Evita repetir DDL na primeira chamada de cada isolate.
     const consultar = () => env.DB.prepare(`SELECT a.id, x.mcp_url, e.armado_ate, e.travado, e.desarmado_permite
       FROM aparelhos a LEFT JOIN extras x ON x.aparelho = a.id LEFT JOIN estado e ON e.aparelho = a.id
-      WHERE a.revogado = 0 ORDER BY a.criado LIMIT 1`).first();
+      WHERE a.revogado = 0 AND ${NAO_PC} ORDER BY a.criado LIMIT 1`).first();
     let ap;
     try { ap = await consultar(); } catch (e) {
       if (!/no such table/i.test(String(e.message || e))) throw e;
       await inicializar(env);
       ap = await consultar();
     }
-    if (!ap) return rpc(msg?.id, { error: { code: -32000, message: 'nenhum celular cadastrado na Central' } }, 503);
+    const unico = Array.isArray(msg) ? null : msg, metodo = unico?.method;
+    const pc = await pcAtivo(env);
+    if (metodo === 'tools/call' && ehPC(unico.params?.name)) return await chamarPC(env, ctx, pc, unico, bruto, t0);
+    if (!ap) {
+      if (pc && metodo === 'initialize') return rpc(unico.id, { result: inicioSemCelular(unico) });
+      if (pc && metodo === 'tools/list') return rpc(unico.id, { result: { tools: await ferramentasPC(env, pc) } });
+      return rpc(msg?.id, { error: { code: -32000, message: 'nenhum celular cadastrado na Central' } }, 503);
+    }
+    const listaPC = pc && metodo === 'tools/list' ? ferramentasPC(env, pc) : null;  // em paralelo com o celular
     const e = { armado_ate: ap.armado_ate || 0, travado: ap.travado || 0, desarmado_permite: ap.desarmado_permite || 'ir' };
     for (const m of Array.isArray(msg) ? msg : [msg]) {
       if (m?.method !== 'tools/call') continue;
@@ -838,19 +921,26 @@ const mcpApi = {
     for (const h of ['mcp-session-id', 'mcp-protocol-version']) if (req.headers.get(h)) cab[h] = req.headers.get(h);
     // 1º o canal direto (conexão aberta pelo celular: sem túnel); sem canal, o túnel (ngrok) como antes
     const inicioTransporte = Date.now();
-    let r = null, via = 'canal';
+    let r = null, via = 'canal', falha = null;
     try {
       const rc = await canalDe(env, ap.id).fetch('https://canal/rpc', { method: 'POST', headers: cab, body: bruto });
       if (rc.status !== 503) r = rc;
     } catch { /* objeto do canal indisponível: segue pelo túnel */ }
     if (!r) {
       via = 'túnel';
-      if (!ap.mcp_url) return rpc(msg?.id, { error: { code: -32000, message: 'o celular está fora do ar (sem canal direto e sem túnel): confira se o serviço controle-ir está ligado' } }, 503);
-      try {
-        r = await fetch(ap.mcp_url, { method: 'POST', headers: cab, body: bruto });
-      } catch (err) {
-        return rpc(msg?.id, { error: { code: -32000, message: `o celular não respondeu: ${String(err.message || err).slice(0, 120)}` } }, 502);
+      if (!ap.mcp_url) falha = rpc(msg?.id, { error: { code: -32000, message: 'o celular está fora do ar (sem canal direto e sem túnel): confira se o serviço controle-ir está ligado' } }, 503);
+      else {
+        try {
+          r = await fetch(ap.mcp_url, { method: 'POST', headers: cab, body: bruto });
+        } catch (err) {
+          falha = rpc(msg?.id, { error: { code: -32000, message: `o celular não respondeu: ${String(err.message || err).slice(0, 120)}` } }, 502);
+        }
       }
+    }
+    if (!r) {  // celular fora do ar: com o PC cadastrado, o conector continua de pé só com ele
+      if (pc && metodo === 'initialize') return rpc(unico.id, { result: inicioSemCelular(unico) });
+      if (listaPC) return rpc(unico.id, { result: { tools: await listaPC } });
+      return falha;
     }
     const chamada = (Array.isArray(msg) ? msg : [msg]).find(m => m?.method === 'tools/call');
     if (chamada) ctx.waitUntil(registrarChamada(env, String(chamada.params?.name || '?'), chamada.params?.arguments,
@@ -859,6 +949,18 @@ const mcpApi = {
       'server-timing': `central;dur=${inicioTransporte - t0}, transporte;dur=${Date.now() - inicioTransporte}`,
       'x-via': via === 'canal' ? 'canal' : 'tunel' };  // cabeçalho só em ASCII
     if (r.headers.get('mcp-session-id')) sai['mcp-session-id'] = r.headers.get('mcp-session-id');
+    if (listaPC && r.ok) {  // une as ferramentas do PC às do celular
+      const texto = await r.text();
+      try {
+        const base = lerRpc(texto, sai['content-type']);
+        const extra = await listaPC;
+        if (base?.result?.tools && extra.length) {
+          base.result.tools = [...base.result.tools.filter(t => !ehPC(t?.name)), ...extra];
+          return new Response(JSON.stringify(base), { status: 200, headers: { ...sai, 'content-type': 'application/json' } });
+        }
+      } catch { /* resposta que não dá para ler: vai como veio */ }
+      return new Response(texto, { status: r.status, headers: sai });
+    }
     return new Response(r.body, { status: r.status, headers: sai });
   },
 };

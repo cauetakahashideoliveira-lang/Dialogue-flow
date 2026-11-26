@@ -217,6 +217,34 @@ class TestUnidades(unittest.TestCase):
                 self.assertTrue(saude["ok"])
                 self.assertEqual(saude.get("canal"), esperado)
 
+    def test_ps1_preso_nao_derruba_o_fim_da_tarefa(self):
+        """Regressão (26/11): o antivírus segurava o .ps1 e o unlink lançava PermissionError na thread que fecha a
+        tarefa; o evento de fim nunca era sinalizado. Agora o .ps1 fica para depois e a tarefa termina normalmente."""
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            t = tarefas_mod.Tarefas(Path(d))
+            original = Path.unlink
+
+            def unlink_preso(self_, missing_ok=False):
+                if self_.suffix == ".ps1":
+                    raise PermissionError(5, "Acesso negado", str(self_))
+                return original(self_, missing_ok=missing_ok)
+
+            with mock.patch.object(Path, "unlink", unlink_preso):
+                inicio = time.time()
+                r = t.pedir("echo ok", aguardar=10)
+                gasto = time.time() - inicio
+            # com o defeito, o evento de fim não era sinalizado e o pedir esperava os 10 s inteiros
+            self.assertEqual(r["status"], "concluida")
+            self.assertLess(gasto, 5, f"pedir ficou preso {gasto:.1f} s esperando o fim da tarefa")
+
+    def test_iniciar_rele_o_path_a_cada_volta(self):
+        """Regressão A5 (26/11): o agente seguia com o PATH do logon e não via Node, Ollama nem Rokit instalados depois."""
+        txt = (RAIZ / "pc" / "iniciar.ps1").read_text(encoding="utf-8-sig")
+        laco = txt[txt.index("while ($true)"):]
+        self.assertIn("GetEnvironmentVariable('Path', 'Machine')", laco)
+        self.assertLess(laco.index("GetEnvironmentVariable('Path', 'Machine')"), laco.index("-m agente_pc ligar"))
+
     def test_atualizar_sem_ref_sai_do_head_destacado(self):
         """Depois de um pc_atualizar(ref=...) o repositório fica destacado; o próximo, sem ref, volta à branch padrão."""
         import subprocess

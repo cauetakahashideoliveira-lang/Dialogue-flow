@@ -207,6 +207,9 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   pcOk = await esperar(async () => { const { d } = await textoDe(await chamarCom('pc_executar', { comando: 'echo pc-ok', aguardar: 20 }));
     return d.status === 'concluida' && /pc-ok/.test(d.saida?.texto || ''); }, 15000);
   ok(pcOk, 'armado com a digital: o comando roda no PC e a saída volta (assinatura conferida pelo agente)');
+  const { d: dp } = await textoDe(await chamarCom('executar_capacidade', { nome: 'pc_executar', argumentos: { comando: 'echo via-ponte', aguardar: 20 } }));
+  ok(dp.status === 'concluida' && /via-ponte/.test(dp.saida?.texto || '') && await chamadasNoCelular() === 2,
+    'conversa antiga (sem pc_* na lista): executar_capacidade(nome="pc_executar") chega ao PC, não ao celular');
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/PC-teste/.test(await pagina.textContent('#celulares')) && /pc_executar/.test(await pagina.textContent('#chamadas')),
     'a Central lista o PC e as chamadas pc_* na Atividade');

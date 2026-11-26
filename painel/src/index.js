@@ -898,6 +898,14 @@ const mcpApi = {
     const unico = Array.isArray(msg) ? null : msg, metodo = unico?.method;
     const pc = await pcAtivo(env);
     if (metodo === 'tools/call' && ehPC(unico.params?.name)) return await chamarPC(env, ctx, pc, unico, bruto, t0);
+    // Ponte para conversas abertas antes do PC existir (a lista de ferramentas é fixa por conversa):
+    // executar_capacidade(nome="pc_…", argumentos={…}) vira a chamada pc_… e segue as mesmas regras (estado do PC,
+    // assinatura, atividade)
+    const capa = metodo === 'tools/call' && unico.params?.name === 'executar_capacidade' ? unico.params?.arguments : null;
+    if (capa && ehPC(capa.nome)) {
+      const m = { ...unico, params: { name: String(capa.nome), arguments: capa.argumentos || {} } };
+      return await chamarPC(env, ctx, pc, m, enc.encode(JSON.stringify(m)), t0);
+    }
     if (!ap) {
       if (pc && metodo === 'initialize') return rpc(unico.id, { result: inicioSemCelular(unico) });
       if (pc && metodo === 'tools/list') return rpc(unico.id, { result: { tools: await ferramentasPC(env, pc) } });

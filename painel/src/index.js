@@ -937,6 +937,12 @@ const mcpApi = {
         }
       }
     }
+    // túnel morto (ngrok sem o celular do outro lado devolve 404 ERR_NGROK_3200, por exemplo): para abrir a conversa
+    // e listar ferramentas, isso também é "celular fora do ar" — sem isso, o conector inteiro cai junto com o celular
+    if (r && !r.ok && pc && (metodo === 'initialize' || metodo === 'tools/list')) {
+      falha = rpc(msg?.id, { error: { code: -32000, message: `o celular respondeu HTTP ${r.status} pelo ${via}` } }, 502);
+      r = null;
+    }
     if (!r) {  // celular fora do ar: com o PC cadastrado, o conector continua de pé só com ele
       if (pc && metodo === 'initialize') return rpc(unico.id, { result: inicioSemCelular(unico) });
       if (listaPC) return rpc(unico.id, { result: { tools: await listaPC } });

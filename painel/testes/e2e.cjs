@@ -178,6 +178,8 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   await pagina.unroute('https://claude.ai/**');
   await pagina.goto(BASE); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/Claude \(teste\) → claude\.ai/.test(await pagina.textContent('#acessos')), 'painel lista o acesso autorizado');
+  const versao = await (await fetch(`${BASE}/versao`)).json();
+  ok(versao.recursos?.includes('pc-ponte') && /^\d{4}-\d{2}-\d{2}/.test(versao.central || ''), `/versao publica a versão da Central (${versao.central})`);
   // 4b''. PC (agente_pc, código real): segundo aparelho no MESMO conector, ferramentas pc_* pelo canal dele,
   //       com o estado de armado próprio
   const PASTA_PC = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-'));
@@ -207,6 +209,9 @@ async function semSessao(rota, corpo = {}, cab = {}) {
   pcOk = await esperar(async () => { const { d } = await textoDe(await chamarCom('pc_executar', { comando: 'echo pc-ok', aguardar: 20 }));
     return d.status === 'concluida' && /pc-ok/.test(d.saida?.texto || ''); }, 15000);
   ok(pcOk, 'armado com a digital: o comando roda no PC e a saída volta (assinatura conferida pelo agente)');
+  const { d: dp } = await textoDe(await chamarCom('executar_capacidade', { nome: 'pc_executar', argumentos: { comando: 'echo via-ponte', aguardar: 20 } }));
+  ok(dp.status === 'concluida' && /via-ponte/.test(dp.saida?.texto || '') && await chamadasNoCelular() === 2,
+    'conversa antiga (sem pc_* na lista): executar_capacidade(nome="pc_executar") chega ao PC, não ao celular');
   await pagina.reload(); await pagina.waitForSelector('#logado:not(.escondido)');
   ok(/PC-teste/.test(await pagina.textContent('#celulares')) && /pc_executar/.test(await pagina.textContent('#chamadas')),
     'a Central lista o PC e as chamadas pc_* na Atividade');

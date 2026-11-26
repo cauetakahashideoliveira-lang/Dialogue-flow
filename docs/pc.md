@@ -73,6 +73,8 @@ Para atualizar depois: `pc_atualizar` pelo Claude, ou rode o instalador de novo 
   como administrador, então os comandos não pedem UAC.
 - Sem o celular no ar, o conector continua de pé só com o PC (`initialize` e `tools/list` respondidos pela
   Central).
+- **Conversa aberta antes do PC existir** (sem `pc_*` na lista): use `executar_capacidade` com
+  `nome="pc_executar"` (ou outra `pc_*`) e `argumentos={…}`. A Central encaminha ao PC com as mesmas regras.
 - Se o PC estiver desligado quando a conversa começa, as ferramentas `pc_*` aparecem mesmo assim, pela última
   lista guardada na Central, e a chamada responde "o PC está fora do ar".
 

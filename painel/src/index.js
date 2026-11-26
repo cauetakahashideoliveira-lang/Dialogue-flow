@@ -11,6 +11,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 const SESSAO_MAX = 12 * 3600, SESSAO_OCIOSA = 30 * 60, PASSKEY_FRESCA = 120, DESAFIO = 300, PAREAMENTO = 600;
 const HORAS_MAX = 24;
+const VERSAO_CENTRAL = '2026-11-26.1';  // suba a cada mudança da Central (aparece em /versao)
 const agora = () => Math.floor(Date.now() / 1000);
 const enc = new TextEncoder();
 
@@ -569,6 +570,8 @@ const painelApp = {
       await inicializar(env);
       return await autorizar(req, env, u);
     }
+    // versão publicada (sem segredo nenhum): para conferir de fora se o deploy chegou
+    if (rota === '/versao') return json({ central: VERSAO_CENTRAL, recursos: ['pc', 'pc-sem-celular', 'pc-ponte'] });
     if (!rota.startsWith('/api/')) return env.ASSETS.fetch(req);
     try {
       await inicializar(env);
@@ -898,6 +901,14 @@ const mcpApi = {
     const unico = Array.isArray(msg) ? null : msg, metodo = unico?.method;
     const pc = await pcAtivo(env);
     if (metodo === 'tools/call' && ehPC(unico.params?.name)) return await chamarPC(env, ctx, pc, unico, bruto, t0);
+    // Ponte para conversas abertas antes do PC existir (a lista de ferramentas é fixa por conversa):
+    // executar_capacidade(nome="pc_…", argumentos={…}) vira a chamada pc_… e segue as mesmas regras (estado do PC,
+    // assinatura, atividade)
+    const capa = metodo === 'tools/call' && unico.params?.name === 'executar_capacidade' ? unico.params?.arguments : null;
+    if (capa && ehPC(capa.nome)) {
+      const m = { ...unico, params: { name: String(capa.nome), arguments: capa.argumentos || {} } };
+      return await chamarPC(env, ctx, pc, m, enc.encode(JSON.stringify(m)), t0);
+    }
     if (!ap) {
       if (pc && metodo === 'initialize') return rpc(unico.id, { result: inicioSemCelular(unico) });
       if (pc && metodo === 'tools/list') return rpc(unico.id, { result: { tools: await ferramentasPC(env, pc) } });

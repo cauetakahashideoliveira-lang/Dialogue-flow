@@ -2,6 +2,21 @@
 
 A revisão de **21/11/2026** consolidou as entregas até o PR #21 na branch padrão, inclusive os PRs #19 e #20 pelo #18. Os números de versão e a lista de pendências de 19/11 abaixo descrevem aquela data. O estado do pacote, a história das missões, as medições de 20/11 e as próximas verificações estão no [guia de passagem](HANDOFF.md). Para saber o que está instalado no seu aparelho, consulte o serviço.
 
+## 27/11 — agente do PC 1.0.3: ver a tela melhor (commit `0e15019`, ainda sem PR)
+
+- `pc_entrada` com `ver=true` devolve a tela no mesmo passo. `pc_tela` com `quadros` e `intervalo` junta vários momentos
+  numa grade com a hora de cada um, e `regiao` mostra um pedaço de perto. Rodado no PC real, nos quatro modos, e
+  também pelo conector.
+- **O PC está em HEAD destacado em `0e15019`.** Um `pc_atualizar` sem `ref` volta para a branch padrão (1.0.2) até o PR
+  ser aprovado.
+- **Defender:** o dono liberou a detecção `HackTool:PowerShell/EmpireGetScreenshot.C` (ThreatID `2147743659`), que
+  bloqueava o `pc_tela` (AMSI). Vale para o PC todo. Para desfazer, no PowerShell como administrador:
+  `Remove-MpPreference -ThreatIDDefaultAction_Ids 2147743659`.
+- O PC ficou armado até 28/11 00:00. Depois disso o dono arma de novo na Central, com a digital.
+- Na mesma sessão: Blender 5.3.0 com o complemento MCP no PC (`localhost:9876`) e as permissões do Studio em "Acesso
+  completo" no lugar privado "Estúdio - Homologação". Detalhes no repositório Roblox:
+  `docs/entregas/2026-11-27-ambiente-visao-e-direcao-de-arte.md`.
+
 ## 26/11 noite — incidente "sessão nova sem as ferramentas do celular" e correção (Central 2026-11-26.5, celular 1.0.129)
 
 **O que o dono viu:**

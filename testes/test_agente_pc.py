@@ -310,5 +310,115 @@ class TestUnidades(unittest.TestCase):
         self.assertTrue(all(n.startswith("pc_") for n in nomes))
 
 
+class TestVerATela(unittest.TestCase):
+    """Ver melhor a tela (pc-1.0.3): ver=true, montagem de vários momentos e região. O PowerShell é falso: o que
+    interessa aqui são as contas do agente e o que ele manda para o script; o script de verdade foi rodado no PC."""
+
+    def setUp(self):
+        from agente_pc import tela as tela_mod
+        self.tela_mod = tela_mod
+        self.chamadas = []
+        self._orig = tela_mod.rodar_ps
+        tela_mod.rodar_ps = self.ps_falso
+        self.addCleanup(setattr, tela_mod, "rodar_ps", self._orig)
+
+    def ps_falso(self, script, dados, timeout=60):
+        self.chamadas.append((script, dados, timeout))
+        if "SetCursorPos" in script:  # entrada
+            return "10 20"
+        if dados.get("quadros"):  # montagem
+            n = dados["quadros"]
+            return json.dumps({"x": 0, "y": 0, "largura": 1920, "altura": 1080, "w": 1600, "h": 900, "telas": 1,
+                               "tempos": [round(i * dados["intervalo"] / 1000, 2) for i in range(n)], "jpeg": "QUJD"})
+        reg = dados.get("regiao") or [0, 0, 1920, 1080]
+        esc = min(1.0, dados["largura"] / reg[2])
+        return json.dumps({"x": reg[0], "y": reg[1], "largura": reg[2], "altura": reg[3], "w": int(reg[2] * esc),
+                           "h": int(reg[3] * esc), "telas": 1, "jpeg": "QUJD"})
+
+    def tela_com_mapa(self):
+        t = self.tela_mod.Tela()
+        t.ultima = {"x": 100, "y": 50, "largura": 1920, "altura": 1080, "w": 960, "h": 540, "telas": 1, "escala": 0.5}
+        return t
+
+    def test_plano_da_grade(self):
+        p = self.tela_mod.plano_montagem
+        self.assertEqual((p(2, None, 1600)["colunas"], p(2, None, 1600)["linhas"]), (2, 1))
+        self.assertEqual((p(4, None, 1600)["colunas"], p(4, None, 1600)["linhas"]), (2, 2))
+        self.assertEqual((p(8, None, 1600)["colunas"], p(8, None, 1600)["linhas"]), (3, 3))
+        self.assertEqual((p(12, None, 1600)["colunas"], p(12, None, 1600)["linhas"]), (4, 3))
+        self.assertEqual(p(8, 4, 1600)["linhas"], 2)
+        self.assertEqual(p(3, 9, 1600)["colunas"], 3)  # nunca mais colunas do que quadros
+        self.assertEqual(p(8, None, 1600)["largura_celula"], 533)
+        for ruim in (1, 0, 13):
+            with self.assertRaises(ValueError):
+                p(ruim, None, 1600)
+
+    def test_regiao_da_imagem_vira_pixels_reais(self):
+        t = self.tela_com_mapa()
+        self.assertEqual(t.regiao_real([10, 20, 100, 60]), [120, 90, 200, 120])  # x = 100 + 10 / 0.5
+        self.assertEqual(t.regiao_real([10, 20, 100, 60], "tela"), [10, 20, 100, 60])
+        self.assertEqual(self.tela_mod.Tela().regiao_real([10, 20, 100, 60]), [10, 20, 100, 60])  # sem captura antes
+        self.assertIsNone(t.regiao_real(None))
+        for ruim in ([1, 2, 3], "abc", [0, 0, 4, 100]):
+            with self.assertRaises(ValueError):
+                t.regiao_real(ruim)
+
+    def test_captura_de_regiao_manda_pixels_reais_e_refaz_o_mapa_de_cliques(self):
+        t = self.tela_com_mapa()
+        r = t.capturar(regiao=[10, 20, 100, 60], largura=320)
+        self.assertEqual(self.chamadas[-1][1]["regiao"], [120, 90, 200, 120])
+        self.assertIn("_imagem", r)
+        # o mapa agora é o da região: um clique em (50, 30) da imagem cai em 120 + 50/escala, 90 + 30/escala
+        self.assertEqual((t.ultima["x"], t.ultima["y"]), (120, 90))
+        x, y = t.para_tela(50, 30)
+        self.assertEqual((x, y), (120 + round(50 / t.ultima["escala"]), 90 + round(30 / t.ultima["escala"])))
+
+    def test_montagem_junta_os_momentos_e_nao_mexe_no_mapa_de_cliques(self):
+        t = self.tela_com_mapa()
+        antes = dict(t.ultima)
+        r = t.capturar(quadros=4, intervalo=50)  # 50 ms é pouco: o agente sobe para 100
+        dados = self.chamadas[-1][1]
+        self.assertEqual((dados["quadros"], dados["colunas"], dados["intervalo"]), (4, 2, 100))
+        self.assertEqual(r["montagem"]["tempos_s"], [0.0, 0.1, 0.2, 0.3])
+        self.assertEqual(r["montagem"]["linhas"], 2)
+        self.assertIn("_imagem", r)
+        self.assertEqual(t.ultima, antes)
+
+    def test_montagem_longa_demais_e_recusada_e_o_tempo_de_espera_acompanha(self):
+        t = self.tela_mod.Tela()
+        with self.assertRaises(ValueError):
+            t.capturar(quadros=12, intervalo=5000)  # 55 s
+        self.assertEqual(self.chamadas, [])
+        t.capturar(quadros=5, intervalo=1000)  # 4 s de captura
+        self.assertGreaterEqual(self.chamadas[-1][2], 64)
+
+    def test_pc_entrada_com_ver_devolve_a_tela_no_mesmo_passo(self):
+        f = Ferramentas(Path(tempfile.mkdtemp()), lambda r: None, lambda: {}, lambda m: None)
+        r = f.pc_entrada("clicar", x=10, y=20, coordenadas="tela")
+        self.assertEqual(r["feito"], "clicar")
+        self.assertNotIn("_imagem", r)  # sem ver, é só o clique, como antes
+        r = f.pc_entrada("clicar", x=10, y=20, coordenadas="tela", ver=True, espera=0)
+        self.assertEqual(r["feito"], "clicar")
+        self.assertIn("_imagem", r)
+        self.assertEqual(r["cursor_agora"], "10 20")
+        r = f.pc_entrada("teclas", teclas="{ENTER}", ver=True, espera=0, quadros=3, intervalo=100)
+        self.assertEqual(r["montagem"]["quadros"], 3)
+
+    def test_ferramentas_anunciam_as_opcoes_novas(self):
+        defs = {d["name"]: d["inputSchema"]["properties"] for d in ferr_mod.DEFINICOES}
+        for campo in ("regiao", "quadros", "intervalo", "colunas"):
+            self.assertIn(campo, defs["pc_tela"])
+            self.assertIn(campo, defs["pc_entrada"])
+        self.assertIn("ver", defs["pc_entrada"])
+        self.assertIn("espera", defs["pc_entrada"])
+        self.assertEqual(defs["pc_tela"]["regiao"]["minItems"], 4)
+
+    def test_resposta_do_servidor_anexa_a_imagem_da_montagem(self):
+        from agente_pc.servidor import _resultado
+        r = _resultado({"montagem": {"quadros": 2}, "_imagem": {"base64": "QUJD", "mime": "image/jpeg"}}, False)
+        self.assertEqual([c["type"] for c in r["content"]], ["text", "image"])
+        self.assertIn("imagem_anexada", r["content"][0]["text"])
+
+
 if __name__ == "__main__":
     unittest.main()

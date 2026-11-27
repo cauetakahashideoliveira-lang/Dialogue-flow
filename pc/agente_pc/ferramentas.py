@@ -32,6 +32,9 @@ def _obj(props: dict, req: list | None = None) -> dict:
 S = {"type": "string"}
 N = {"type": "number"}
 B = {"type": "boolean"}
+REGIAO = {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4,
+          "description": "[x, y, largura, altura] nas coordenadas da última imagem do pc_tela (ou da tela com "
+                         "coordenadas=tela)"}
 
 DEFINICOES = [
     {"name": "pc_consultar", "title": "Consultar o PC",
@@ -73,17 +76,26 @@ DEFINICOES = [
                     "pula .git e node_modules).",
      "inputSchema": _obj({"caminho": S, "padrao": S, "recursivo": B, "maximo": N})},
     {"name": "pc_tela", "title": "Ver a tela do PC",
-     "description": "Captura a tela (todos os monitores, ou monitor=1, 2…) e devolve a imagem. Use antes do pc_entrada.",
+     "description": "Captura a tela (todos os monitores, ou monitor=1, 2…) e devolve a imagem. Use antes do pc_entrada. "
+                    "regiao=[x,y,largura,altura] (nas coordenadas da última imagem) mostra só um pedaço, de perto. "
+                    "quadros=2 a 12 com intervalo (ms) junta vários momentos numa imagem só, com a hora de cada um: "
+                    "serve para ver animações e transições sem uma chamada por foto.",
      "inputSchema": _obj({"monitor": N, "largura": {"type": "number", "description": "largura máxima (padrão 1600)"},
-                          "qualidade": N})},
+                          "qualidade": N, "regiao": REGIAO, "quadros": N,
+                          "intervalo": {"type": "number", "description": "ms entre os quadros (100 a 5000, padrão 500)"},
+                          "colunas": N, "coordenadas": {"type": "string", "enum": ["imagem", "tela"]}})},
     {"name": "pc_entrada", "title": "Mouse e teclado do PC",
      "description": "acao: clicar, duplo, direito, meio, mover, arrastar (x2,y2), rolar (quantidade: negativo desce), "
                     "digitar (texto) ou teclas (formato SendKeys: ^s = Ctrl+S, %{F4} = Alt+F4, {ENTER}). x,y nas "
-                    "coordenadas da última imagem do pc_tela (coordenadas=tela para pixels reais).",
+                    "coordenadas da última imagem do pc_tela (coordenadas=tela para pixels reais). ver=true devolve a "
+                    "tela logo depois de agir, no mesmo passo (espera ms antes, padrão 500); aceita também "
+                    "regiao, quadros e intervalo, como o pc_tela.",
      "inputSchema": _obj({"acao": {"type": "string", "enum": ["clicar", "duplo", "direito", "meio", "mover", "arrastar",
                                                                "rolar", "digitar", "teclas"]},
                           "x": N, "y": N, "x2": N, "y2": N, "texto": S, "teclas": S, "quantidade": N,
-                          "coordenadas": {"type": "string", "enum": ["imagem", "tela"]}}, ["acao"])},
+                          "coordenadas": {"type": "string", "enum": ["imagem", "tela"]},
+                          "ver": B, "espera": N, "monitor": N, "largura": N, "qualidade": N, "regiao": REGIAO,
+                          "quadros": N, "intervalo": N, "colunas": N}, ["acao"])},
     {"name": "pc_atualizar", "title": "Atualizar o agente do PC",
      "description": "Atualiza o agente pelo Git (git pull no repositório dialogue-flow do PC, ou checkout de 'ref') e "
                     "reinicia o agente. A conexão volta sozinha em alguns segundos.",
@@ -232,12 +244,19 @@ class Ferramentas:
                 break
         return {"pasta": str(base), "itens": itens, **({"cortado_em": maximo} if cortado else {})}
 
-    def pc_tela(self, monitor: int = 0, largura: int = 1600, qualidade: int = 70) -> dict:
-        return self.tela.capturar(monitor, largura, qualidade)
+    def pc_tela(self, monitor: int = 0, largura: int = 1600, qualidade: int = 70, regiao=None, quadros: int = 1,
+                intervalo: int = 500, colunas: int | None = None, coordenadas: str = "imagem") -> dict:
+        return self.tela.capturar(monitor, largura, qualidade, regiao, quadros, intervalo, colunas, coordenadas)
 
-    def pc_entrada(self, acao: str, **kw) -> dict:
+    def pc_entrada(self, acao: str, ver: bool = False, espera: float = 500, monitor: int = 0, largura: int = 1280,
+                   qualidade: int = 70, regiao=None, quadros: int = 1, intervalo: int = 500,
+                   colunas: int | None = None, **kw) -> dict:
         r = self.tela.entrada(acao, **kw)
         self.auditar({"evento": "pc_entrada", "acao": acao})
+        if ver:  # age e já mostra o resultado, no mesmo passo
+            time.sleep(max(0.0, min(float(espera or 0), 5000.0)) / 1000)
+            r = {**r, **self.tela.capturar(monitor, largura, qualidade, regiao, quadros, intervalo, colunas,
+                                           kw.get("coordenadas", "imagem"))}
         return r
 
     def pc_atualizar(self, ref: str | None = None) -> dict:

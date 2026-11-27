@@ -27,8 +27,8 @@ Claude ── conector Controle Geral (OAuth com a digital) ──► Central (W
 | `pc_executar` | Comando no PowerShell (padrão), cmd, pwsh ou bash, como administrador. Espera até 55 s; o que demora mais segue rodando como tarefa. |
 | `pc_tarefa` | Acompanhar (`aguardar`, `desde`), parar (árvore inteira) ou listar tarefas. |
 | `pc_ler_arquivo` / `pc_escrever_arquivo` / `pc_editar_arquivo` / `pc_listar` | Arquivos: leitura por linhas, imagens como imagem, binário em base64, troca exata de trecho (mantém `\r\n` e BOM). |
-| `pc_tela` | Captura da tela (todos os monitores ou um), em JPEG. |
-| `pc_entrada` | Mouse e teclado: clicar, duplo, direito, arrastar, rolar, digitar e teclas no formato SendKeys. As coordenadas são as da última `pc_tela`. |
+| `pc_tela` | Captura da tela (todos os monitores ou um), em JPEG. `regiao=[x,y,largura,altura]` mostra só um pedaço, de perto, e o mapa de cliques passa a ser o da região. `quadros` (2 a 12) com `intervalo` (100 a 5000 ms, no máximo 20 s no total) junta vários momentos numa grade só, com a hora de cada quadro. A grade não muda o mapa de cliques. (pc-1.0.3) |
+| `pc_entrada` | Mouse e teclado: clicar, duplo, direito, arrastar, rolar, digitar e teclas no formato SendKeys. As coordenadas são as da última `pc_tela`. `ver=true` devolve a tela logo depois de agir, no mesmo passo (`espera` ms antes, padrão 500), com as mesmas opções `regiao`, `quadros` e `intervalo`. (pc-1.0.3) |
 | `pc_atualizar` | `git pull` (ou `ref`, que deixa o repositório destacado nesse commit) e reinício do agente. Sem `ref`, volta para a branch padrão se estiver destacado. |
 | `pc_travar` | Encerra as tarefas e bloqueia o PC até o dono armar de novo na Central. Sempre responde. |
 
